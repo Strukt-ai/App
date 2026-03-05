@@ -1,0 +1,11 @@
+{
+  "[project]/app/components/App.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/app/components/App.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/app_components_editor_09ba73c0._.js",
+      "static/chunks/app_6e20ce31._.js",
+      "static/chunks/node_modules_0bc77d80._.js",
+      "static/chunks/app_components_App_tsx_e366d875._.js"
+    ]
+  }
+}

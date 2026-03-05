@@ -1,0 +1,50 @@
+# Ignore Virtual Environments
+venv/
+env/
+miniconda3/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Ignore Model Checkpoints & Large Files
+*.pth
+*.pt
+*.safetensors
+*.bin
+*.onnx
+*.ckpt
+
+# Ignore Secrets and Configuration
+.env
+.ngrok_authtoken
+secrets.bat
+secrets_aws_dispatcher.bat
+SERVER/.env
+WORKER/.env
+WORKER/.env.example
+*.pem
+*.key
+
+# Ignore Logs and Caches
+logs/
+SERVER/logs/
+WORKER/LOGS/
+WORKER/temp_jobs/
+SERVER/uploads/
+
+# Ignore Node.js Modules
+node_modules/
+dist/
+build/
+.npm/
+
+# Ignore IDE / Editor Settings
+.vscode/
+.idea/
+*.swp
+*.orig
+
+# Ignore OS Generated Files
+.DS_Store
+Thumbs.db

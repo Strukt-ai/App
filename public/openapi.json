@@ -1,0 +1,1811 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Strukt AI Floorplan 3D API",
+    "description": "REST API for converting 2D floorplan images into 3D models. Handles job queuing, SVG management, furniture placement, and interactive segmentation.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Strukt AI Team",
+      "url": "https://struktai.work"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000",
+      "description": "Local development server"
+    },
+    {
+      "url": "https://struktai.work",
+      "description": "Production server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "System health and status endpoints"
+    },
+    {
+      "name": "Authentication",
+      "description": "User authentication via Google OAuth"
+    },
+    {
+      "name": "Runs",
+      "description": "Floorplan project/runs management"
+    },
+    {
+      "name": "SVG",
+      "description": "SVG file management and texturizing"
+    },
+    {
+      "name": "3D Generation",
+      "description": "3D model generation and rendering"
+    },
+    {
+      "name": "Furniture",
+      "description": "FurnAI furniture placement"
+    },
+    {
+      "name": "Imported Models",
+      "description": "User-imported 3D models"
+    },
+    {
+      "name": "Rooms",
+      "description": "Room detection and placement"
+    },
+    {
+      "name": "SAM3D",
+      "description": "Interactive segmentation with SAM"
+    },
+    {
+      "name": "LLM",
+      "description": "LLM-powered 3D modification"
+    },
+    {
+      "name": "Worker",
+      "description": "Worker node endpoints"
+    },
+    {
+      "name": "System",
+      "description": "System metrics and security"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "description": "Lightweight health endpoint to verify the service is running.",
+        "operationId": "api_health",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean", "example": true},
+                    "service": {"type": "string", "example": "floorplan3d"},
+                    "server_time": {"type": "string", "format": "date-time"},
+                    "status": {"type": "string", "example": "active"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/status": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Get system status",
+        "description": "Returns system health including connected workers.",
+        "operationId": "get_system_status",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "System status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "workers_online": {"type": "integer"},
+                    "worker_ids": {"type": "array", "items": {"type": "string"}}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/metrics": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Download metrics report",
+        "description": "Generates and returns an Excel file with system metrics.",
+        "operationId": "download_metrics_report",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Excel metrics report",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/security/logs": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Get security logs",
+        "description": "Return recent security events.",
+        "operationId": "get_security_logs",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Security logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "logs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SecurityLog"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/verify": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Verify Google OAuth token",
+        "description": "Verify Google ID Token and return user info.",
+        "operationId": "verify_google_token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {"type": "string", "description": "Google ID Token"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User info from Google",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Login with credentials",
+        "description": "Login and receive authentication token.",
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {"type": "string"},
+                  "password": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "tags": ["Runs"],
+        "summary": "Get all runs",
+        "description": "Get all runs/jobs filtered by the current user.",
+        "operationId": "get_all_runs",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {"type": "integer", "default": 50}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Run"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Runs"],
+        "summary": "Create new run",
+        "description": "Create a new run, save image, and enqueue job for Worker.",
+        "operationId": "create_run",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["image"],
+                "properties": {
+                  "image": {"type": "string", "format": "binary", "description": "Floorplan image file"},
+                  "task_type": {"type": "string", "default": "segmentation", "description": "Type of processing task"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "status": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Project limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "tags": ["Runs"],
+        "summary": "Get run metadata",
+        "description": "Get detailed metadata for a specific run.",
+        "operationId": "get_run_meta",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run metadata",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/RunMeta"}
+              }
+            }
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Runs"],
+        "summary": "Delete run",
+        "description": "Delete a run (DB + Files + Azure).",
+        "operationId": "delete_run",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "deleted": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/status": {
+      "get": {
+        "tags": ["Runs"],
+        "summary": "Get run status",
+        "description": "Check the processing status of a specific run.",
+        "operationId": "get_run_status",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/svg": {
+      "get": {
+        "tags": ["SVG"],
+        "summary": "Get current SVG",
+        "description": "Return the current SVG for a run as image/svg+xml.",
+        "operationId": "get_run_svg",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SVG file",
+            "content": {
+              "image/svg+xml": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "404": {
+            "description": "SVG not found"
+          }
+        }
+      },
+      "put": {
+        "tags": ["SVG"],
+        "summary": "Update SVG",
+        "description": "Update the SVG for a run. Updates current.svg and syncs to Azure.",
+        "operationId": "update_run_svg",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/svg+xml": {
+              "schema": {"type": "string"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SVG updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "svg_url": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/svg/raw": {
+      "get": {
+        "tags": ["SVG"],
+        "summary": "Get raw inference SVG",
+        "description": "Return the raw inference SVG (clean.svg) for debugging.",
+        "operationId": "get_run_svg_raw",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw SVG file",
+            "content": {
+              "image/svg+xml": {
+                "schema": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/svg-for-3d": {
+      "get": {
+        "tags": ["SVG"],
+        "summary": "Get SVG for 3D generation",
+        "description": "Return the locked SVG snapshot used for 3D generation.",
+        "operationId": "get_run_svg_for_3d",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Locked SVG",
+            "content": {
+              "image/svg+xml": {
+                "schema": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/lock-svg-for-3d": {
+      "post": {
+        "tags": ["SVG"],
+        "summary": "Lock SVG for 3D",
+        "description": "Freeze the current SVG into svg_for_3d.svg for deterministic 3D generation.",
+        "operationId": "lock_svg_for_3d",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SVG locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "locked_svg": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/generate-3d": {
+      "post": {
+        "tags": ["3D Generation"],
+        "summary": "Trigger 3D generation",
+        "description": "Trigger 3D generation for a run. Moves status from WAITING to PENDING.",
+        "operationId": "generate_3d",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scale": {"type": "number", "default": 0.01, "description": "Meters per pixel"},
+                  "svg": {"type": "string", "description": "Optional SVG content to sync"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "3D generation queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "status": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/detect-rooms": {
+      "post": {
+        "tags": ["Rooms"],
+        "summary": "Trigger room detection",
+        "description": "Trigger Room Detection (OCR + Geometry) on current SVG.",
+        "operationId": "detect_rooms",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Room detection queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "status": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/render": {
+      "post": {
+        "tags": ["3D Generation"],
+        "summary": "Trigger Blender rendering",
+        "description": "Trigger Blender rendering and return render image URLs.",
+        "operationId": "trigger_render",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lighting": {"type": "string", "default": "day", "enum": ["day", "night", "dusk"]}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Renders queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "renders": {"type": "array", "items": {"type": "string"}},
+                    "lighting": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/download/blend": {
+      "get": {
+        "tags": ["3D Generation"],
+        "summary": "Download .blend file",
+        "description": "Download the Blender .blend file for a run.",
+        "operationId": "download_blend",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Blend file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {"type": "string", "format": "binary"}
+              }
+            }
+          },
+          "404": {
+            "description": "Blend file not found"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/download/glb": {
+      "get": {
+        "tags": ["3D Generation"],
+        "summary": "Download .glb file",
+        "description": "Download the GLB 3D model for a run.",
+        "operationId": "download_glb",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GLB file",
+            "content": {
+              "model/gltf-binary": {
+                "schema": {"type": "string", "format": "binary"}
+              }
+            }
+          },
+          "404": {
+            "description": "GLB file not found"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/download/llm-blend": {
+      "get": {
+        "tags": ["LLM"],
+        "summary": "Download LLM-modified blend",
+        "description": "Download the LLM-modified .blend file.",
+        "operationId": "download_llm_blend",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LLM-modified blend file"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/furniture/batch": {
+      "post": {
+        "tags": ["Furniture"],
+        "summary": "Add furniture to batch",
+        "description": "Append a furniture selection to a per-run category batch.",
+        "operationId": "queue_furniture_item",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["category", "item"],
+                "properties": {
+                  "category": {"type": "string", "description": "Furniture category"},
+                  "item": {"$ref": "#/components/schemas/FurnitureItem"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Furniture added to batch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "job_id": {"type": "string"},
+                    "category": {"type": "string"},
+                    "queued": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Furniture"],
+        "summary": "Get furniture batch",
+        "description": "Get the current furniture batch for a run.",
+        "operationId": "get_furniture_batch",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Furniture batch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FurnitureBatch"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/furniture/finish": {
+      "post": {
+        "tags": ["Furniture"],
+        "summary": "Finish furniture batch",
+        "description": "Promote all per-category furniture batch jobs to WAITING_AWS for processing.",
+        "operationId": "finish_furniture_batch",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Batch queued for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "promoted_jobs": {"type": "integer"},
+                    "status": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/furniture/assets": {
+      "get": {
+        "tags": ["Furniture"],
+        "summary": "Get FurnAI assets manifest",
+        "description": "Return the per-run FurnAI assets manifest.",
+        "operationId": "get_furniture_assets",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Assets manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FurnAIManifest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/imported/upload": {
+      "post": {
+        "tags": ["Imported Models"],
+        "summary": "Upload imported model",
+        "description": "Upload a custom GLB model for a run.",
+        "operationId": "upload_imported_model",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {"type": "string", "format": "binary", "description": "GLB file"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "item_id": {"type": "string"},
+                    "rel_path": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/assets/{rel_path}": {
+      "get": {
+        "tags": ["Imported Models"],
+        "summary": "Get asset file",
+        "description": "Serve a file from inside the run directory (for loading GLBs).",
+        "operationId": "get_run_asset_file",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "rel_path",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Asset file",
+            "content": {
+              "model/gltf-binary": {
+                "schema": {"type": "string", "format": "binary"}
+              }
+            }
+          },
+          "404": {
+            "description": "Asset not found"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/texturize/apply": {
+      "post": {
+        "tags": ["SVG"],
+        "summary": "Apply texture to SVG element",
+        "description": "Apply an uploaded texture image to a specific SVG element.",
+        "operationId": "texturize_apply",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file", "target_id", "tile_width_ft", "tile_height_ft"],
+                "properties": {
+                  "file": {"type": "string", "format": "binary", "description": "Texture image"},
+                  "target_id": {"type": "string", "description": "SVG element ID to apply texture to"},
+                  "tile_width_ft": {"type": "number", "description": "Tile width in feet"},
+                  "tile_height_ft": {"type": "number", "description": "Tile height in feet"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Texture applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "target_id": {"type": "string"},
+                    "tile_w_px": {"type": "number"},
+                    "tile_h_px": {"type": "number"},
+                    "svg_url": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/placements": {
+      "get": {
+        "tags": ["Rooms"],
+        "summary": "Get placements",
+        "description": "Return placements.json (2D->3D placement data).",
+        "operationId": "get_placements",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Placements data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Placements"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Rooms"],
+        "summary": "Save placements",
+        "description": "Save placements.json. Does NOT trigger 3D rebuild.",
+        "operationId": "save_placements",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "placements": {"$ref": "#/components/schemas/Placements"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Placements saved"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/meta": {
+      "put": {
+        "tags": ["Runs"],
+        "summary": "Update run metadata",
+        "description": "Update run metadata (e.g., calibration/scale).",
+        "operationId": "update_run_meta",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Metadata updated"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/email": {
+      "post": {
+        "tags": ["Runs"],
+        "summary": "Queue email notification",
+        "description": "Capture email for offline queueing.",
+        "operationId": "queue_email_job",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email queued"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/prepare-methoddraw": {
+      "post": {
+        "tags": ["Runs"],
+        "summary": "Prepare MethodDraw editor",
+        "description": "Copy run's current SVG into sidecar uploads for MethodDraw editor.",
+        "operationId": "prepare_methoddraw",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Editor URL returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "methoddraw_url": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/cleanup-click-jobs": {
+      "post": {
+        "tags": ["Runs"],
+        "summary": "Cleanup click jobs",
+        "description": "Delete stale click_* jobs for the current user.",
+        "operationId": "cleanup_click_jobs",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "older_than_minutes": {"type": "integer", "default": 10},
+                  "include_processing": {"type": "boolean", "default": false}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Jobs cleaned up"
+          }
+        }
+      }
+    },
+    "/api/runs/cleanup-stale-jobs": {
+      "post": {
+        "tags": ["Runs"],
+        "summary": "Cleanup stale jobs",
+        "description": "Delete stale non-click jobs for the current user.",
+        "operationId": "cleanup_stale_jobs",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "older_than_minutes": {"type": "integer", "default": 60},
+                  "task_type": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Jobs cleaned up"
+          }
+        }
+      }
+    },
+    "/api/editor/detect-rooms": {
+      "post": {
+        "tags": ["Rooms"],
+        "summary": "Detect rooms from walls",
+        "description": "Analyzes the wall layout and detects closed rooms.",
+        "operationId": "editor_detect_rooms",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Wall"}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Detected rooms",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "rooms": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/Room"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sam3d/segment-click": {
+      "post": {
+        "tags": ["SAM3D"],
+        "summary": "Handle SAM segmentation click",
+        "description": "Handle user click for SAM3D segmentation. Creates high-priority click job.",
+        "operationId": "segment_click",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["job_id", "x", "y"],
+                "properties": {
+                  "job_id": {"type": "string", "description": "Run/job ID"},
+                  "x": {"type": "number", "description": "Click X coordinate"},
+                  "y": {"type": "number", "description": "Click Y coordinate"},
+                  "intent": {"type": "string", "default": "user_click"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Click dispatched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "job_id": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sam3d/reconstruct": {
+      "post": {
+        "tags": ["SAM3D"],
+        "summary": "Reconstruct 3D object",
+        "description": "Trigger 3D reconstruction for a segmented object.",
+        "operationId": "reconstruct_object",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["job_id", "polygon"],
+                "properties": {
+                  "job_id": {"type": "string"},
+                  "polygon": {
+                    "type": "array",
+                    "items": {"type": "array", "items": {"type": "number"}}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reconstruction queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "job_id": {"type": "string"},
+                    "status": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sam3d/submit-batch": {
+      "post": {
+        "tags": ["SAM3D"],
+        "summary": "Submit SAM3D batch",
+        "description": "Submit a batch of furniture masks to AWS dispatcher queue.",
+        "operationId": "submit_batch",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["run_id", "items"],
+                "properties": {
+                  "run_id": {"type": "string"},
+                  "items": {"type": "string", "description": "JSON string of items array"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch submitted"
+          }
+        }
+      }
+    },
+    "/api/llm/3d-command": {
+      "post": {
+        "tags": ["LLM"],
+        "summary": "LLM 3D modification",
+        "description": "Use LLaVA (via VisionLLMAnalyzer) to modify the 3D model.",
+        "operationId": "llm_modify_3d",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["run_id", "prompt"],
+                "properties": {
+                  "run_id": {"type": "string"},
+                  "prompt": {"type": "string", "description": "Natural language command"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "LLM modification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {"type": "boolean"},
+                    "run_id": {"type": "string"},
+                    "message": {"type": "string"},
+                    "modified_blend_url": {"type": "string"},
+                    "raw_response": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM not available"
+          }
+        }
+      }
+    },
+    "/api/worker/jobs": {
+      "get": {
+        "tags": ["Worker"],
+        "summary": "Worker poll for job",
+        "description": "Worker nodes poll for the next pending job.",
+        "operationId": "worker_poll_job",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "query",
+            "schema": {"type": "string", "default": "default_worker"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Next job or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {"$ref": "#/components/schemas/Job"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/worker/download/{job_id}": {
+      "get": {
+        "tags": ["Worker"],
+        "summary": "Worker download image",
+        "description": "Worker downloads the source image for a job.",
+        "operationId": "worker_download_image",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image file"
+          },
+          "404": {
+            "description": "Image not found"
+          }
+        }
+      }
+    },
+    "/api/worker/jobs/{job_id}/result": {
+      "post": {
+        "tags": ["Worker"],
+        "summary": "Worker submit result",
+        "description": "Worker uploads results (SVG, Blend, GLB, Metadata).",
+        "operationId": "worker_submit_result",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "svg": {"type": "string", "format": "binary"},
+                  "blend": {"type": "string", "format": "binary"},
+                  "glb": {"type": "string", "format": "binary"},
+                  "logs": {"type": "string", "format": "binary"},
+                  "metadata": {"type": "string", "default": "{}"},
+                  "error": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Result recorded"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Google OAuth ID Token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "detail": {"type": "string"}
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "properties": {
+          "user_id": {"type": "string"},
+          "email": {"type": "string"},
+          "name": {"type": "string"},
+          "picture": {"type": "string"}
+        }
+      },
+      "Run": {
+        "type": "object",
+        "properties": {
+          "job_id": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "QUEUED_OFFLINE"]},
+          "task_type": {"type": "string"},
+          "user_id": {"type": "string"},
+          "email": {"type": "string"},
+          "result_json": {"type": "string"}
+        }
+      },
+      "RunMeta": {
+        "type": "object",
+        "properties": {
+          "run_id": {"type": "string"},
+          "path": {"type": "string"},
+          "run_meta": {"type": "object"},
+          "svg": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "size": {"type": "integer"},
+              "mtime": {"type": "number"}
+            }
+          },
+          "blend": {"$ref": "#/components/schemas/FileMeta"},
+          "glb": {"$ref": "#/components/schemas/FileMeta"},
+          "llm_blend": {"$ref": "#/components/schemas/FileMeta"},
+          "status": {"type": "string"},
+          "worker_id": {"type": "string"},
+          "error": {"type": "string"}
+        }
+      },
+      "FileMeta": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "size": {"type": "integer"},
+          "mtime": {"type": "number"}
+        }
+      },
+      "RunStatus": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "run_id": {"type": "string"},
+          "status": {"type": "string"},
+          "error": {"type": "string"},
+          "has_glb": {"type": "boolean"},
+          "has_blend": {"type": "boolean"},
+          "glb_url": {"type": "string"},
+          "blend_url": {"type": "string"}
+        }
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "job_id": {"type": "string"},
+          "created_at": {"type": "string"},
+          "status": {"type": "string"},
+          "task_type": {"type": "string"},
+          "image_path": {"type": "string"},
+          "run_dir": {"type": "string"},
+          "worker_id": {"type": "string"},
+          "user_id": {"type": "string"},
+          "email": {"type": "string"},
+          "priority": {"type": "integer"}
+        }
+      },
+      "SecurityLog": {
+        "type": "object",
+        "properties": {
+          "timestamp": {"type": "string"},
+          "type": {"type": "string"},
+          "ip": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      },
+      "FurnitureItem": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "polygons": {
+            "type": "array",
+            "items": {"type": "array", "items": {"type": "number"}}
+          }
+        }
+      },
+      "FurnitureBatch": {
+        "type": "object",
+        "properties": {
+          "version": {"type": "integer"},
+          "run_id": {"type": "string"},
+          "categories": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {"$ref": "#/components/schemas/FurnitureItem"}
+            }
+          }
+        }
+      },
+      "FurnAIManifest": {
+        "type": "object",
+        "properties": {
+          "version": {"type": "integer"},
+          "run_id": {"type": "string"},
+          "items": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "item_id": {"type": "string"},
+                "file_name": {"type": "string"},
+                "rel_path": {"type": "string"},
+                "updated_at": {"type": "string"}
+              }
+            }
+          }
+        }
+      },
+      "Room": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "center": {
+            "type": "object",
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"}
+            }
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {"type": "number"}
+            }
+          },
+          "color": {"type": "string"}
+        }
+      },
+      "Wall": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "start": {
+            "type": "object",
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"}
+            }
+          },
+          "end": {
+            "type": "object",
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"}
+            }
+          },
+          "thickness": {"type": "number"},
+          "room": {"type": "string"},
+          "type": {"type": "string"}
+        }
+      },
+      "Placements": {
+        "type": "object",
+        "properties": {
+          "version": {"type": "integer"},
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {"type": "string"},
+                "type": {"type": "string"},
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "z": {"type": "number"}
+                  }
+                },
+                "rotation": {"type": "number"},
+                "scale": {
+                  "type": "object",
+                  "properties": {
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "z": {"type": "number"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
