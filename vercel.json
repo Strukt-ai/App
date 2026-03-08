@@ -1,6 +1,10 @@
 {
     "rewrites": [
         {
+            "source": "/api/:path*",
+            "destination": "https://struktai.work/api/:path*"
+        },
+        {
             "source": "/sidecar/:path*",
             "destination": "https://struktai.work/sidecar/:path*"
         }
