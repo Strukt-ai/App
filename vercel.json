@@ -1,0 +1,8 @@
+{
+    "rewrites": [
+        {
+            "source": "/sidecar/:path*",
+            "destination": "https://struktai.work/sidecar/:path*"
+        }
+    ]
+}
