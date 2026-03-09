@@ -20,23 +20,26 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Only rewrite to localhost in development.
-  // In production (Vercel), the Next.js API catch-all route
-  // proxies requests via NEXT_PUBLIC_BACKEND_URL (Cloudflare Tunnel).
-  rewrites: isDev
-    ? async () => ({
+  // Rewrite /api/* and /sidecar/* to the backend in both dev and production.
+  // Vercel's rewrite layer forwards requests natively (preserving multipart
+  // bodies, streaming, etc.) so the JS catch-all proxy is never hit.
+  rewrites: async () => {
+    const backendUrl = isDev
+      ? 'http://127.0.0.1:8000'
+      : (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://struktai.work');
+    return {
       beforeFiles: [
         {
           source: '/api/:path*',
-          destination: 'http://127.0.0.1:8000/:path*',
+          destination: `${backendUrl}/api/:path*`,
         },
         {
           source: '/sidecar/:path*',
-          destination: 'http://127.0.0.1:8000/sidecar/:path*',
+          destination: `${backendUrl}/sidecar/:path*`,
         },
       ],
-    })
-    : undefined,
+    };
+  },
   typescript: {
     ignoreBuildErrors: true,
   },

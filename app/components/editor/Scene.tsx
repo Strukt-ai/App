@@ -140,61 +140,66 @@ function FitHandler() {
     const lastProcessedTrigger = useRef(0)
 
     useEffect(() => {
-        // Only run when fitViewTrigger actually increments (not on camera/scene/controls ref changes)
+        // Only run when fitViewTrigger actually increments
         if (fitViewTrigger <= lastProcessedTrigger.current) return
         lastProcessedTrigger.current = fitViewTrigger
 
-        // Calculate bounding box of relevant objects
-        const box = new Box3()
-        const targets: Object3D[] = []
+        // Small delay to ensure all meshes (doors/windows/AI models) are pushed to the scene
+        const timer = setTimeout(() => {
+            // Calculate bounding box of relevant objects
+            const box = new Box3()
+            const targets: Object3D[] = []
 
-        scene.traverse((obj) => {
-            if (obj.type === 'Mesh') {
-                if (obj.name === 'Wall' || obj.name === 'Floor' || obj.parent?.name === 'Item') {
-                    targets.push(obj)
+            scene.traverse((obj) => {
+                if (obj.type === 'Mesh') {
+                    // Include all relevant geometry for bounds
+                    if (obj.name === 'Wall' || obj.name === 'Floor' || obj.parent?.name === 'Item' || obj.name.includes('door') || obj.name.includes('window')) {
+                        targets.push(obj)
+                    }
+                }
+            })
+
+            if (targets.length === 0) return
+
+            box.setFromObject(targets[0])
+            targets.forEach(t => box.expandByObject(t))
+
+            if (box.isEmpty()) return
+
+            const center = new Vector3()
+            box.getCenter(center)
+
+            const size = new Vector3()
+            box.getSize(size)
+
+            const maxDim = Math.max(size.x, size.z)
+            const padding = 1.2
+
+            // Move camera to center top
+            if (camera.type === 'OrthographicCamera') {
+                const cam = camera as any
+                const ctrl = controls as any
+                if (ctrl) {
+                    ctrl.target.set(center.x, 0, center.z)
+                    ctrl.object.position.set(center.x, 10, center.z)
+
+                    const newZoom = Math.min(window.innerWidth, window.innerHeight) / (maxDim * padding)
+                    cam.zoom = Math.max(newZoom, 5)
+                    cam.updateProjectionMatrix()
+                    ctrl.update()
+                }
+            } else {
+                const ctrl = controls as any
+                if (ctrl) {
+                    ctrl.target.copy(center)
+                    const dist = maxDim * padding
+                    ctrl.object.position.set(center.x + dist, center.y + dist, center.z + dist)
+                    ctrl.update()
                 }
             }
-        })
+        }, 100) // 100ms delay for geometry stability
 
-        if (targets.length === 0) return
-
-        box.setFromObject(targets[0])
-        targets.forEach(t => box.expandByObject(t))
-
-        if (box.isEmpty()) return
-
-        const center = new Vector3()
-        box.getCenter(center)
-
-        const size = new Vector3()
-        box.getSize(size)
-
-        const maxDim = Math.max(size.x, size.z)
-        const padding = 1.2
-
-        // Move camera to center top
-        if (camera.type === 'OrthographicCamera') {
-            const cam = camera as any
-
-            const ctrl = controls as any
-            if (ctrl) {
-                ctrl.target.set(center.x, 0, center.z)
-                ctrl.object.position.set(center.x, 10, center.z)
-
-                const newZoom = Math.min(window.innerWidth, window.innerHeight) / (maxDim * padding)
-                cam.zoom = Math.max(newZoom, 5)
-                cam.updateProjectionMatrix()
-                ctrl.update()
-            }
-        } else {
-            const ctrl = controls as any
-            if (ctrl) {
-                ctrl.target.copy(center)
-                const dist = maxDim * padding
-                ctrl.object.position.set(center.x + dist, center.y + dist, center.z + dist)
-                ctrl.update()
-            }
-        }
+        return () => clearTimeout(timer)
     }, [fitViewTrigger, camera, scene, controls])
 
     return null
@@ -342,7 +347,7 @@ function SceneContent() {
                 far={10}
                 resolution={2048}
                 color="#000000"
-                frames={Infinity}
+                frames={1} // Fix: Render once to prevent flickering/perf hit on load
             />
 
             {mode === '3d' ? (
@@ -356,6 +361,7 @@ function SceneContent() {
                 enableRotate={mode === '3d'}
                 enableZoom={true}
                 enablePan={true}
+                enableDamping={false} // Fix: Instant camera jumps for "fit view"
                 maxPolarAngle={mode === '3d' ? Math.PI / 2 : 0}
             />
 
@@ -390,7 +396,7 @@ function SceneContent() {
                 Note: SSAO/N8AO disabled — postprocessing v6 incompatible with Three.js 0.182 (unpackRGBAToDepth removed).
                 Upgrade to postprocessing v7 when stable to re-enable AO. */}
             {mode === '3d' && (
-                <EffectComposer multisampling={4}>
+                <EffectComposer multisampling={0}> {/* Fix: 0 to avoid MSAA conflicts with main Canvas */}
                     <SMAA />
                     <Bloom
                         luminanceThreshold={0.9}
@@ -588,7 +594,7 @@ export function Scene() {
             <Canvas
                 shadows
                 gl={{
-                    antialias: true,
+                    antialias: false, // Fix: Disabled to prevent black flickers when using EffectComposer
                     toneMapping: ACESFilmicToneMapping,
                     toneMappingExposure: 1.0,
                 }}
