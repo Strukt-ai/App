@@ -133,6 +133,7 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
                 samFormData.append('image', imageFileRef.current!)
                 samFormData.append('x', pixelX.toString())
                 samFormData.append('y', pixelY.toString())
+                if (currentRunId) samFormData.append('run_id', currentRunId)
 
                 const res = await fetch('/api/sam3d/segment-click', {
                     method: 'POST',

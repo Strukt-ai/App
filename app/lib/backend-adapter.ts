@@ -66,16 +66,23 @@ async function callHttpBackend(request: BackendRequest): Promise<BackendResponse
       })
     }
 
+    // For Blob bodies (multipart/form-data, binary uploads), preserve the
+    // original Content-Type header (which includes the boundary) and pass
+    // the raw bytes through.  Only default to application/json for plain
+    // object bodies.
+    const isBlob = request.body instanceof Blob
+    const fetchHeaders: Record<string, string> = {
+      ...(isBlob ? {} : { 'Content-Type': 'application/json' }),
+      ...request.headers
+    }
+
     const fetchOptions: RequestInit = {
       method: request.method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...request.headers
-      }
+      headers: fetchHeaders
     }
 
     if (request.body && ['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      fetchOptions.body = JSON.stringify(request.body)
+      fetchOptions.body = isBlob ? request.body : JSON.stringify(request.body)
     }
 
     const response = await fetch(url.toString(), fetchOptions)
