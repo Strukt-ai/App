@@ -93,6 +93,9 @@ const App = {
         this.setLoading(true, "Uploading & Registering...");
         this.elements.dropZone.style.display = 'none';
 
+        // Store the file for direct SAM uploads
+        this.state.uploadedFile = file;
+
         // 1. Read locally for immediate display
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -106,7 +109,7 @@ const App = {
         };
         reader.readAsDataURL(file);
 
-        // 2. Upload to Backend
+        // 2. Upload to Backend (for run tracking / 3D generation)
         const formData = new FormData();
         formData.append('image', file);
 
@@ -163,9 +166,9 @@ const App = {
     },
 
     async handleCanvasClick(e) {
-        if (!this.state.currentJobId || this.state.isProcessing) return;
+        if (!this.state.uploadedFile || this.state.isProcessing) return;
 
-        // Calculate clicked coordinates
+        // Calculate clicked coordinates in image pixel space
         const rect = this.elements.canvas.getBoundingClientRect();
         const scaleX = this.elements.canvas.width / rect.width;
         const scaleY = this.elements.canvas.height / rect.height;
@@ -177,30 +180,26 @@ const App = {
         this.setLoading(true, "Segmenting...");
 
         try {
-            // New Endpoint for Polling/Worker
-            const formData = new FormData();
-            formData.append('job_id', this.state.currentJobId);
-            formData.append('x', x);
-            formData.append('y', y);
+            // Send the actual image directly to the SAM daemon (matches reference local_sam_click_server.py)
+            const samFormData = new FormData();
+            samFormData.append('image', this.state.uploadedFile);
+            samFormData.append('x', x.toString());
+            samFormData.append('y', y.toString());
 
-            // Use the config endpoint
-            const endpoint = this.state.config.clickEndpoint;
-            const res = await fetch(endpoint, { method: 'POST', body: formData });
+            const samUrl = this.state.config.samDaemonUrl || 'http://127.0.0.1:8003';
+            const res = await fetch(`${samUrl}/segment_click`, { method: 'POST', body: samFormData });
             const data = await res.json();
 
-            if (data.ok || data.mask_id) { // Accept either standard or direct success
-                // Draw Mask
+            if (data.polygon && data.polygon.length > 0) {
                 this.addMask(data);
                 this.showToast("Object Segmented!", "success");
                 this.elements.reconstructBtn.disabled = false;
             } else {
-                this.showToast("Could not segment object. Try again.", "warning");
+                this.showToast("No mask found. Try clicking on a different area.", "warning");
             }
 
         } catch (err) {
             console.error(err);
-            // FALLBACK SIMULATION (If backend not ready)
-            // this.drawDummyMask(x, y); 
             this.showToast("Error calling segmentation: " + err.message, "error");
         } finally {
             this.setLoading(false);

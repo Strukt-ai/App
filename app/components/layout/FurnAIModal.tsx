@@ -51,6 +51,7 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
     const [statusMsg, setStatusMsg] = useState('')
 
     const imgRef = useRef<HTMLImageElement>(null)
+    const imageFileRef = useRef<File | null>(null)
 
     const handleClose = () => {
         if (currentRunId) {
@@ -87,8 +88,10 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            const url = URL.createObjectURL(e.target.files[0])
+            const file = e.target.files[0]
+            const url = URL.createObjectURL(file)
             setImage(url)
+            imageFileRef.current = file  // Keep the actual File for SAM uploads
             // Reset state
             setLabels([])
             setActivePoints([])
@@ -115,70 +118,43 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
             setPreviewPolygon(null)
         }
 
-        // TRIGGER BACKEND INFERENCE
-        if (currentRunId) {
+        // Send the actual uploaded image directly to the SAM daemon for segmentation.
+        // This bypasses the server pipeline which would use the stored floor plan instead.
+        if (imageFileRef.current) {
             setIsProcessing(true)
             setStatusMsg('')
-            const formData = new FormData()
-            formData.append('job_id', currentRunId)
-            formData.append('x', Math.round(newPoint.x * (imgRef.current.naturalWidth || 1)).toString())
-            formData.append('y', Math.round(newPoint.y * (imgRef.current.naturalHeight || 1)).toString())
-            formData.append('intent', 'user_click')
+
+            const pixelX = Math.round(newPoint.x * (imgRef.current.naturalWidth || 1))
+            const pixelY = Math.round(newPoint.y * (imgRef.current.naturalHeight || 1))
 
             const tryClick = async () => {
-                const res = await fetch('/api/sam3d/segment-click', {
+                // Post directly to SAM daemon /segment_click (matches reference local_sam_click_server.py)
+                const samFormData = new FormData()
+                samFormData.append('image', imageFileRef.current!)
+                samFormData.append('x', pixelX.toString())
+                samFormData.append('y', pixelY.toString())
+
+                const samUrl = (window as any).__SAM_DAEMON_URL || 'http://127.0.0.1:8003'
+                const res = await fetch(`${samUrl}/segment_click`, {
                     method: 'POST',
-                    body: formData,
-                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    body: samFormData,
                 })
-                const data = await res.json().catch(() => ({} as any))
-
-                if (res.status === 429) {
-                    const details = [data?.busy_task_type, data?.busy_job_id].filter(Boolean).join(' • ')
-                    setStatusMsg(`${data?.message || 'GPU busy. Please wait...'}${details ? ` (${details})` : ''}`)
-                    setIsProcessing(false)
-                    return
-                }
-
-                // If polygon is missing (async worker), poll for it via the status endpoint
-                let result: any = data
-                const clickJobId = data.job_id
-
-                if (!result?.polygon && clickJobId) {
-                    const pollStart = Date.now()
-                    while (Date.now() - pollStart < 15000) { // 15s timeout
-                        await new Promise(r => setTimeout(r, 150))
-                        try {
-                            const check = await fetch(`/api/runs/${clickJobId}/status?t=${Date.now()}`, {
-                                headers: token ? { Authorization: `Bearer ${token}` } : undefined
-                            })
-                            if (check.ok) {
-                                const statusData = await check.json()
-                                if (statusData.status === 'COMPLETED' && statusData.result) {
-                                    if (statusData.result.polygon && statusData.result.polygon.length > 0) {
-                                        result = statusData.result
-                                        break
-                                    }
-                                } else if (statusData.status === 'FAILED') {
-                                    break
-                                }
-                            }
-                        } catch { }
-                    }
-                }
+                const result = await res.json().catch(() => ({} as any))
 
                 setIsProcessing(false)
                 setStatusMsg('')
                 if (result?.polygon && result.polygon.length > 0) {
                     setPreviewPolygon(result.polygon)
-                    console.log("[FurnAI] Received Polygon:", result.polygon.length)
+                    console.log("[FurnAI] Received Polygon:", result.polygon.length, "points")
+                } else {
+                    setStatusMsg('No mask found. Try clicking on a different area.')
                 }
             }
 
             Promise.resolve(tryClick())
                 .catch(err => {
                     console.error("[FurnAI] Segment Click Failed", err)
-                    setStatusMsg('Segmentation failed.')
+                    setStatusMsg('Segmentation failed: ' + err.message)
                     setIsProcessing(false)
                 })
         }
