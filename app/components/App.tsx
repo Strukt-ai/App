@@ -27,13 +27,16 @@ import { useFloorplanStore } from '@/store/floorplanStore'
 function App() {
   const searchParams = useSearchParams()
   const template = searchParams.get('template')
-  
-  const { showProcessingModal, setShowProcessingModal, showQueueModal, setShowQueueModal } = useFloorplanStore()
+
+  const showProcessingModal = useFloorplanStore(s => s.showProcessingModal)
+  const setShowProcessingModal = useFloorplanStore(s => s.setShowProcessingModal)
+  const showQueueModal = useFloorplanStore(s => s.showQueueModal)
+  const setShowQueueModal = useFloorplanStore(s => s.setShowQueueModal)
   const [showPremiumModal, setShowPremiumModal] = useState(false)
   const [showUpgradeCard, setShowUpgradeCard] = useState(true)
   const [showWelcome, setShowWelcome] = useState(true)
   const [showTemplateGrid, setShowTemplateGrid] = useState(false)
-  
+
   // Use useMemo to determine the current view - if template is in URL, go directly to editor
   const currentView = useMemo(() => {
     if (template) return 'editor'
@@ -89,7 +92,7 @@ function App() {
 
       {/* 2. Template Grid (Home Screen) - After Welcome */}
       {showTemplateGrid && <TemplateGrid />}
-      
+
       {/* Editor - After Template Selection (no template in URL) */}
       {!showWelcome && !showTemplateGrid && (
         <>
