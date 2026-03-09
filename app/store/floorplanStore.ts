@@ -837,10 +837,19 @@ export const useFloorplanStore = create<FloorplanState>()(
                     f.dimensions.width *= ratio
                     f.dimensions.depth *= ratio
 
-                    // Manage height / Y-position logic consistently
+                    // --- RE-STANDARDIZE DIMENSIONS AFTER SCALING ---
+                    // If a door/window was previously standard, or if the new scaled size
+                    // falls within a "Standard" range, snap it back to standard metrics.
+                    // This prevents "Wide Doors" after calibration.
                     if (f.type === 'door') {
+                        if (f.dimensions.width > 0.54 && f.dimensions.width < 1.26) {
+                            f.dimensions.width = 0.9;
+                        }
                         f.dimensions.height = 2.1
                     } else if (f.type === 'window') {
+                        if (f.dimensions.width > 0.72 && f.dimensions.width < 1.68) {
+                            f.dimensions.width = 1.2;
+                        }
                         f.dimensions.height = 1.2
                         f.position.y = 1.0 // Window sill height
                     } else {
@@ -1009,9 +1018,9 @@ export const useFloorplanStore = create<FloorplanState>()(
                 position: { x: position.x, y: type === 'window' ? 1.0 : 0, z: position.y },
                 rotation: { x: 0, y: 0, z: 0 },
                 dimensions: type === 'door'
-                    ? { width: 1, height: 2.1, depth: 0.15 }
+                    ? { width: 0.9, height: 2.1, depth: 0.15 }
                     : type === 'window'
-                        ? { width: 1.0, height: 1.2, depth: 0.15 } // Standard window size
+                        ? { width: 1.2, height: 1.2, depth: 0.15 } // Standard window size
                         : { width: 1, height: 1, depth: 1 },
             })
         }),
