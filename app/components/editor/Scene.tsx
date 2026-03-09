@@ -4,8 +4,8 @@ import { useRef, useEffect, Suspense, useState } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows } from '@react-three/drei'
-import { EffectComposer, N8AO, SMAA, Bloom, ToneMapping } from '@react-three/postprocessing'
-import { ToneMappingMode } from 'postprocessing'
+import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast } from '@react-three/postprocessing'
+import { ToneMappingMode, BlendFunction } from 'postprocessing'
 
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { WallManager } from './WallManager'
@@ -336,11 +336,11 @@ function SceneContent() {
             {/* Contact Shadows for grounding objects */}
             <ContactShadows
                 position={[0, 0.01, 0]}
-                opacity={0.55}
+                opacity={0.65}
                 scale={50}
-                blur={2.0}
+                blur={2.5}
                 far={10}
-                resolution={1024}
+                resolution={2048}
                 color="#000000"
                 frames={Infinity}
             />
@@ -386,24 +386,23 @@ function SceneContent() {
                 <ErrorBoundary name="FloatingMenu"><FloatingMenu /></ErrorBoundary>
             </group>
 
-            {/* Post-processing: AO, Bloom, Tone Mapping — halfRes removed to fix wall disappearing */}
+            {/* Post-processing: Bloom, Tone Mapping, Vignette
+                Note: SSAO/N8AO disabled — postprocessing v6 incompatible with Three.js 0.182 (unpackRGBAToDepth removed).
+                Upgrade to postprocessing v7 when stable to re-enable AO. */}
             {mode === '3d' && (
                 <EffectComposer multisampling={4}>
                     <SMAA />
-                    <N8AO
-                        color="black"
-                        aoRadius={0.8}
-                        intensity={2.5}
-                        aoSamples={16}
-                        denoiseSamples={8}
-                        distanceFalloff={0.8}
-                        screenSpaceRadius={false}
-                    />
                     <Bloom
-                        luminanceThreshold={1.2}
+                        luminanceThreshold={0.9}
                         mipmapBlur
-                        intensity={0.4}
-                        radius={0.4}
+                        intensity={0.5}
+                        radius={0.5}
+                    />
+                    <BrightnessContrast contrast={0.05} brightness={0.0} />
+                    <Vignette
+                        offset={0.3}
+                        darkness={0.4}
+                        blendFunction={BlendFunction.NORMAL}
                     />
                     <ToneMapping mode={ToneMappingMode.AGX} />
                 </EffectComposer>
