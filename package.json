@@ -14,7 +14,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.181.0",
     "@types/uuid": "^10.0.0",
     "clsx": "^2.1.1",
     "immer": "^11.1.4",
@@ -25,7 +25,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.5.0",
-    "three": "^0.182.0",
+    "three": "^0.181.0",
     "three-bvh-csg": "^0.0.18",
     "uuid": "^13.0.0",
     "zustand": "^5.0.11"
