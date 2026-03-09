@@ -27,7 +27,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
         setLoading(true)
         try {
             const res = await fetch('/api/runs', {
-                headers: { 'Authorization': `Bearer ${token} ` }
+                headers: { 'Authorization': `Bearer ${token}` }
             })
             if (res.ok) {
                 const data = await res.json()
@@ -46,9 +46,9 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
 
         setDeletingId(runId)
         try {
-            const res = await fetch(`/ api / runs / ${runId} `, {
+            const res = await fetch(`/api/runs/${runId}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token} ` }
+                headers: { 'Authorization': `Bearer ${token}` }
             })
             if (res.ok) {
                 setProjects(prev => prev.filter(p => p.job_id !== runId))
@@ -82,8 +82,8 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
 
             // Restore per-run calibration/scale from run_meta.json (if present)
             try {
-                const metaRes = await fetch(`/ api / runs / ${runId} `, {
-                    headers: { 'Authorization': `Bearer ${token} ` }
+                const metaRes = await fetch(`/api/runs/${runId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
                 })
                 if (metaRes.ok) {
                     const meta = await metaRes.json().catch(() => ({} as any))
@@ -101,7 +101,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                 // ignore, we'll fall back to whatever is in store
             }
 
-            const svgRes = await fetch(`/ api / runs / ${runId}/svg`, {
+            const svgRes = await fetch(`/api/runs/${runId}/svg`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             if (svgRes.ok) {
