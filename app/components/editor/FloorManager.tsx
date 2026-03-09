@@ -82,24 +82,28 @@ const RoomItem = memo(function RoomItem({
                     onSelect(room.id)
                 }}
             >
-                {textureUrl ? (
-                    <meshStandardMaterial
-                        map={texture}
-                        color={selected ? '#fbbf24' : '#ffffff'}
-                        roughness={1.0}
+                {mode === '3d' ? (
+                    <meshPhysicalMaterial
+                        map={textureUrl ? texture : null}
+                        color={selected ? '#fbbf24' : (textureUrl ? '#ffffff' : room.color)}
+                        roughness={0.6}
                         metalness={0.0}
+                        clearcoat={0.3}
+                        clearcoatRoughness={0.3}
+                        envMapIntensity={0.4}
                         transparent
-                        opacity={mode === '3d' ? (selected ? 0.5 : 0.4) : (selected ? 0.4 : 0.15)}
+                        opacity={selected ? 0.6 : 0.5}
                         side={DoubleSide}
                         depthWrite={false}
                     />
                 ) : (
                     <meshStandardMaterial
-                        color={selected ? '#fbbf24' : room.color}
+                        map={textureUrl ? texture : null}
+                        color={selected ? '#fbbf24' : (textureUrl ? '#ffffff' : room.color)}
                         roughness={1.0}
                         metalness={0.0}
                         transparent
-                        opacity={mode === '3d' ? (selected ? 0.5 : 0.4) : (selected ? 0.4 : 0.15)}
+                        opacity={selected ? 0.4 : 0.15}
                         side={DoubleSide}
                         depthWrite={false}
                     />

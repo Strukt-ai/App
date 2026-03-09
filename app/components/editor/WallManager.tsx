@@ -4,17 +4,32 @@ import { useFloorplanStore } from '@/store/floorplanStore'
 import type { Wall } from '@/store/floorplanStore'
 import { memo, useCallback, useEffect, useMemo, useState, Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
-import { BoxGeometry, CylinderGeometry, DoubleSide, MeshStandardMaterial, RepeatWrapping, Texture } from 'three'
+import { BoxGeometry, CylinderGeometry, DoubleSide, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, Texture } from 'three'
 import { Geometry, Base, Subtraction } from '@react-three/csg'
 import { useLoader } from '@react-three/fiber'
 import { TextureLoader } from 'three'
 
 // Per-wall error boundary so one broken wall doesn't crash ALL walls
-class WallErrorBoundary extends Component<{ children?: ReactNode, wallId: string }, { hasError: boolean }> {
+class WallErrorBoundary extends Component<{ children?: ReactNode, wallId: string, fallback?: ReactNode }, { hasError: boolean }> {
     state = { hasError: false }
     static getDerivedStateFromError() { return { hasError: true } }
     componentDidCatch(error: Error, info: ErrorInfo) {
         console.error(`[WallErrorBoundary] Wall "${this.props.wallId}" crashed:`, error, info)
+    }
+    render() {
+        if (this.state.hasError) return this.props.fallback ?? null
+        return this.props.children
+    }
+}
+
+// Inner error boundary: wraps only the CSG mesh so failures trigger csgFailed
+// state on the parent WallItem, which then re-renders as a simple block.
+class CSGErrorBoundary extends Component<{ children?: ReactNode, wallId: string, onError: () => void }, { hasError: boolean }> {
+    state = { hasError: false }
+    static getDerivedStateFromError() { return { hasError: true } }
+    componentDidCatch(error: Error, info: ErrorInfo) {
+        console.error(`[CSGErrorBoundary] CSG failed for wall "${this.props.wallId}", falling back to simple block:`, error, info)
+        this.props.onError()
     }
     render() {
         if (this.state.hasError) return null
@@ -166,12 +181,15 @@ const WallItem = memo(function WallItem({
                 depthWrite: false
             })
         }
-        const mat = new MeshStandardMaterial({
-            color: isSelected ? 0x3b82f6 : (wall.color || 0xd4d4d4),
-            roughness: isSelected ? 0.6 : 1.0,
+        const mat = new MeshPhysicalMaterial({
+            color: isSelected ? 0x3b82f6 : (wall.color || 0xe0e0e0),
+            roughness: isSelected ? 0.5 : 0.75,
             metalness: isSelected ? 0.1 : 0.0,
             emissive: isSelected ? 0x1a365d : 0x000000,
             emissiveIntensity: isSelected ? 0.2 : 0,
+            clearcoat: isSelected ? 0 : 0.08,
+            clearcoatRoughness: 0.6,
+            envMapIntensity: 0.6,
             side: DoubleSide,
             depthTest: true,
             depthWrite: true,
@@ -183,8 +201,9 @@ const WallItem = memo(function WallItem({
         if (textureUrl) {
             mat.map = texture
             mat.color.set(isSelected ? 0x3b82f6 : 0xffffff)
-            mat.roughness = 0.98
+            mat.roughness = 0.85
             mat.metalness = 0.0
+            mat.clearcoat = 0.05
         }
         return mat
     }, [isSelected, isPreview, textureUrl, wall.color, texture])
@@ -232,9 +251,10 @@ const WallItem = memo(function WallItem({
     // 3D MODE WITH CUTOUTS
     // Uses Constructive Solid Geometry (CSG) for perfect boolean holes 
     // This allows single unified UV maps across the wall and prevents Z-fighting
-    // Wrapped in try-catch: if CSG fails, we fall back to simple block automatically
-    try {
-        return (
+    // Wrapped in CSGErrorBoundary: if CSG fails at render-time, onError sets
+    // csgFailed=true so the next render falls back to renderSimpleBlock().
+    return (
+        <CSGErrorBoundary wallId={wall.id} onError={() => setCsgFailed(true)}>
             <group>
                 <mesh
                     name={isPreview ? "WallPreview" : "Wall"}
@@ -275,12 +295,8 @@ const WallItem = memo(function WallItem({
                     </>
                 )}
             </group>
-        )
-    } catch (e) {
-        console.error(`[WallItem] CSG crashed for wall ${wall.id}, falling back to simple block:`, e)
-        setCsgFailed(true)
-        return renderSimpleBlock()
-    }
+        </CSGErrorBoundary>
+    )
 
 })
 
@@ -362,19 +378,37 @@ export function WallManager() {
 
     return (
         <group>
-            {walls.map((wall) => (
-                <WallErrorBoundary key={`eb-${wall.id}`} wallId={wall.id}>
-                    <WallItem
-                        key={wall.id}
-                        wall={wall}
-                        isSelected={selectedId === wall.id}
-                        is2D={mode === '2d'}
-                        furniture={furniture}
-                        onPointerDown={handlePointerDown}
-                        onWheel={handleWheel}
+            {walls.map((wall) => {
+                const dx = wall.end.x - wall.start.x
+                const dy = wall.end.y - wall.start.y
+                const len = Math.sqrt(dx * dx + dy * dy)
+                const ang = Math.atan2(dy, dx)
+                const cx = (wall.start.x + wall.end.x) / 2
+                const cy = (wall.start.y + wall.end.y) / 2
+                const fallback = (
+                    <mesh
+                        position={[cx, (wall.height || 2.5) / 2, cy]}
+                        rotation={[0, -ang, 0]}
+                        scale={[Math.max(len, 0.01), wall.height || 2.5, wall.thickness || 0.15]}
+                        geometry={wallGeometry}
+                        material={wireframeMaterial}
+                        frustumCulled={false}
                     />
-                </WallErrorBoundary>
-            ))}
+                )
+                return (
+                    <WallErrorBoundary key={`eb-${wall.id}`} wallId={wall.id} fallback={fallback}>
+                        <WallItem
+                            key={wall.id}
+                            wall={wall}
+                            isSelected={selectedId === wall.id}
+                            is2D={mode === '2d'}
+                            furniture={furniture}
+                            onPointerDown={handlePointerDown}
+                            onWheel={handleWheel}
+                        />
+                    </WallErrorBoundary>
+                )
+            })}
             {joinPreviewWalls && joinPreviewWalls.map((wall, idx) => (
                 <WallErrorBoundary key={`eb-preview-${wall.id}-${idx}`} wallId={`preview-${wall.id}`}>
                     <WallItem

@@ -15,23 +15,33 @@ export function Door3D({ width, height, depth, isSelected }: DoorProps) {
     const frameDepth = depth
     const doorThickness = 0.05
 
-    // Materials
-    const frameMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: '#5D4037', // Dark Brown Frame
-        roughness: 0.3,
-        metalness: 0.05
+    // Materials — upgraded to MeshPhysicalMaterial for realism
+    const frameMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#5D4037',
+        roughness: 0.4,
+        metalness: 0.02,
+        clearcoat: 0.3,
+        clearcoatRoughness: 0.5,
     }), [])
 
-    const doorMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: isSelected ? '#3b82f6' : '#8B4513', // Saddle Brown (#8B4513) or selection blue
-        roughness: 0.6,
-        metalness: 0.1
+    const doorMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: isSelected ? '#3b82f6' : '#8B4513',
+        roughness: 0.5,
+        metalness: 0.05,
+        clearcoat: 0.2,
+        clearcoatRoughness: 0.4,
+        sheen: 0.3,
+        sheenColor: new THREE.Color('#4a2800'),
+        sheenRoughness: 0.8,
     }), [isSelected])
 
-    const handleMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: '#cccccc', // Chrome
-        roughness: 0.1,
-        metalness: 0.9
+    const handleMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#e0e0e0',
+        roughness: 0.05,
+        metalness: 0.95,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.05,
+        reflectivity: 1.0,
     }), [])
 
     return (

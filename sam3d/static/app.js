@@ -180,29 +180,63 @@ const App = {
         this.setLoading(true, "Segmenting...");
 
         try {
-            // Proxy through the backend /api/sam3d/segment-click which forwards to SAM daemon
-            const samFormData = new FormData();
-            samFormData.append('image', this.state.uploadedFile);
-            samFormData.append('x', x.toString());
-            samFormData.append('y', y.toString());
+            const formData = new FormData();
+            formData.append('image', this.state.uploadedFile);
+            formData.append('x', x.toString());
+            formData.append('y', y.toString());
+            formData.append('run_id', this.state.currentJobId);
 
-            const res = await fetch('/api/sam3d/segment-click', { method: 'POST', body: samFormData });
+            const res = await fetch('/api/sam3d/segment-click', { method: 'POST', body: formData });
             const data = await res.json();
 
-            if (data.polygon && data.polygon.length > 0) {
+            if (data.job_queued) {
+                console.log("Job queued, entering polling loop...");
+                this.pollForClickResult(data.job_id);
+            } else if (data.polygon && data.polygon.length > 0) {
                 this.addMask(data);
                 this.showToast("Object Segmented!", "success");
                 this.elements.reconstructBtn.disabled = false;
+                this.setLoading(false);
             } else {
                 this.showToast("No mask found. Try clicking on a different area.", "warning");
+                this.setLoading(false);
             }
 
         } catch (err) {
             console.error(err);
             this.showToast("Error calling segmentation: " + err.message, "error");
-        } finally {
             this.setLoading(false);
         }
+    },
+
+    async pollForClickResult(jobId) {
+        const poll = async () => {
+            try {
+                const res = await fetch(`/api/runs/${jobId}/status`);
+                const data = await res.json();
+
+                if (data.status === 'COMPLETED') {
+                    if (data.result && data.result.polygon) {
+                        this.addMask(data.result);
+                        this.showToast("Object Segmented!", "success");
+                        this.elements.reconstructBtn.disabled = false;
+                    } else {
+                        this.showToast("Worker finished but no mask was found.", "warning");
+                    }
+                    this.setLoading(false);
+                } else if (data.status === 'FAILED') {
+                    this.showToast("Segmentation Failed: " + (data.result?.error || "Unknown error"), "error");
+                    this.setLoading(false);
+                } else {
+                    // Still processing (PENDING, RUNNING)
+                    setTimeout(poll, 1000);
+                }
+            } catch (e) {
+                console.error("Click Poll Error", e);
+                setTimeout(poll, 2000);
+            }
+        };
+        poll();
     },
 
     addMask(maskData) {
@@ -233,18 +267,22 @@ const App = {
     },
 
     async triggerReconstruction() {
-        if (!this.state.activeMaskId) return;
+        const activeMask = this.state.masks.find(m => m.mask_id === this.state.activeMaskId);
+        if (!activeMask || !activeMask.polygon) {
+            this.showToast("Please segment an object first.", "warning");
+            return;
+        }
 
         this.setLoading(true, "Generating 3D Model (Worker)...");
         this.showToast("Task Sent to Worker", "info");
 
         try {
             const payload = {
-                job_id: this.state.currentJobId,
-                mask_id: this.state.activeMaskId
+                run_id: this.state.currentJobId,
+                polygon: activeMask.polygon
             };
 
-            const res = await fetch(this.state.config.reconstructEndpoint, {
+            const res = await fetch('/api/sam3d/reconstruct', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -254,7 +292,7 @@ const App = {
 
             if (data.ok) {
                 // Start Polling for Result
-                this.pollFor3D(this.state.currentJobId);
+                this.pollFor3D(data.job_id); // Use the job_id returned by the backend
             } else {
                 throw new Error(data.message || "Reconstruction Failed");
             }

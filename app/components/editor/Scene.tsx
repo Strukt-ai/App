@@ -1,9 +1,11 @@
 'use client'
 
 import { useRef, useEffect, Suspense, useState } from 'react'
-import { Box3, Vector3, Object3D, TextureLoader } from 'three'
+import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows } from '@react-three/drei'
+import { EffectComposer, N8AO, SMAA, Bloom, ToneMapping } from '@react-three/postprocessing'
+import { ToneMappingMode } from 'postprocessing'
 
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { WallManager } from './WallManager'
@@ -265,10 +267,10 @@ function SceneContent() {
 
     // Lighting presets configuration - Mapped to Environment presets + directional tweaks
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 3.5, sunColor: '#fff5e0', fillIntensity: 1.5, fillColor: '#d4e5ff', ambientIntensity: 0.9 },
+        day: { env: 'city', sunIntensity: 2.8, sunColor: '#fff5e0', fillIntensity: 1.2, fillColor: '#d4e5ff', ambientIntensity: 0.4 },
         night: { env: 'night', sunIntensity: 0.3, sunColor: '#8899cc', fillIntensity: 0.1, fillColor: '#334466', ambientIntensity: 0.15 },
-        studio: { env: 'studio', sunIntensity: 2.5, sunColor: '#ffffff', fillIntensity: 1.2, fillColor: '#e8e8ff', ambientIntensity: 1.0 },
-        sunset: { env: 'sunset', sunIntensity: 2.5, sunColor: '#ff8833', fillIntensity: 0.8, fillColor: '#7799cc', ambientIntensity: 0.5 }
+        studio: { env: 'studio', sunIntensity: 2.0, sunColor: '#ffffff', fillIntensity: 1.0, fillColor: '#e8e8ff', ambientIntensity: 0.5 },
+        sunset: { env: 'sunset', sunIntensity: 2.2, sunColor: '#ff8833', fillIntensity: 0.6, fillColor: '#7799cc', ambientIntensity: 0.3 }
     }
     const lighting = lightingConfigs[lightingPreset]
 
@@ -286,31 +288,35 @@ function SceneContent() {
 
     return (
         <>
-            {/* Solid Background for studio feel - Lightened to Dark Grey */}
-            <color attach="background" args={['#252525']} />
+            {/* Solid Background for studio feel */}
+            <color attach="background" args={['#1a1a1a']} />
 
-            {/* Ambient Light base */}
+            {/* Soft shadows for realistic penumbra */}
+            {mode === '3d' && <SoftShadows size={25} samples={16} focus={0.5} />}
+
+            {/* Ambient Light base — lowered to let AO and directional lights do the work */}
             <ambientLight intensity={lighting.ambientIntensity} color="#ffffff" />
 
             {/* Hemisphere Light — sky/ground color split for natural feel */}
-            <hemisphereLight args={['#c8deff', '#584830', 0.6]} />
+            <hemisphereLight args={['#b4c8e8', '#3d2b1a', 0.4]} />
 
             {/* HDRI Environment for realistic reflections and ambient light */}
-            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.8} />
+            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.6} environmentIntensity={0.8} />
 
-            {/* Key Light (Sun) — upper right */}
+            {/* Key Light (Sun) — upper right, higher res shadows */}
             <directionalLight
                 position={[8, 15, 6]}
                 intensity={lighting.sunIntensity}
                 color={lighting.sunColor}
                 castShadow
-                shadow-bias={-0.0001}
-                shadow-mapSize={[2048, 2048]}
-                shadow-camera-far={50}
-                shadow-camera-left={-20}
-                shadow-camera-right={20}
-                shadow-camera-top={20}
-                shadow-camera-bottom={-20}
+                shadow-bias={-0.0002}
+                shadow-normalBias={0.02}
+                shadow-mapSize={[4096, 4096]}
+                shadow-camera-far={60}
+                shadow-camera-left={-25}
+                shadow-camera-right={25}
+                shadow-camera-top={25}
+                shadow-camera-bottom={-25}
             />
 
             {/* Fill Light — opposite side, no shadows */}
@@ -323,16 +329,16 @@ function SceneContent() {
             {/* Rim / Back Light — edge definition */}
             <directionalLight
                 position={[0, 5, -8]}
-                intensity={0.8}
-                color="#e0e8ff"
+                intensity={0.6}
+                color="#c8d4e8"
             />
 
-            {/* Contact Shadows for grounding objects - Tuned for soft studio look */}
+            {/* Contact Shadows for grounding objects */}
             <ContactShadows
                 position={[0, 0.01, 0]}
-                opacity={0.7}
+                opacity={0.55}
                 scale={50}
-                blur={2.5}
+                blur={2.0}
                 far={10}
                 resolution={1024}
                 color="#000000"
@@ -380,30 +386,28 @@ function SceneContent() {
                 <ErrorBoundary name="FloatingMenu"><FloatingMenu /></ErrorBoundary>
             </group>
 
-            {/* EffectComposer disabled — N8AO halfRes causes walls to visually disappear from certain angles.
-               Re-enable once wall rendering is confirmed stable.
+            {/* Post-processing: AO, Bloom, Tone Mapping — halfRes removed to fix wall disappearing */}
             {mode === '3d' && (
-                <EffectComposer multisampling={0}>
-                    <SMAA />
+                <EffectComposer multisampling={4}>
                     <SMAA />
                     <N8AO
-                        halfRes
                         color="black"
-                        aoRadius={0.5}
-                        intensity={1.5}
-                        aoSamples={6}
-                        denoiseSamples={4}
+                        aoRadius={0.8}
+                        intensity={2.5}
+                        aoSamples={16}
+                        denoiseSamples={8}
+                        distanceFalloff={0.8}
+                        screenSpaceRadius={false}
                     />
                     <Bloom
-                        luminanceThreshold={1}
+                        luminanceThreshold={1.2}
                         mipmapBlur
-                        intensity={0.8}
-                        radius={0.6}
+                        intensity={0.4}
+                        radius={0.4}
                     />
-                    <ToneMapping />
+                    <ToneMapping mode={ToneMappingMode.AGX} />
                 </EffectComposer>
             )}
-            */}
 
             <DropResolver />
         </>
@@ -582,7 +586,15 @@ export function Scene() {
             }}
         >
             <DebugOverlay />
-            <Canvas shadows className="w-full h-full">
+            <Canvas
+                shadows
+                gl={{
+                    antialias: true,
+                    toneMapping: ACESFilmicToneMapping,
+                    toneMappingExposure: 1.0,
+                }}
+                className="w-full h-full"
+            >
                 <Suspense fallback={null}>
                     <SceneContent />
                     {uploadedImage && <BackgroundPlane />}
