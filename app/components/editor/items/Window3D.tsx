@@ -12,7 +12,7 @@ interface WindowProps {
 
 export function Window3D({ width, height, depth, isSelected }: WindowProps) {
     const frameThickness = 0.08
-    const frameDepth = Math.max(depth, 0.25) // Ensure it's thicker than standard 0.2 walls
+    const frameDepth = depth
 
     // Materials
     const upvcMaterial = useMemo(() => new THREE.MeshStandardMaterial({

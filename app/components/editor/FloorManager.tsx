@@ -74,8 +74,9 @@ const RoomItem = memo(function RoomItem({
             <mesh
                 name="Floor"
                 rotation={[-Math.PI / 2, 0, 0]}
-                position={[0, 0.002, 0]}
+                position={[0, mode === '3d' ? -0.05 : 0.002, 0]}
                 geometry={geometry}
+                renderOrder={0}
                 onClick={(e) => {
                     e.stopPropagation()
                     onSelect(room.id)
@@ -88,8 +89,9 @@ const RoomItem = memo(function RoomItem({
                         roughness={1.0}
                         metalness={0.0}
                         transparent
-                        opacity={mode === '3d' ? (selected ? 0.9 : 1) : (selected ? 0.85 : 0.25)}
+                        opacity={mode === '3d' ? (selected ? 0.5 : 0.4) : (selected ? 0.4 : 0.15)}
                         side={DoubleSide}
+                        depthWrite={false}
                     />
                 ) : (
                     <meshStandardMaterial
@@ -97,8 +99,9 @@ const RoomItem = memo(function RoomItem({
                         roughness={1.0}
                         metalness={0.0}
                         transparent
-                        opacity={mode === '3d' ? (selected ? 0.9 : 1) : (selected ? 0.85 : 0.25)}
+                        opacity={mode === '3d' ? (selected ? 0.5 : 0.4) : (selected ? 0.4 : 0.15)}
                         side={DoubleSide}
+                        depthWrite={false}
                     />
                 )}
             </mesh>
@@ -145,8 +148,38 @@ const RoomItem = memo(function RoomItem({
     )
 })
 
+const LabelItem = memo(function LabelItem({ label }: { label: { id: string, text: string, position: { x: number, y: number } } }) {
+    // Show labels in both 2D and 3D so users can see exactly what OCR found
+
+    return (
+        <Html
+            position={[label.position.x, 0.1, label.position.y]}
+            center
+            sprite
+            style={{ pointerEvents: 'none' }}
+        >
+            <div style={{
+                background: 'rgba(0,0,0,0.8)',
+                backdropFilter: 'blur(4px)',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                color: 'white',
+                fontSize: '11px',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                userSelect: 'none'
+            }}>
+                {label.text}
+            </div>
+        </Html>
+    )
+})
+
 export function FloorManager() {
     const rooms = useFloorplanStore(s => s.rooms)
+    const labels = useFloorplanStore(s => s.labels)
     const selectedId = useFloorplanStore(s => s.selectedId)
     const activeTool = useFloorplanStore(s => s.activeTool)
     const selectObject = useFloorplanStore(s => s.selectObject)
@@ -175,6 +208,12 @@ export function FloorManager() {
                     selected={room.id === selectedId}
                     onSelect={selectObject}
                     onInteraction={handleInteraction}
+                />
+            ))}
+            {labels.map(label => (
+                <LabelItem
+                    key={label.id}
+                    label={label}
                 />
             ))}
         </group>

@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Shield, Lock, FileText } from 'lucide-react'
+import { X, Shield } from 'lucide-react'
 
 interface TermsModalProps {
     isOpen: boolean

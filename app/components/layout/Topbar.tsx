@@ -111,10 +111,9 @@ export function Topbar() {
     return (
         <div className="relative h-14 border-b bg-card flex items-center justify-between px-4 select-none">
             <div className="flex items-center gap-2">
-                {/* clicking the logo returns to the templates homepage */}
-                <a href="/" className="w-8 h-8 flex items-center justify-center">
+                <div className="w-8 h-8 flex items-center justify-center">
                     <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
-                </a>
+                </div>
                 <div className="flex flex-col">
                     <span className="font-bold text-sm tracking-tight leading-none">Strukt AI</span>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -183,6 +182,120 @@ export function Topbar() {
             </div>
 
             <div className="flex items-center gap-2">
+
+                {currentRunId && (
+                    <div className="flex items-center gap-1 mr-2 border-r border-border pr-3">
+                        <button
+                            disabled={isGenerating3D}
+                            onClick={async () => {
+                                if (!token) return showToast("Please login to download", "error")
+
+                                const doDownload = async () => {
+                                    try {
+                                        const res = await fetch(`/api/runs/${currentRunId}/download/glb`, {
+                                            headers: { 'Authorization': `Bearer ${token}` }
+                                        })
+                                        if (!res.ok) throw new Error(await res.text())
+                                        const blob = await res.blob()
+                                        const url = window.URL.createObjectURL(blob)
+                                        const a = document.createElement('a')
+                                        a.href = url
+                                        a.download = `floorplan-${currentRunId}.glb`
+                                        document.body.appendChild(a)
+                                        a.click()
+                                        a.remove()
+                                        window.URL.revokeObjectURL(url)
+                                    } catch (e: any) {
+                                        showToast("Failed to download GLB. Wait a moment and try again.", "error")
+                                    }
+                                }
+
+                                // If not generating, trigger it AND wait.
+                                if (runStatus !== 'processing') {
+                                    showToast("Generating High Quality 3D Model...", "info")
+                                    await useFloorplanStore.getState().triggerBlenderGeneration()
+                                    let attempts = 0;
+                                    const pollInterval = setInterval(async () => {
+                                        attempts++;
+                                        const status = useFloorplanStore.getState().runStatus;
+                                        if (status === 'completed') {
+                                            clearInterval(pollInterval);
+                                            await doDownload();
+                                        } else if (status === 'failed' || attempts > 120) {
+                                            clearInterval(pollInterval);
+                                            showToast("3D Generation failed or timed out.", "error");
+                                        }
+                                    }, 1500);
+                                } else {
+                                    // Already processing? Just try download assuming it might be another task, or wait? Let's just try.
+                                    await doDownload()
+                                }
+                            }}
+                            className={cn(
+                                "px-2.5 py-1.5 rounded-md text-xs font-medium bg-secondary/50 hover:bg-secondary flex items-center gap-1.5 transition-colors",
+                                isGenerating3D && "animate-pulse opacity-50 cursor-not-allowed text-yellow-500"
+                            )}
+                            title="Generate & Download 3D Model (GLB)"
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                            {isGenerating3D ? 'Wait...' : 'GLB'}
+                        </button>
+                        <button
+                            disabled={isGenerating3D}
+                            onClick={async () => {
+                                if (!token) return showToast("Please login to download", "error")
+
+                                const doDownload = async () => {
+                                    try {
+                                        const res = await fetch(`/api/runs/${currentRunId}/download/blend`, {
+                                            headers: { 'Authorization': `Bearer ${token}` }
+                                        })
+                                        if (!res.ok) throw new Error(await res.text())
+                                        const blob = await res.blob()
+                                        const url = window.URL.createObjectURL(blob)
+                                        const a = document.createElement('a')
+                                        a.href = url
+                                        a.download = `floorplan-${currentRunId}.blend`
+                                        document.body.appendChild(a)
+                                        a.click()
+                                        a.remove()
+                                        window.URL.revokeObjectURL(url)
+                                    } catch (e: any) {
+                                        showToast("Failed to download Blend. Wait a moment and try again.", "error")
+                                    }
+                                }
+
+                                // If not generating, trigger it AND wait.
+                                if (runStatus !== 'processing') {
+                                    showToast("Generating High Quality 3D Model...", "info")
+                                    await useFloorplanStore.getState().triggerBlenderGeneration()
+                                    let attempts = 0;
+                                    const pollInterval = setInterval(async () => {
+                                        attempts++;
+                                        const status = useFloorplanStore.getState().runStatus;
+                                        if (status === 'completed') {
+                                            clearInterval(pollInterval);
+                                            await doDownload();
+                                        } else if (status === 'failed' || attempts > 120) {
+                                            clearInterval(pollInterval);
+                                            showToast("3D Generation failed or timed out.", "error");
+                                        }
+                                    }, 1500);
+                                } else {
+                                    await doDownload()
+                                }
+                            }}
+                            className={cn(
+                                "px-2.5 py-1.5 rounded-md text-xs font-medium bg-secondary/50 hover:bg-secondary flex items-center gap-1.5 transition-colors",
+                                isGenerating3D && "animate-pulse opacity-50 cursor-not-allowed text-yellow-500"
+                            )}
+                            title="Generate & Download Blender File"
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                            {isGenerating3D ? 'Wait...' : 'Blend'}
+                        </button>
+                    </div>
+                )}
 
                 <div className="relative flex items-center gap-2">
                     {/* Process Button - Only visible if file selected */}

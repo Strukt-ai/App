@@ -1,50 +1,15 @@
 'use client'
 
-import {
-    Download, Upload, MousePointer2, Loader2, Box
-} from 'lucide-react'
+import { Upload, Loader2, MousePointer2, Box } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { useState, useRef, useEffect } from 'react'
 
 export function RightSidebar() {
-    const {
-        activeTool, mode, token
-    } = useFloorplanStore()
+    const activeTool = useFloorplanStore(s => s.activeTool)
+    const mode = useFloorplanStore(s => s.mode)
+    const token = useFloorplanStore(s => s.token)
 
-    const downloadWithAuth = async (url: string, filename: string) => {
-        if (!token) {
-            alert('You are not signed in. Please sign in and try again.')
-            return
-        }
-        const res = await fetch(url, {
-            cache: 'no-store',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Cache-Control': 'no-cache',
-            },
-        })
-        if (!res.ok) {
-            const txt = await res.text().catch(() => '')
-            console.error('[Download] failed', res.status, txt)
-            try {
-                const errParse = JSON.parse(txt)
-                alert(`Download failed: ${errParse.detail || txt}`)
-            } catch {
-                alert(`Download failed: ${res.statusText}`)
-            }
-            return
-        }
-        const blob = await res.blob()
-        const objectUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = objectUrl
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(objectUrl)
-    }
 
     // --- AI / SAM3D State ---
     const [imageSrc, setImageSrc] = useState<string | null>(null)
@@ -52,7 +17,7 @@ export function RightSidebar() {
     const [isProcessingAI, setIsProcessingAI] = useState(false)
     const [statusMsg, setStatusMsg] = useState('')
     const [masks, setMasks] = useState<any[]>([])
-    const [generatedModels, setGeneratedModels] = useState<any[]>([])
+
 
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -268,35 +233,6 @@ export function RightSidebar() {
         }
     }
 
-    const pollFor3D = async (currentJobId: string) => {
-        setStatusMsg("Worker is generating 3D...")
-        const interval = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/runs/${currentJobId}/status`)
-                const data = await res.json()
-
-                if (data.status === 'COMPLETED') {
-                    clearInterval(interval)
-                    setIsProcessingAI(false)
-                    setStatusMsg("3D Ready!")
-                    addGeneratedModel(currentJobId)
-                } else if (data.status === 'FAILED') {
-                    clearInterval(interval)
-                    setIsProcessingAI(false)
-                    setStatusMsg("3D Generation Failed: " + data.error)
-                }
-            } catch (e) {
-                console.error(e)
-            }
-        }, 2000)
-    }
-
-    const addGeneratedModel = (id: string) => {
-        const glbUrl = `/api/runs/${id}/download/glb`
-        if (!generatedModels.find(m => m.id === id)) {
-            setGeneratedModels(prev => [{ id, url: glbUrl }, ...prev])
-        }
-    }
 
 
     if (!isVisible) return null
@@ -409,51 +345,7 @@ export function RightSidebar() {
                             </div>
                         </div>
 
-                        {/* Results List */}
-                        {generatedModels.length > 0 && (
-                            <div className="p-4 border-b border-border/50">
-                                <h4 className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">Generated Models</h4>
-                                <div className="space-y-2">
-                                    {generatedModels.map(model => (
-                                        <div key={model.id} className="bg-secondary/20 rounded-md p-2 border border-border/50 flex items-center justify-between group">
-                                            <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[120px]">
-                                                {model.id}
-                                            </span>
-                                            <button
-                                                onClick={() => downloadWithAuth(`${model.url}?t=${Date.now()}`, 'floorplan.glb')}
-                                                className="text-[9px] flex items-center gap-1 bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded hover:bg-primary/20"
-                                            >
-                                                <Download className="w-3 h-3" />
-                                                GLB
-                                            </button>
-                                            <button
-                                                onClick={() => downloadWithAuth(`/api/runs/${model.id}/svg/raw?t=${Date.now()}`, `inference_raw_${model.id}.svg`)}
-                                                className="text-[9px] flex items-center gap-1 bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded hover:bg-primary/20"
-                                            >
-                                                <Download className="w-3 h-3" />
-                                                SVG
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    await useFloorplanStore.getState().triggerBlenderGeneration()
-                                                    downloadWithAuth(`/api/runs/${model.id}/download/blend?t=${Date.now()}`, 'floorplan.blend')
-                                                }}
-                                                disabled={useFloorplanStore.getState().isGenerating3D}
-                                                className={cn(
-                                                    "text-[9px] flex items-center gap-1 border px-2 py-1 rounded transition-colors",
-                                                    useFloorplanStore.getState().isGenerating3D
-                                                        ? "bg-primary/5 text-primary/50 border-primary/10 cursor-not-allowed"
-                                                        : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
-                                                )}
-                                            >
-                                                <Download className="w-3 h-3" />
-                                                {useFloorplanStore.getState().isGenerating3D ? 'Gen...' : 'Blend'}
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+
 
                     </div>
                 </div>

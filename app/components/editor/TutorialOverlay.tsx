@@ -1,11 +1,10 @@
 'use client'
 
 import { useFloorplanStore } from '@/store/floorplanStore'
-import { ArrowLeft, Ruler, Hammer, Layers, LayoutTemplate } from 'lucide-react'
+import { ArrowLeft, Ruler, Hammer, Layers } from 'lucide-react'
 
 export function TutorialOverlay() {
     const tutorialStep = useFloorplanStore(s => s.tutorialStep)
-    const setTutorialStep = useFloorplanStore(s => s.setTutorialStep)
     const completeTutorial = useFloorplanStore(s => s.completeTutorial)
     const triggerDetectRooms = useFloorplanStore(s => s.triggerDetectRooms)
 

@@ -46,6 +46,12 @@ export type Room = {
     textureTileHeightM?: number
 }
 
+export type TextLabel = {
+    id: string
+    text: string
+    position: Vector2
+}
+
 export interface FloorplanState {
     mode: '2d' | '3d'
     activeTool: 'select' | 'move' | 'resize' | 'rotate' | 'delete' | 'label' | 'wall' | 'ruler' | 'furniture' | 'floor' | 'none'
@@ -55,6 +61,7 @@ export interface FloorplanState {
     walls: Wall[]
     furniture: FurnItem[]
     rooms: Room[]
+    labels: TextLabel[]
     pendingDrop: { type: string; x: number; y: number } | null // x,y are NDC [-1, 1]
 
     currentRunId: string | null
@@ -64,6 +71,8 @@ export interface FloorplanState {
     // Calibration & 3D Workflow
     uploadedImage: string | null
     imageDimensions: { width: number; height: number } | null
+    imageWorldWidth?: number
+    imageWorldHeight?: number
     calibrationFactor: number // Meters per Pixel
     isCalibrated: boolean
     isGenerating3D: boolean
@@ -144,6 +153,20 @@ export interface FloorplanState {
     consumeDrop: () => void
     addRender: (url: string) => void
     showToast: (message: string, type?: 'error' | 'info' | 'success') => void
+    cornerSnapMode: boolean
+    setCornerSnapMode: (active: boolean) => void
+    snapCorners: { wallId: string; type: 'start' | 'end' }[]
+    addSnapCorner: (corner: { wallId: string; type: 'start' | 'end' }) => void
+
+    // Join Mode Interactions
+    joinMode: boolean
+    joinSourceId: string | null
+    joinTargetId: string | null
+    joinPreviewWalls: Wall[] | null
+
+    setJoinMode: (active: boolean) => void
+    setJoinTargetId: (id: string | null, point?: { x: number, y: number }) => void
+    applyJoin: () => void
 }
 
 // --- Store ---
@@ -158,6 +181,7 @@ export const useFloorplanStore = create<FloorplanState>()(
         walls: [] as Wall[],
         furniture: [] as FurnItem[],
         rooms: [] as Room[],
+        labels: [] as TextLabel[],
         pendingDrop: null as FloorplanState['pendingDrop'],
         currentRunId: null as string | null,
         runStatus: 'idle',
@@ -181,6 +205,13 @@ export const useFloorplanStore = create<FloorplanState>()(
         fitViewTrigger: 0,
         exportScale: 1,
         toast: null,
+        cornerSnapMode: false,
+        snapCorners: [],
+
+        joinMode: false,
+        joinSourceId: null,
+        joinTargetId: null,
+        joinPreviewWalls: null,
 
         token: localStorage.getItem('google_token') || null,
         user: null,
@@ -332,12 +363,23 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const wall = state.walls.find(w => w.id === targetId)
                 if (wall) {
                     wall.end = sp
-                    // Auto-straighten while drawing if Shift is held
+                    // Auto-straighten to 90 degrees (orthogonal snapping) by default.
+                    // If Shift is held, force absolute exact ortho.
+                    // Otherwise, soft snap if within a tolerance (e.g., 0.5m deviation).
+                    const dx = Math.abs(wall.end.x - wall.start.x)
+                    const dy = Math.abs(wall.end.y - wall.start.y)
+                    const SNAP_TOLERANCE = 0.5 // meters
+
                     if (options?.shiftKey) {
-                        const dx = Math.abs(wall.end.x - wall.start.x)
-                        const dy = Math.abs(wall.end.y - wall.start.y)
                         if (dx > dy) wall.end.y = wall.start.y
                         else wall.end.x = wall.start.x
+                    } else {
+                        // Soft snap
+                        if (dy < SNAP_TOLERANCE && dx > dy) {
+                            wall.end.y = wall.start.y // Snap horizontal
+                        } else if (dx < SNAP_TOLERANCE && dy > dx) {
+                            wall.end.x = wall.start.x // Snap vertical
+                        }
                     }
                 }
             } else if (type === 'drawing_floor' && targetId) {
@@ -379,6 +421,58 @@ export const useFloorplanStore = create<FloorplanState>()(
                 } else if (furn && (delta.x !== 0 || delta.y !== 0)) {
                     furn.position.x += delta.x
                     furn.position.z += delta.y
+
+                    // --- LEGO SNAPPING FOR DOORS & WINDOWS ---
+                    if ((furn.type === 'door' || furn.type === 'window') && !options?.shiftKey) {
+                        let bestWall = null;
+                        let minDist = 0.3; // Snap threshold: 0.3 meters (reduced to allow easier detaching)
+                        let snapX = furn.position.x;
+                        let snapZ = furn.position.z;
+                        let snapAngle = furn.rotation.y;
+
+                        for (const w of state.walls) {
+                            const dx = w.end.x - w.start.x;
+                            const dy = w.end.y - w.start.y;
+                            const lengthSquared = dx * dx + dy * dy;
+
+                            if (lengthSquared === 0) continue;
+
+                            // Project point onto line segment
+                            let t = ((furn.position.x - w.start.x) * dx + (furn.position.z - w.start.y) * dy) / lengthSquared;
+                            t = Math.max(0, Math.min(1, t)); // Clamp to segment bounds
+
+                            const cx = w.start.x + t * dx;
+                            const cy = w.start.y + t * dy;
+
+                            const distSquared = (furn.position.x - cx) ** 2 + (furn.position.z - cy) ** 2;
+                            const dist = Math.sqrt(distSquared);
+
+                            if (dist < minDist) {
+                                minDist = dist;
+                                bestWall = w;
+                                snapX = cx;
+                                snapZ = cy;
+                                snapAngle = Math.atan2(dy, dx);
+                            }
+                        }
+
+                        if (bestWall) {
+                            // Magnetic Snap!
+                            furn.position.x = snapX;
+                            furn.position.z = snapZ;
+                            // Match WallManager's rotation mapping (negative angle around Y)
+                            furn.rotation.y = -snapAngle;
+
+                            // Dynamically fit thickness to wall depth
+                            furn.dimensions.depth = bestWall.thickness;
+                        } else {
+                            // If it detaches, reset depth to a standard so it doesn't look like a huge block
+                            if (furn.dimensions.depth !== 0.15) {
+                                furn.dimensions.depth = 0.15;
+                                furn.rotation.y = 0; // Reset rotation so they lay flat when unattached
+                            }
+                        }
+                    }
                 } else {
                     const room = state.rooms.find(r => r.id === targetId)
                     if (room && (delta.x !== 0 || delta.y !== 0)) {
@@ -420,21 +514,31 @@ export const useFloorplanStore = create<FloorplanState>()(
                 else if (wall && subType) {
                     if (subType === 'start') {
                         wall.start = sp
-                        // Straighten Logic
+                        // Straighten Logic: Orthogonal Snapping
+                        const dx = Math.abs(wall.start.x - wall.end.x)
+                        const dy = Math.abs(wall.start.y - wall.end.y)
+                        const SNAP_TOLERANCE = 0.5
+
                         if (options?.shiftKey) {
-                            const dx = Math.abs(wall.start.x - wall.end.x)
-                            const dy = Math.abs(wall.start.y - wall.end.y)
                             if (dx > dy) wall.start.y = wall.end.y // Snap to horizontal
                             else wall.start.x = wall.end.x // Snap to vertical
+                        } else {
+                            if (dy < SNAP_TOLERANCE && dx > dy) wall.start.y = wall.end.y
+                            else if (dx < SNAP_TOLERANCE && dy > dx) wall.start.x = wall.end.x
                         }
                     } else if (subType === 'end') {
                         wall.end = sp
-                        // Straighten Logic
+                        // Straighten Logic: Orthogonal Snapping
+                        const dx = Math.abs(wall.end.x - wall.start.x)
+                        const dy = Math.abs(wall.end.y - wall.start.y)
+                        const SNAP_TOLERANCE = 0.5
+
                         if (options?.shiftKey) {
-                            const dx = Math.abs(wall.end.x - wall.start.x)
-                            const dy = Math.abs(wall.end.y - wall.start.y)
                             if (dx > dy) wall.end.y = wall.start.y
                             else wall.end.x = wall.start.x
+                        } else {
+                            if (dy < SNAP_TOLERANCE && dx > dy) wall.end.y = wall.start.y
+                            else if (dx < SNAP_TOLERANCE && dy > dx) wall.end.x = wall.start.x
                         }
                     } else if (subType === 'thickness') {
                         const dx = wall.end.x - wall.start.x
@@ -482,9 +586,223 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
 
         endInteraction: () => set((state) => {
-            // Simply reset interaction state - DON'T delete walls
-            // Tiny walls are invisible anyway (scale 0.01) so no need to remove
+            // Clean up degenerate (zero-length) walls from accidental clicks
+            if (state.interaction.type === 'drawing' && state.interaction.targetId) {
+                const wall = state.walls.find(w => w.id === state.interaction.targetId)
+                if (wall) {
+                    const dx = wall.end.x - wall.start.x
+                    const dy = wall.end.y - wall.start.y
+                    const len = Math.sqrt(dx * dx + dy * dy)
+                    if (len < 0.05) {
+                        // Remove zero-length wall
+                        state.walls = state.walls.filter(w => w.id !== state.interaction.targetId)
+                    }
+                }
+            }
             state.interaction = { type: 'none', targetId: null, lastPoint: null }
+        }),
+
+        setCornerSnapMode: (active) => set((state) => {
+            state.cornerSnapMode = active
+            if (!active) state.snapCorners = []
+        }),
+
+        addSnapCorner: (corner) => set((state) => {
+            if (state.snapCorners.find(c => c.wallId === corner.wallId)) return;
+            state.snapCorners.push(corner);
+
+            if (state.snapCorners.length === 2) {
+                const c1 = state.snapCorners[0];
+                const c2 = state.snapCorners[1];
+                const w1 = state.walls.find(w => w.id === c1.wallId);
+                const w2 = state.walls.find(w => w.id === c2.wallId);
+
+                if (w1 && w2) {
+                    const x1 = w1.start.x, y1 = w1.start.y, x2 = w1.end.x, y2 = w1.end.y;
+                    const x3 = w2.start.x, y3 = w2.start.y, x4 = w2.end.x, y4 = w2.end.y;
+                    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+                    if (Math.abs(denom) > 0.0001) {
+                        const px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+                        const py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+
+                        if (c1.type === 'start') { w1.start.x = px; w1.start.y = py; }
+                        else { w1.end.x = px; w1.end.y = py; }
+
+                        if (c2.type === 'start') { w2.start.x = px; w2.start.y = py; }
+                        else { w2.end.x = px; w2.end.y = py; }
+                    }
+                }
+
+                state.snapCorners = [];
+                state.cornerSnapMode = false;
+            }
+        }),
+
+        setJoinMode: (active) => set((state) => {
+            if (active) {
+                // Only activate if a wall is selected
+                if (state.selectedId && state.walls.some(w => w.id === state.selectedId)) {
+                    state.joinMode = true
+                    state.joinSourceId = state.selectedId
+                    state.joinTargetId = null
+                    state.joinPreviewWalls = null
+                    state.toast = { message: "Join Mode Active: Click target wall", type: "info" }
+                } else {
+                    state.toast = { message: "Select a wall first before holding J", type: "info" }
+                }
+            } else {
+                if (state.joinMode && !state.joinTargetId) {
+                    state.toast = { message: "Join Mode Cancelled", type: "info" }
+                }
+                state.joinMode = false
+                state.joinSourceId = null
+                state.joinTargetId = null
+                state.joinPreviewWalls = null
+            }
+        }),
+
+        setJoinTargetId: (id) => set((state) => {
+            if (!state.joinMode || !state.joinSourceId || id === state.joinSourceId) return
+            state.joinTargetId = id
+
+            const w1 = state.walls.find(w => w.id === state.joinSourceId)
+            const targetWall = state.walls.find(w => w.id === id)
+            const targetFurniture = state.furniture.find(f => f.id === id)
+
+            if (!w1 || (!targetWall && !targetFurniture)) {
+                state.toast = { message: "Join target not found", type: "error" }
+                return
+            }
+
+            state.toast = { message: "Calculating Smart Join...", type: "info" }
+
+            const x1 = w1.start.x, y1 = w1.start.y, x2 = w1.end.x, y2 = w1.end.y;
+            let px: number, py: number;
+
+            // -- OBJECT SNAP LOGIC (DOOR/WINDOW) --
+            if (targetFurniture) {
+                // Snap to center of the furniture
+                px = targetFurniture.position.x;
+                py = targetFurniture.position.z;
+
+                // Move strictly the closer endpoint of the active wall
+                const dStart = Math.hypot(x1 - px, y1 - py);
+                const dEnd = Math.hypot(x2 - px, y2 - py);
+
+                const pW1 = { ...w1 };
+                if (dStart < dEnd) pW1.start = { x: px, y: py };
+                else pW1.end = { x: px, y: py };
+
+                state.joinPreviewWalls = [pW1];
+                state.toast = { message: `Preview ready: Joining to ${targetFurniture.type}. Press ENTER to connect!`, type: "info" }
+                return;
+            }
+
+            // -- WALL TO WALL SNAP LOGIC --
+            const w2 = targetWall!;
+            const x3 = w2.start.x, y3 = w2.start.y, x4 = w2.end.x, y4 = w2.end.y;
+
+            // Calculate mathematical line intersection of infinite lines
+            const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+            if (Math.abs(denom) < 0.0001) {
+                // Walls are exactly parallel. Project W1's closer endpoint cleanly perpendicular onto W2's line.
+                const pointDists = [
+                    { type: 'start', p: w1.start, d: Math.min(Math.hypot(x1 - x3, y1 - y3), Math.hypot(x1 - x4, y1 - y4)) },
+                    { type: 'end', p: w1.end, d: Math.min(Math.hypot(x2 - x3, y2 - y3), Math.hypot(x2 - x4, y2 - y4)) }
+                ].sort((a, b) => a.d - b.d);
+
+                const w1p = pointDists[0].p;
+                const w1Type = pointDists[0].type;
+
+                const w2Dx = x4 - x3;
+                const w2Dy = y4 - y3;
+                const w2LenSq = w2Dx * w2Dx + w2Dy * w2Dy;
+                let t = 0;
+                if (w2LenSq > 0.0001) {
+                    t = ((w1p.x - x3) * w2Dx + (w1p.y - y3) * w2Dy) / w2LenSq;
+                }
+                px = x3 + t * w2Dx;
+                py = y3 + t * w2Dy;
+
+                const pW1 = { ...w1 };
+                if (w1Type === 'start') pW1.start = { x: px, y: py };
+                else pW1.end = { x: px, y: py };
+
+                state.joinPreviewWalls = [pW1];
+                state.toast = { message: "Preview ready: Parallel Projection. Press ENTER to connect!", type: "info" }
+                return;
+            }
+
+            // Standard mathematical intersection (guarantees NO rotation)
+            px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+            py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+
+            // Check if intersection point lies on the physical segment of W2 (T-Junction check)
+            const w2Dx = x4 - x3;
+            const w2Dy = y4 - y3;
+            const w2LenSq = w2Dx * w2Dx + w2Dy * w2Dy;
+
+            let t = -1;
+            if (w2LenSq > 0.0001) {
+                t = ((px - x3) * w2Dx + (py - y3) * w2Dy) / w2LenSq;
+            }
+
+            // Determine which endpoint of W1 to stretch
+            const w1MoveDist = [
+                { type: 'start', d: Math.hypot(x1 - px, y1 - py) },
+                { type: 'end', d: Math.hypot(x2 - px, y2 - py) }
+            ].sort((a, b) => a.d - b.d)[0];
+
+            const pW1 = { ...w1 };
+            if (w1MoveDist.type === 'start') pW1.start = { x: px, y: py };
+            else pW1.end = { x: px, y: py };
+
+            if (t >= -0.05 && t <= 1.05) {
+                // T-Junction: Intersection hits the middle of W2.
+                // Apply ONLY to W1. W2 remains perfectly untouched.
+                state.joinPreviewWalls = [pW1];
+                state.toast = { message: "Preview ready: T-Junction Join. Press ENTER to connect!", type: "info" }
+            } else {
+                // L-Corner: Intersection is out in empty space.
+                // Stretch both W1 and W2 mathematically to meet at the virtual corner.
+                const w2MoveDist = [
+                    { type: 'start', d: Math.hypot(x3 - px, y3 - py) },
+                    { type: 'end', d: Math.hypot(x4 - px, y4 - py) }
+                ].sort((a, b) => a.d - b.d)[0];
+
+                const pW2 = { ...w2 };
+                if (w2MoveDist.type === 'start') pW2.start = { x: px, y: py };
+                else pW2.end = { x: px, y: py };
+
+                state.joinPreviewWalls = [pW1, pW2];
+                state.toast = { message: "Preview ready: L-Corner Join. Press ENTER to connect!", type: "info" }
+            }
+        }),
+
+        applyJoin: () => set((state) => {
+            if (state.joinMode && state.joinPreviewWalls && state.joinPreviewWalls.length > 0 && state.joinTargetId) {
+                // Dynamically apply properties of all modified walls in the preview
+                state.joinPreviewWalls.forEach(previewWall => {
+                    const idx = state.walls.findIndex(w => w.id === previewWall.id);
+                    if (idx > -1) {
+                        state.walls[idx].start = { ...previewWall.start };
+                        state.walls[idx].end = { ...previewWall.end };
+                    }
+                });
+
+                state.toast = { message: "Object joined successfully!", type: "success" }
+
+            } else if (state.joinMode && state.joinTargetId) {
+                state.toast = { message: "Failed to apply join. No preview generated.", type: "error" }
+            }
+
+            // Reset everything
+            state.joinMode = false
+            state.joinSourceId = null
+            state.joinTargetId = null
+            state.joinPreviewWalls = null
         }),
 
         calibrate: (wallId, realLength) => set((state) => {
@@ -499,43 +817,36 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const prevMetersPerPixel = state.calibrationFactor
                 const ratio = realLength / currentLen
 
-                // Rescale EVERYTHING
+                // Rescale EVERYTHING proportionately to maintain the exact visual aspect ratio
                 state.walls.forEach(w => {
                     w.start.x *= ratio; w.start.y *= ratio
                     w.end.x *= ratio; w.end.y *= ratio
-                    // Keep wall thickness in the same unit system as wall coordinates.
-                    // If the whole plan scales, thickness must scale too, otherwise it can look
-                    // "randomly" huge compared to the plan after calibration.
-                    const nextTh = (Number(w.thickness) > 0 ? Number(w.thickness) : 0.15) * ratio
-                    w.thickness = Math.min(Math.max(nextTh, 0.05), 0.6)
-                    w.height = Math.min(Math.max(w.height || 2.5, 2.2), 3.5)
+
+                    // Scale thickness proportionately with the plan
+                    w.thickness = (Number(w.thickness) > 0 ? Number(w.thickness) : 0.15) * ratio
+                    // Do not clamp thickness here so we don't accidentally get 'fat' handles on tiny floorplans
+                    w.height = 2.5 // Standard wall height
                 })
 
                 state.furniture.forEach(f => {
-                    // Scale placement in the same coordinate system as walls.
+                    // Position scales linearly in the X/Z plane
                     f.position.x *= ratio
                     f.position.z *= ratio
 
-                    // Don't scale Y placement by calibration ratio; it's already in real-world meters.
-                    // (Scaling it makes windows jump/fatten vertically.)
+                    // Scale footprint dimensions perfectly
+                    f.dimensions.width *= ratio
+                    f.dimensions.depth *= ratio
 
-                    // Doors/windows are openings whose thickness should stay thin.
-                    // Only scale their opening width; keep depth (thickness) and height stable.
+                    // Manage height / Y-position logic consistently
                     if (f.type === 'door') {
-                        f.dimensions.width *= ratio
-                        f.dimensions.depth = Math.min(f.dimensions.depth, 0.3)
                         f.dimensions.height = 2.1
                     } else if (f.type === 'window') {
-                        f.dimensions.width *= ratio
-                        f.dimensions.depth = Math.min(f.dimensions.depth, 0.3)
                         f.dimensions.height = 1.2
-                        f.position.y = 1.0
+                        f.position.y = 1.0 // Window sill height
                     } else {
-                        // Generic items can be scaled uniformly if desired.
+                        // For fully generic 3D objects, scale the height too
                         f.position.y *= ratio
-                        f.dimensions.width *= ratio
                         f.dimensions.height *= ratio
-                        f.dimensions.depth *= ratio
                     }
                 })
 
@@ -543,6 +854,11 @@ export const useFloorplanStore = create<FloorplanState>()(
                     r.points.forEach(p => { p.x *= ratio; p.y *= ratio })
                     r.center.x *= ratio
                     r.center.y *= ratio
+                })
+
+                state.labels.forEach(l => {
+                    l.position.x *= ratio
+                    l.position.y *= ratio
                 })
 
                 // Keep calibrationFactor as meters-per-pixel so background image and SVG remain in sync.
@@ -693,9 +1009,9 @@ export const useFloorplanStore = create<FloorplanState>()(
                 position: { x: position.x, y: type === 'window' ? 1.0 : 0, z: position.y },
                 rotation: { x: 0, y: 0, z: 0 },
                 dimensions: type === 'door'
-                    ? { width: 1, height: 2.1, depth: 0.1 }
+                    ? { width: 1, height: 2.1, depth: 0.15 }
                     : type === 'window'
-                        ? { width: 1.0, height: 1.2, depth: 0.1 } // Standard window size
+                        ? { width: 1.0, height: 1.2, depth: 0.15 } // Standard window size
                         : { width: 1, height: 1, depth: 1 },
             })
         }),
@@ -764,6 +1080,7 @@ export const useFloorplanStore = create<FloorplanState>()(
 
             const walls: Wall[] = []
             const furniture: FurnItem[] = []
+            const labels: TextLabel[] = []
 
             let pxToM = Number(state.calibrationFactor)
             if (!isFinite(pxToM) || pxToM <= 0) pxToM = 0.01
@@ -814,16 +1131,21 @@ export const useFloorplanStore = create<FloorplanState>()(
                     const w = parseFloat(r.getAttribute('width') || '0') * pxToM
                     const h = parseFloat(r.getAttribute('height') || '0') * pxToM
 
-                    // We represent vertical/horizontal walls as start/end vectors
+                    // Skip degenerate rects that produce zero-length walls
+                    if (w < 1e-4 && h < 1e-4) return
+
+                    // We represent vertical/horizontal walls as start/end vectors.
+                    // Use the SMALLER dimension as thickness (the thin side of the rect).
                     if (w > h) {
                         const id = r.getAttribute('id') || uuidv4()
                         const existing = state.walls.find(w => w.id === id)
-                        // Horizontal wall
+                        // Horizontal wall - width is length, height is thickness
+                        const thickness = Math.max(0.05, Math.min(h, 2.0)) || 0.15
                         walls.push({
                             id,
                             start: { x, y: y + h / 2 },
                             end: { x: x + w, y: y + h / 2 },
-                            thickness: Math.min(Math.max(h, 0.05), 0.6),
+                            thickness,
                             height: 2.5,
                             ...(existing ? {
                                 textureDataUrl: existing.textureDataUrl,
@@ -834,12 +1156,13 @@ export const useFloorplanStore = create<FloorplanState>()(
                     } else {
                         const id = r.getAttribute('id') || uuidv4()
                         const existing = state.walls.find(w => w.id === id)
-                        // Vertical wall
+                        // Vertical wall - height is length, width is thickness
+                        const thickness = Math.max(0.05, Math.min(w, 2.0)) || 0.15
                         walls.push({
                             id,
                             start: { x: x + w / 2, y },
                             end: { x: x + w / 2, y: y + h },
-                            thickness: Math.min(Math.max(w, 0.05), 0.6),
+                            thickness,
                             height: 2.5,
                             ...(existing ? {
                                 textureDataUrl: existing.textureDataUrl,
@@ -849,6 +1172,8 @@ export const useFloorplanStore = create<FloorplanState>()(
                         })
                     }
                 })
+                const svgWallCount = wallGroup.querySelectorAll('rect').length
+                console.log(`[DEBUG importFromSVG] Wall rects in SVG: ${svgWallCount}, Parsed walls: ${walls.length}`)
             }
 
             // 3b. Parse imported model placemarks (written by backend upload)
@@ -910,15 +1235,45 @@ export const useFloorplanStore = create<FloorplanState>()(
                     group.querySelectorAll('rect').forEach(r => {
                         const x = (parseFloat(r.getAttribute('x') || '0') - offsetX) * pxToM
                         const y = (parseFloat(r.getAttribute('y') || '0') - offsetY) * pxToM
-                        const w = parseFloat(r.getAttribute('width') || '0') * pxToM
-                        const h = parseFloat(r.getAttribute('height') || '0') * pxToM
+                        let w = parseFloat(r.getAttribute('width') || '0') * pxToM
+                        const hOriginal = parseFloat(r.getAttribute('height') || '0') * pxToM
+                        let h = hOriginal
+
+                        // Check for preserved rotation attribute (written by exportToSVG)
+                        const savedRotation = r.getAttribute('data-rotation')
+                        let objRotationY: number
+
+                        if (savedRotation !== null) {
+                            // Rotation was explicitly saved — use it directly
+                            objRotationY = parseFloat(savedRotation)
+                            if (!isFinite(objRotationY)) objRotationY = 0
+                        } else {
+                            // Infer from rect dimensions (initial import from backend SVG)
+                            objRotationY = (w > h) ? 0 : Math.PI / 2
+                        }
+
+                        const isHorizontal = Math.abs(objRotationY) < 0.1
+
+                        // --- STANDARDIZE DIMENSIONS (matches Blender backend) ---
+                        let openingWidth = isHorizontal ? w : h;
+                        let thickness = 0.15; // Standardize door/window depth to match standard wall thickness
+
+                        if (type === 'door') {
+                            if (openingWidth > 0.54 && openingWidth < 1.26) {
+                                openingWidth = 0.9;
+                            }
+                        } else if (type === 'window') {
+                            if (openingWidth > 0.72 && openingWidth < 1.68) {
+                                openingWidth = 1.2;
+                            }
+                        }
 
                         furniture.push({
-                            id: uuidv4(),
+                            id: r.getAttribute('id') || uuidv4(),
                             type: type as any,
-                            position: { x: x + w / 2, y: 0, z: y + h / 2 },
-                            rotation: { x: 0, y: 0, z: 0 },
-                            dimensions: { width: w, height: 2.1, depth: h }
+                            position: { x: x + w / 2, y: type === 'window' ? 1.0 : 0, z: y + hOriginal / 2 },
+                            rotation: { x: 0, y: objRotationY, z: 0 },
+                            dimensions: { width: openingWidth, height: type === 'window' ? 1.2 : 2.1, depth: thickness }
                         })
                     })
                 }
@@ -1089,127 +1444,15 @@ export const useFloorplanStore = create<FloorplanState>()(
 
                 // Check if this looks like a room name (has letters)
                 if (textContent.match(/[a-zA-Z]/)) {
-                    // Find matching room: Containment first, then proximity
-                    let candidates = rooms.filter(r => {
-                        const xs = r.points.map(p => p.x);
-                        const ys = r.points.map(p => p.y);
-                        const minX = Math.min(...xs); const maxX = Math.max(...xs);
-                        const minY = Math.min(...ys); const maxY = Math.max(...ys);
-                        return textX >= minX && textX <= maxX && textY >= minY && textY <= maxY
+                    // *** USER REQUEST: Stop generating individual floors. We just want labels. ***
+                    // We no longer snap to existing rooms, because there is only one giant master floor.
+                    // Instead, we just push all OCR'd labels to the isolated labels array
+                    // so they appear exactly at their parsed coordinates.
+                    labels.push({
+                        id: uuidv4(),
+                        text: textContent,
+                        position: { x: textX, y: textY }
                     })
-
-                    if (candidates.length === 0) {
-                        candidates = rooms.filter(r =>
-                            Math.abs(r.center.x - textX) < 3 && Math.abs(r.center.y - textY) < 3
-                        )
-                    }
-
-                    const nearRoom = candidates.sort((a, b) => {
-                        const da = (textX - a.center.x) ** 2 + (textY - a.center.y) ** 2;
-                        const db = (textX - b.center.x) ** 2 + (textY - b.center.y) ** 2;
-                        return da - db;
-                    })[0]
-
-                    if (nearRoom) {
-                        nearRoom.name = textContent
-                    } else {
-                        // Calculate room bounds from nearest walls/openings
-                        // Init with large values
-                        let minLeft = -Infinity, maxRight = Infinity, minTop = -Infinity, maxBottom = Infinity
-                        const padding = 2 // Tolerance for text being slightly "past" the wall edge
-
-                        // Treat Walls AND Doors/Windows as boundaries
-                        const boundaries = [
-                            ...walls.map(w => ({ start: w.start, end: w.end })),
-                            ...furniture.filter(f => f.type === 'door' || f.type === 'window' || f.type === 'opening').map(f => {
-                                const w = f.dimensions.width
-                                const d = f.dimensions.depth
-                                // Assume horizontal if width > depth (standard for most aligned items)
-                                if (w > d) {
-                                    return {
-                                        start: { x: f.position.x - w / 2, y: f.position.z },
-                                        end: { x: f.position.x + w / 2, y: f.position.z }
-                                    }
-                                } else {
-                                    return {
-                                        start: { x: f.position.x, y: f.position.z - d / 2 },
-                                        end: { x: f.position.x, y: f.position.z + d / 2 }
-                                    }
-                                }
-                            })
-                        ]
-
-                        boundaries.forEach(w => {
-                            const wallCenterX = (w.start.x + w.end.x) / 2
-                            const wallCenterY = (w.start.y + w.end.y) / 2
-                            const dx = w.end.x - w.start.x
-                            const dy = w.end.y - w.start.y
-                            const isHorizontal = Math.abs(dx) > Math.abs(dy)
-
-                            if (isHorizontal) {
-                                // Horizontal wall - potential Top/Bottom boundary
-                                // Check if text is within the X-span of this wall
-                                const wMinX = Math.min(w.start.x, w.end.x)
-                                const wMaxX = Math.max(w.start.x, w.end.x)
-
-                                if (textX >= wMinX - padding && textX <= wMaxX + padding) {
-                                    if (wallCenterY < textY && wallCenterY > minTop) {
-                                        minTop = wallCenterY // Wall above
-                                    }
-                                    if (wallCenterY > textY && wallCenterY < maxBottom) {
-                                        maxBottom = wallCenterY // Wall below
-                                    }
-                                }
-                            } else {
-                                // Vertical wall - potential Left/Right boundary
-                                // Check if text is within the Y-span of this wall
-                                const wMinY = Math.min(w.start.y, w.end.y)
-                                const wMaxY = Math.max(w.start.y, w.end.y)
-
-                                if (textY >= wMinY - padding && textY <= wMaxY + padding) {
-                                    if (wallCenterX < textX && wallCenterX > minLeft) {
-                                        minLeft = wallCenterX // Wall to left
-                                    }
-                                    if (wallCenterX > textX && wallCenterX < maxRight) {
-                                        maxRight = wallCenterX // Wall to right
-                                    }
-                                }
-                            }
-                        })
-
-                        // Validate and Apply Fallbacks
-                        // If walls weren't found (gap in raycast), use default 2.5m radiu
-                        if (minLeft === -Infinity) minLeft = textX - 2.5
-                        if (maxRight === Infinity) maxRight = textX + 2.5
-                        if (minTop === -Infinity) minTop = textY - 2.5
-                        if (maxBottom === Infinity) maxBottom = textY + 2.5
-
-                        const width = maxRight - minLeft
-                        const height = maxBottom - minTop
-
-                        // If dimensions are still weird (too small or massive), default to 4x4m box
-                        if (width < 0.5 || width > 50 || height < 0.5 || height > 50) {
-                            minLeft = textX - 2
-                            maxRight = textX + 2
-                            minTop = textY - 2
-                            maxBottom = textY + 2
-                        }
-
-                        // Always create the room if a label exists
-                        rooms.push({
-                            id: uuidv4(),
-                            name: textContent,
-                            points: [
-                                { x: minLeft, y: minTop },
-                                { x: maxRight, y: minTop },
-                                { x: maxRight, y: maxBottom },
-                                { x: minLeft, y: maxBottom }
-                            ],
-                            color: roomColors[colorIndex % roomColors.length],
-                            center: { x: (minLeft + maxRight) / 2, y: (minTop + maxBottom) / 2 }
-                        })
-                        colorIndex++
-                    }
                 }
             })
 
@@ -1257,41 +1500,68 @@ export const useFloorplanStore = create<FloorplanState>()(
 
             console.log('[DEBUG importFromSVG] Parsed:', { walls: walls.length, furniture: furniture.length, rooms: rooms.length })
 
-            // Create a single floor covering all walls if we have walls
-            // Create a single floor covering all walls if we have walls
-            // REMOVED: Do not auto-generate a master floor when rooms are missing.
-            // User wants to edit walls without floor interference first.
-            /*
+            // Create a single master floor — always when walls exist
             if (walls.length > 0) {
                 let floorMinX = Infinity, floorMinY = Infinity
                 let floorMaxX = -Infinity, floorMaxY = -Infinity
- 
+
+                // Include wall endpoints + half-thickness so the floor covers the full wall body
                 walls.forEach(w => {
-                    floorMinX = Math.min(floorMinX, w.start.x, w.end.x)
-                    floorMaxX = Math.max(floorMaxX, w.start.x, w.end.x)
-                    floorMinY = Math.min(floorMinY, w.start.y, w.end.y)
-                    floorMaxY = Math.max(floorMaxY, w.start.y, w.end.y)
+                    const halfT = (w.thickness || 0.15) / 2
+                    floorMinX = Math.min(floorMinX, w.start.x - halfT, w.end.x - halfT)
+                    floorMaxX = Math.max(floorMaxX, w.start.x + halfT, w.end.x + halfT)
+                    floorMinY = Math.min(floorMinY, w.start.y - halfT, w.end.y - halfT)
+                    floorMaxY = Math.max(floorMaxY, w.start.y + halfT, w.end.y + halfT)
                 })
- 
-                // Add a "master floor" that covers the entire plan
-                // Individual room labels still show on top
-                if (rooms.length === 0) {
-                     // Logic removed
+
+                // Also include furniture positions so the floor covers everything
+                furniture.forEach(f => {
+                    if (f.position) {
+                        floorMinX = Math.min(floorMinX, f.position.x - 0.5)
+                        floorMaxX = Math.max(floorMaxX, f.position.x + 0.5)
+                        floorMinY = Math.min(floorMinY, f.position.z - 0.5)
+                        floorMaxY = Math.max(floorMaxY, f.position.z + 0.5)
+                    }
+                })
+
+                // Check if any existing room already covers most of the plan (avoid duplicates)
+                const planArea = (floorMaxX - floorMinX) * (floorMaxY - floorMinY)
+                const hasLargeFloor = rooms.some(r => roomAreaAbs(r) > planArea * 0.5)
+
+                if (!hasLargeFloor && planArea > 0) {
+                    // Guaranteed min 0.5m padding + 10% proportional padding
+                    const planW = floorMaxX - floorMinX
+                    const planH = floorMaxY - floorMinY
+                    const padX = Math.max(0.5, planW * 0.1)
+                    const padY = Math.max(0.5, planH * 0.1)
+                    rooms.push({
+                        id: uuidv4(),
+                        name: 'Floor',
+                        points: [
+                            { x: floorMinX - padX, y: floorMinY - padY },
+                            { x: floorMaxX + padX, y: floorMinY - padY },
+                            { x: floorMaxX + padX, y: floorMaxY + padY },
+                            { x: floorMinX - padX, y: floorMaxY + padY }
+                        ],
+                        color: '#E8E8E8',
+                        center: { x: (floorMinX + floorMaxX) / 2, y: (floorMinY + floorMaxY) / 2 }
+                    })
+                    console.log('[DEBUG importFromSVG] Added master floor covering all walls + furniture')
                 }
             }
-            */
+
+            // Auto-fit camera only on FIRST import (not on every poll re-import)
+            if (state.walls.length === 0 && walls.length > 0) {
+                state.fitViewTrigger = (state.fitViewTrigger || 0) + 1
+            }
 
             state.walls = walls
             state.furniture = furniture
+            state.labels = labels
             // Prevent "random" floor/room disappearance:
-            // Sometimes we re-import an SVG that doesn't include room geometry/labels.
-            // In that case, don't overwrite existing rooms with [].
             if (rooms.length > 0 || state.rooms.length === 0) {
                 state.rooms = rooms
             }
-
-            // Auto-fit camera after importing new geometry (prevents "cleared" / off-screen view)
-            state.fitViewTrigger = (state.fitViewTrigger || 0) + 1
 
             // Start Tutorial Flow if not calibrated.
             // IMPORTANT: Don't force tutorial steps when loading an existing project SVG.
@@ -1311,11 +1581,22 @@ export const useFloorplanStore = create<FloorplanState>()(
             // We'll normalize offset to 0 for simplicity, or keep existing bounds?
             // Safer to just export everything relative to 0,0 or finding bounds.
 
-            // 1. Find Bounds
+            // 1. Find Bounds (include wall thickness so rects don't clip the viewBox)
             let minX = Infinity, minY = Infinity
             walls.forEach(w => {
-                minX = Math.min(minX, w.start.x, w.end.x)
-                minY = Math.min(minY, w.start.y, w.end.y)
+                const halfT = (w.thickness || 0.15) / 2
+                minX = Math.min(minX, w.start.x - halfT, w.end.x - halfT)
+                minY = Math.min(minY, w.start.y - halfT, w.end.y - halfT)
+            })
+            furniture.forEach(f => {
+                minX = Math.min(minX, f.position.x - f.dimensions.width / 2)
+                minY = Math.min(minY, f.position.z - f.dimensions.depth / 2)
+            })
+            state.rooms.forEach(r => {
+                r.points.forEach(p => {
+                    minX = Math.min(minX, p.x)
+                    minY = Math.min(minY, p.y)
+                })
             })
             // If empty, default 0
             if (minX === Infinity) { minX = 0; minY = 0 }
@@ -1326,20 +1607,72 @@ export const useFloorplanStore = create<FloorplanState>()(
             mpp = Math.min(Math.max(mpp, 1e-5), 0.5)
             const pxPerMeter = 1 / mpp
 
-            // Helper to coord
-            const toPx = (val: number, minVal: number) => (val - minVal) * pxPerMeter + padding
+            // Collect all textures from walls and rooms to build <defs>
+            const patternDefs = new Set<string>()
 
-            // Calculate SVG Dimensions
+            // Calculate SVG Dimensions (include wall thickness)
             let maxX = -Infinity, maxY = -Infinity
             walls.forEach(w => {
-                maxX = Math.max(maxX, w.start.x, w.end.x)
-                maxY = Math.max(maxY, w.start.y, w.end.y)
+                const halfT = (w.thickness || 0.15) / 2
+                maxX = Math.max(maxX, w.start.x + halfT, w.end.x + halfT)
+                maxY = Math.max(maxY, w.start.y + halfT, w.end.y + halfT)
+                // Collect wall textures
+                if (w.textureDataUrl && w.textureTileWidthM && w.textureTileHeightM) {
+                    const tw = w.textureTileWidthM * pxPerMeter
+                    const th = w.textureTileHeightM * pxPerMeter
+                    patternDefs.add(
+                        `<pattern id="tex_${w.id}" patternUnits="userSpaceOnUse" x="0" y="0" width="${tw}" height="${th}"><image href="${w.textureDataUrl}" x="0" y="0" width="${tw}" height="${th}" preserveAspectRatio="none" /></pattern>`
+                    )
+                }
             })
+            furniture.forEach(f => {
+                maxX = Math.max(maxX, f.position.x + f.dimensions.width / 2)
+                maxY = Math.max(maxY, f.position.z + f.dimensions.depth / 2)
+            })
+            state.rooms.forEach(r => {
+                r.points.forEach(p => {
+                    maxX = Math.max(maxX, p.x)
+                    maxY = Math.max(maxY, p.y)
+                })
+                // Collect room textures
+                if (r.textureDataUrl && r.textureTileWidthM && r.textureTileHeightM) {
+                    const tw = r.textureTileWidthM * pxPerMeter
+                    const th = r.textureTileHeightM * pxPerMeter
+                    patternDefs.add(
+                        `<pattern id="tex_${r.id}" patternUnits="userSpaceOnUse" x="0" y="0" width="${tw}" height="${th}"><image href="${r.textureDataUrl}" x="0" y="0" width="${tw}" height="${th}" preserveAspectRatio="none" /></pattern>`
+                    )
+                }
+            })
+            if (maxX === -Infinity) { maxX = 10; maxY = 10 }
 
-            const width = (maxX - minX) * pxPerMeter + padding * 2
-            const height = (maxY - minY) * pxPerMeter + padding * 2
+            let width: number, height: number;
+            let toPxX: (val: number) => number;
+            let toPxY: (val: number) => number;
+
+            if (state.imageDimensions) {
+                width = state.imageDimensions.width;
+                height = state.imageDimensions.height;
+                const centerX = width / 2;
+                const centerY = height / 2;
+                toPxX = (val: number) => (val * pxPerMeter) + centerX;
+                toPxY = (val: number) => (val * pxPerMeter) + centerY;
+            } else {
+                width = (maxX - minX) * pxPerMeter + padding * 2;
+                height = (maxY - minY) * pxPerMeter + padding * 2;
+                toPxX = (val: number) => (val - minX) * pxPerMeter + padding;
+                toPxY = (val: number) => (val - minY) * pxPerMeter + padding;
+            }
 
             let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">\n`
+
+            // Insert collected definitions
+            if (patternDefs.size > 0) {
+                svg += `  <defs>\n`
+                patternDefs.forEach(def => {
+                    svg += `    ${def}\n`
+                })
+                svg += `  </defs>\n`
+            }
 
             // A. Base/Background (Optional, backend adds it usually, but let's be clean)
             // Backend master.py adds base. We only need the items.
@@ -1369,18 +1702,31 @@ export const useFloorplanStore = create<FloorplanState>()(
                     rh = Math.abs(dy)
                 }
 
-                svg += `    <rect id="${w.id}" x="${toPx(rx, minX)}" y="${toPx(ry, minY)}" width="${rw * pxPerMeter}" height="${rh * pxPerMeter}" fill="#222222" />\n`
+                // Check for texture fill
+                const fillStyle = w.textureDataUrl ? `url(#tex_${w.id})` : "#222222"
+
+                svg += `    <rect id="${w.id}" x="${toPxX(rx)}" y="${toPxY(ry)}" width="${rw * pxPerMeter}" height="${rh * pxPerMeter}" fill="${fillStyle}" />\n`
             })
             svg += `  </g>\n`
 
-            // C. Doors / Windows
+            // C. Doors / Windows — preserve rotation by swapping width/depth for rotated items
+            const exportOpening = (d: FurnItem) => {
+                const isRotated = Math.abs(d.rotation.y) > 0.1 // ~6 degrees threshold
+                // For rotated (vertical) openings: swap width/depth in SVG so the rect matches the 2D layout
+                const svgW = isRotated ? d.dimensions.depth : d.dimensions.width
+                const svgH = isRotated ? d.dimensions.width : d.dimensions.depth
+                const rx = d.position.x - svgW / 2
+                const rz = d.position.z - svgH / 2
+                const rotAttr = ` data-rotation="${d.rotation.y.toFixed(4)}"`
+                return { rx, rz, svgW, svgH, rotAttr }
+            }
+
             const doors = furniture.filter(f => f.type === 'door')
             if (doors.length > 0) {
                 svg += `  <g id="door">\n`
                 doors.forEach(d => {
-                    const rx = d.position.x - d.dimensions.width / 2
-                    const rz = d.position.z - d.dimensions.depth / 2
-                    svg += `    <rect id="${d.id}" x="${toPx(rx, minX)}" y="${toPx(rz, minY)}" width="${d.dimensions.width * pxPerMeter}" height="${d.dimensions.depth * pxPerMeter}" fill="#8B4513" />\n`
+                    const { rx, rz, svgW, svgH, rotAttr } = exportOpening(d)
+                    svg += `    <rect id="${d.id}" x="${toPxX(rx)}" y="${toPxY(rz)}" width="${svgW * pxPerMeter}" height="${svgH * pxPerMeter}" fill="#8B4513"${rotAttr} />\n`
                 })
                 svg += `  </g>\n`
             }
@@ -1389,9 +1735,8 @@ export const useFloorplanStore = create<FloorplanState>()(
             if (windows.length > 0) {
                 svg += `  <g id="window">\n`
                 windows.forEach(d => {
-                    const rx = d.position.x - d.dimensions.width / 2
-                    const rz = d.position.z - d.dimensions.depth / 2
-                    svg += `    <rect id="${d.id}" x="${toPx(rx, minX)}" y="${toPx(rz, minY)}" width="${d.dimensions.width * pxPerMeter}" height="${d.dimensions.depth * pxPerMeter}" fill="#0000FF" />\n`
+                    const { rx, rz, svgW, svgH, rotAttr } = exportOpening(d)
+                    svg += `    <rect id="${d.id}" x="${toPxX(rx)}" y="${toPxY(rz)}" width="${svgW * pxPerMeter}" height="${svgH * pxPerMeter}" fill="#0000FF"${rotAttr} />\n`
                 })
                 svg += `  </g>\n`
             }
@@ -1401,8 +1746,8 @@ export const useFloorplanStore = create<FloorplanState>()(
             if (imported.length > 0) {
                 svg += `  <g id="imported-models" opacity="0.95">\n`
                 imported.forEach(it => {
-                    const cx = toPx(it.position.x, minX)
-                    const cy = toPx(it.position.z, minY)
+                    const cx = toPxX(it.position.x)
+                    const cy = toPxY(it.position.z)
                     const safeRel = String(it.modelUrl || '').replace(/"/g, '')
                     const safeName = String(it.label || '').replace(/"/g, '')
                     svg += `    <g id="imported_${it.id}" data-import-id="${it.id}" data-rel-path="${safeRel}" data-name="${safeName}">\n`
@@ -1418,7 +1763,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 svg += `  <g id="rooms-geometry" opacity="0.35">\n`
                 state.rooms.forEach(r => {
                     const pts = r.points
-                        .map(p => `${toPx(p.x, minX)},${toPx(p.y, minY)}`)
+                        .map(p => `${toPxX(p.x)},${toPxY(p.y)}`)
                         .join(' ')
                     const safeName = String(r.name || '').replace(/"/g, '')
                     svg += `    <polygon id="${r.id}" points="${pts}" fill="${r.color || '#e2e8f0'}" stroke="none" data-name="${safeName}" />\n`

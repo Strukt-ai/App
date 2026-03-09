@@ -2,7 +2,7 @@
 
 
 import { X, Crown, Play } from 'lucide-react'
-import { cn } from '@/lib/utils'
+
 
 interface PremiumModalProps {
     isOpen: boolean

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useFloorplanStore } from '@/store/floorplanStore'
-import { Move, Minus, Plus, Maximize, RotateCcw, X } from 'lucide-react'
+import { X, Move, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function ReferenceOverlay() {

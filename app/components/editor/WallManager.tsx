@@ -2,10 +2,25 @@
 
 import { useFloorplanStore } from '@/store/floorplanStore'
 import type { Wall } from '@/store/floorplanStore'
-import { memo, useCallback, startTransition, useEffect, useMemo } from 'react'
-import { BoxGeometry, CylinderGeometry, MeshStandardMaterial, RepeatWrapping, Texture } from 'three'
+import { memo, useCallback, useEffect, useMemo, useState, Component } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
+import { BoxGeometry, CylinderGeometry, DoubleSide, MeshStandardMaterial, RepeatWrapping, Texture } from 'three'
+import { Geometry, Base, Subtraction } from '@react-three/csg'
 import { useLoader } from '@react-three/fiber'
 import { TextureLoader } from 'three'
+
+// Per-wall error boundary so one broken wall doesn't crash ALL walls
+class WallErrorBoundary extends Component<{ children?: ReactNode, wallId: string }, { hasError: boolean }> {
+    state = { hasError: false }
+    static getDerivedStateFromError() { return { hasError: true } }
+    componentDidCatch(error: Error, info: ErrorInfo) {
+        console.error(`[WallErrorBoundary] Wall "${this.props.wallId}" crashed:`, error, info)
+    }
+    render() {
+        if (this.state.hasError) return null
+        return this.props.children
+    }
+}
 
 const _EMPTY_TEX_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO4G8m8AAAAASUVORK5CYII='
 
@@ -14,22 +29,7 @@ const wallGeometry = new BoxGeometry(1, 1, 1)
 const selectionGeometry = new BoxGeometry(1.002, 1.002, 1.002)
 // Rounded, disc-like handles for a cleaner look (end handles slightly larger)
 const endHandleGeometry = new CylinderGeometry(0.24, 0.24, 0.16, 24)
-const sideHandleGeometry = new CylinderGeometry(0.2, 0.2, 0.14, 20)
 
-// Static Materials - Using StandardMaterial for realistic lighting
-// Walls respond to scene lighting for proper 3D appearance
-const regularMaterial = new MeshStandardMaterial({
-    color: 0xf2f2f0,
-    roughness: 0.98,
-    metalness: 0.0
-})
-const selectedMaterial = new MeshStandardMaterial({
-    color: 0x3b82f6,
-    roughness: 0.6,
-    metalness: 0.1,
-    emissive: 0x1a365d,
-    emissiveIntensity: 0.2
-})
 const wireframeMaterial = new MeshStandardMaterial({
     color: 0xffffff,
     wireframe: true
@@ -41,13 +41,6 @@ const handleMaterial = new MeshStandardMaterial({
     metalness: 0.05,
     emissive: 0x7dd3fc,
     emissiveIntensity: 0.35
-})
-const sideHandleMaterial = new MeshStandardMaterial({
-    color: 0x38bdf8,
-    roughness: 0.3,
-    metalness: 0.08,
-    emissive: 0x0ea5e9,
-    emissiveIntensity: 0.25
 })
 
 // Helper to check if a point projects onto a line segment
@@ -67,16 +60,23 @@ const WallItem = memo(function WallItem({
     furniture, // Passed from Manager
     onPointerDown,
     onWheel,
-    onSideHandleDown
+    isPreview = false
 }: {
     wall: Wall,
     isSelected: boolean,
     is2D: boolean,
     furniture: any[],
-    onPointerDown: (e: any, id: string, type: 'body' | 'start' | 'end') => void
-    onWheel: (e: any, id: string) => void
-    onSideHandleDown: (e: any, id: string) => void
+    onPointerDown?: (e: any, id: string, type: 'body' | 'start' | 'end') => void
+    onWheel?: (e: any, id: string) => void
+    isPreview?: boolean
 }) {
+    // Track CSG failure so we can fall back to simple box
+    const [csgFailed, setCsgFailed] = useState(false)
+
+    // Dynamic scale for handles (Calibration fixes huge handles)
+    const calibrationFactor = useFloorplanStore(s => s.calibrationFactor)
+    const handleScale = Math.max(0.1, Math.min(1.0, calibrationFactor * 10))
+
     // Calculate geometry basics
     const dx = wall.end.x - wall.start.x
     const dy = wall.end.y - wall.start.y
@@ -84,6 +84,13 @@ const WallItem = memo(function WallItem({
     const angle = Math.atan2(dy, dx)
     const centerX = (wall.start.x + wall.end.x) / 2
     const centerY = (wall.start.y + wall.end.y) / 2
+
+    // Log wall geometry in 3D mode for debugging
+    useEffect(() => {
+        if (!is2D) {
+            console.log(`[WallItem 3D] id=${wall.id} len=${length.toFixed(3)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) angle=${(angle * 180 / Math.PI).toFixed(1)}° thickness=${wall.thickness} height=${wall.height} openings=${0}`)
+        }
+    }, [is2D, wall.id, length, centerX, centerY, angle, wall.thickness, wall.height])
 
     const textureUrl = wall.textureDataUrl
     const texture = useLoader(TextureLoader, textureUrl || _EMPTY_TEX_DATA_URL) as Texture
@@ -148,189 +155,132 @@ const WallItem = memo(function WallItem({
         }
     }).sort((a, b) => a.tStart - b.tStart)
 
+    // Create wall material with DoubleSide GUARANTEED at Three.js object level
+    const wallMaterial = useMemo(() => {
+        if (isPreview) {
+            return new MeshStandardMaterial({
+                color: 0x9ca3af,
+                transparent: true,
+                opacity: 0.4,
+                side: DoubleSide,
+                depthWrite: false
+            })
+        }
+        const mat = new MeshStandardMaterial({
+            color: isSelected ? 0x3b82f6 : (wall.color || 0xd4d4d4),
+            roughness: isSelected ? 0.6 : 1.0,
+            metalness: isSelected ? 0.1 : 0.0,
+            emissive: isSelected ? 0x1a365d : 0x000000,
+            emissiveIntensity: isSelected ? 0.2 : 0,
+            side: DoubleSide,
+            depthTest: true,
+            depthWrite: true,
+            // Prevent z-fighting where angled walls meet or overlap
+            polygonOffset: true,
+            polygonOffsetFactor: 1,
+            polygonOffsetUnits: 1,
+        })
+        if (textureUrl) {
+            mat.map = texture
+            mat.color.set(isSelected ? 0x3b82f6 : 0xffffff)
+            mat.roughness = 0.98
+            mat.metalness = 0.0
+        }
+        return mat
+    }, [isSelected, isPreview, textureUrl, wall.color, texture])
 
-    // DEBUG: If NO openings or 2D mode, render simple block
-    if (is2D || openings.length === 0) {
+
+    // Simple block renderer (used for 2D, no-openings, or CSG fallback)
+    const renderSimpleBlock = () => (
+        <group>
+            <mesh
+                name={isPreview ? "WallPreview" : "Wall"}
+                position={[centerX, wall.height / 2, centerY]}
+                rotation={[0, -angle, 0]}
+                scale={[Math.max(length, 0.01), wall.height, wall.thickness]}
+                onPointerDown={onPointerDown ? (e) => onPointerDown(e, wall.id, 'body') : undefined}
+                onClick={(e) => {
+                    if (!isPreview) e.stopPropagation()
+                }}
+                onWheel={onWheel ? (e) => onWheel(e, wall.id) : undefined}
+                geometry={wallGeometry}
+                material={wallMaterial}
+                castShadow={!isPreview}
+                receiveShadow={!isPreview}
+                renderOrder={isPreview ? 1 : 10}
+                frustumCulled={false}
+            >
+                {isSelected && !isPreview && (
+                    <mesh geometry={selectionGeometry} material={wireframeMaterial} />
+                )}
+            </mesh>
+            {/* Handles */}
+            {is2D && isSelected && !isPreview && onPointerDown && (
+                <>
+                    <mesh position={[wall.start.x, 2.7, wall.start.y]} rotation={[-Math.PI / 2, 0, 0]} scale={[handleScale, handleScale, handleScale]} onPointerDown={(e) => onPointerDown(e, wall.id, 'start')} onClick={(e) => e.stopPropagation()} geometry={endHandleGeometry} material={handleMaterial} />
+                    <mesh position={[wall.end.x, 2.7, wall.end.y]} rotation={[-Math.PI / 2, 0, 0]} scale={[handleScale, handleScale, handleScale]} onPointerDown={(e) => onPointerDown(e, wall.id, 'end')} onClick={(e) => e.stopPropagation()} geometry={endHandleGeometry} material={handleMaterial} />
+                </>
+            )}
+        </group>
+    )
+
+    // If 2D mode, no openings, or CSG previously failed → simple block
+    if (is2D || openings.length === 0 || csgFailed) {
+        return renderSimpleBlock()
+    }
+
+    // 3D MODE WITH CUTOUTS
+    // Uses Constructive Solid Geometry (CSG) for perfect boolean holes 
+    // This allows single unified UV maps across the wall and prevents Z-fighting
+    // Wrapped in try-catch: if CSG fails, we fall back to simple block automatically
+    try {
         return (
             <group>
                 <mesh
-                    name="Wall"
+                    name={isPreview ? "WallPreview" : "Wall"}
                     position={[centerX, wall.height / 2, centerY]}
                     rotation={[0, -angle, 0]}
-                    scale={[Math.max(length, 0.01), wall.height, wall.thickness]}
-                    onPointerDown={(e) => onPointerDown(e, wall.id, 'body')}
-                    onWheel={(e) => onWheel(e, wall.id)}
-                    geometry={wallGeometry}
-                    castShadow
-                    receiveShadow
+                    onPointerDown={onPointerDown ? (e) => onPointerDown(e, wall.id, 'body') : undefined}
+                    onClick={(e) => {
+                        if (!isPreview) e.stopPropagation()
+                    }}
+                    onWheel={onWheel ? (e) => onWheel(e, wall.id) : undefined}
+                    castShadow={!isPreview}
+                    receiveShadow={!isPreview}
+                    renderOrder={isPreview ? 1 : 10}
+                    frustumCulled={false}
                 >
-                    {textureUrl ? (
-                        <meshStandardMaterial
-                            map={texture}
-                            color={isSelected ? 0x3b82f6 : 0xffffff}
-                            roughness={0.98}
-                            metalness={0.0}
-                        />
-                    ) : (
-                        <meshStandardMaterial
-                            color={isSelected ? 0x3b82f6 : (wall.color || 0xffffff)}
-                            roughness={isSelected ? 0.6 : 1.0}
-                            metalness={isSelected ? 0.1 : 0.0}
-                            emissive={isSelected ? 0x1a365d : 0x000000}
-                            emissiveIntensity={isSelected ? 0.2 : 0}
-                        />
-                    )}
-                    {isSelected && (
-                        <mesh geometry={selectionGeometry} material={wireframeMaterial} />
-                    )}
+                    <Geometry useGroups>
+                        <Base scale={[Math.max(length, 0.01), wall.height, wall.thickness]} geometry={wallGeometry} material={wallMaterial} />
+                        {openings.map((op) => {
+                            const opLen = (op.tEnd - op.tStart) * length
+                            const opCenterT = (op.tStart + op.tEnd) / 2
+                            const localX = (opCenterT - 0.5) * length
+                            const localY = (op.yBottom + op.height / 2) - (wall.height / 2)
+
+                            return (
+                                <Subtraction key={`cut-${op.id}`} position={[localX, localY, 0]} scale={[opLen, op.height, wall.thickness + 0.2]} geometry={wallGeometry} material={wallMaterial} />
+                            )
+                        })}
+                    </Geometry>
+
+                    <primitive object={wallMaterial} attach="material" />
                 </mesh>
-                {/* Handles omitted for brevity in replacement, assumed consistent with is2D logic */}
-                {is2D && isSelected && (
+
+                {/* End Handles (mostly active in 2D or edge cases where they trigger) */}
+                {is2D && isSelected && !isPreview && onPointerDown && (
                     <>
-                        <mesh position={[wall.start.x, 2.7, wall.start.y]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={(e) => onPointerDown(e, wall.id, 'start')} geometry={endHandleGeometry} material={handleMaterial} />
-                        <mesh position={[wall.end.x, 2.7, wall.end.y]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={(e) => onPointerDown(e, wall.id, 'end')} geometry={endHandleGeometry} material={handleMaterial} />
+                        <mesh position={[wall.start.x, 2.7, wall.start.y]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={(e) => onPointerDown(e, wall.id, 'start')} onClick={(e) => e.stopPropagation()} geometry={endHandleGeometry} material={handleMaterial} />
+                        <mesh position={[wall.end.x, 2.7, wall.end.y]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={(e) => onPointerDown(e, wall.id, 'end')} onClick={(e) => e.stopPropagation()} geometry={endHandleGeometry} material={handleMaterial} />
                     </>
                 )}
             </group>
         )
+    } catch (e) {
+        console.error(`[WallItem] CSG crashed for wall ${wall.id}, falling back to simple block:`, e)
+        setCsgFailed(true)
+        return renderSimpleBlock()
     }
-
-    // 3D MODE WITH CUTOUTS
-    // console.log(`[WallManager] Rendering Multi-Segment Wall ${wall.id} with ${openings.length} openings`)
-    // We construct segments.
-    // Start at t=0. Iterate openings.
-    // 1. Solid segment from currentT to opening.tStart
-    // 2. Header segment (above opening) from opening.tStart to opening.tEnd
-    // 3. Sill segment (below opening) from opening.tStart to opening.tEnd
-    // 4. Update currentT = opening.tEnd
-    // 5. Final solid segment from currentT to 1.0
-
-    const segments = []
-
-    // 1. Calculate Unified Holes (Boolean Union of all openings)
-    // Sort by start time (already sorted above)
-    const unifiedHoles: { start: number, end: number }[] = []
-    if (openings.length > 0) {
-        let currentHole = { start: openings[0].tStart, end: openings[0].tEnd }
-
-        for (let i = 1; i < openings.length; i++) {
-            const op = openings[i]
-            if (op.tStart < currentHole.end) {
-                // Overlap: Merge
-                currentHole.end = Math.max(currentHole.end, op.tEnd)
-            } else {
-                // No overlap: Push current, start new
-                unifiedHoles.push(currentHole)
-                currentHole = { start: op.tStart, end: op.tEnd }
-            }
-        }
-        unifiedHoles.push(currentHole)
-    }
-
-    // 2. Invert Holes to find Solid Wall Segments
-    // solidIntervals = [0, 1] - unifiedHoles
-    let currentT = 0
-    unifiedHoles.forEach(hole => {
-        // Solid wall before this hole
-        if (hole.start > currentT) {
-            const segStart = currentT
-            const segEnd = hole.start
-            const segLen = (segEnd - segStart) * length
-
-            if (segLen > 0.01) {
-                const segCenterT = (segStart + segEnd) / 2
-                const lx = wall.start.x + dx * segCenterT
-                const ly = wall.start.y + dy * segCenterT
-
-                // console.log(`[WallManager] SOLID: ${segStart.toFixed(3)} -> ${segEnd.toFixed(3)} (T)`)
-
-                segments.push(
-                    <mesh
-                        key={`solid-${segStart.toFixed(3)}-${hole.end.toFixed(3)}-${Math.random().toString(36).substr(2, 5)}`}
-                        position={[lx, wall.height / 2, ly]}
-                        rotation={[0, -angle, 0]}
-                        scale={[segLen, wall.height, wall.thickness]}
-                        geometry={wallGeometry}
-                        material={isSelected ? selectedMaterial : regularMaterial}
-                        castShadow receiveShadow
-                        onPointerDown={(e) => onPointerDown(e, wall.id, 'body')}
-                    />
-                )
-            }
-        }
-        currentT = Math.max(currentT, hole.end)
-    })
-
-    // Final Solid Segment (after last hole)
-    if (currentT < 1) {
-        const segLen = (1 - currentT) * length
-        if (segLen > 0.01) {
-            const segCenterT = (currentT + 1) / 2
-            const lx = wall.start.x + dx * segCenterT
-            const ly = wall.start.y + dy * segCenterT
-
-            segments.push(
-                <mesh
-                    key={`solid-end-${currentT.toFixed(3)}-${Math.random().toString(36).substr(2, 5)}`}
-                    position={[lx, wall.height / 2, ly]}
-                    rotation={[0, -angle, 0]}
-                    scale={[segLen, wall.height, wall.thickness]}
-                    geometry={wallGeometry}
-                    material={isSelected ? selectedMaterial : regularMaterial}
-                    castShadow receiveShadow
-                    onPointerDown={(e) => onPointerDown(e, wall.id, 'body')}
-                />
-            )
-        }
-    }
-
-    // 3. Render Headers and Sills for ALL openings (independent of solids)
-    openings.forEach(op => {
-        const opLen = (op.tEnd - op.tStart) * length
-        const opCenterT = (op.tStart + op.tEnd) / 2
-        const lx = wall.start.x + dx * opCenterT
-        const ly = wall.start.y + dy * opCenterT
-
-        // Header (Above opening)
-        const headerH = wall.height - (op.yBottom + op.height)
-        if (headerH > 0.01) {
-            segments.push(
-                <mesh
-                    key={`header-${op.id}`}
-                    position={[lx, (op.yBottom + op.height) + headerH / 2, ly]}
-                    rotation={[0, -angle, 0]}
-                    scale={[opLen, headerH, wall.thickness]}
-                    geometry={wallGeometry}
-                    material={isSelected ? selectedMaterial : regularMaterial}
-                    castShadow receiveShadow
-                    onPointerDown={(e) => onPointerDown(e, wall.id, 'body')}
-                />
-            )
-        }
-
-        // Sill (Below opening)
-        const sillH = op.yBottom
-        if (sillH > 0.01) {
-            segments.push(
-                <mesh
-                    key={`sill-${op.id}`}
-                    position={[lx, sillH / 2, ly]}
-                    rotation={[0, -angle, 0]}
-                    scale={[opLen, sillH, wall.thickness]}
-                    geometry={wallGeometry}
-                    material={isSelected ? selectedMaterial : regularMaterial}
-                    castShadow receiveShadow
-                    onPointerDown={(e) => onPointerDown(e, wall.id, 'body')}
-                />
-            )
-        }
-    })
-
-    return (
-        <group>
-            {segments}
-        </group>
-    )
 
 })
 
@@ -343,40 +293,55 @@ export function WallManager() {
     const activeTool = useFloorplanStore(s => s.activeTool)
     const startInteraction = useFloorplanStore(s => s.startInteraction)
     const updateWall = useFloorplanStore(s => s.updateWall)
+    const joinPreviewWalls = useFloorplanStore(s => s.joinPreviewWalls)
+
+    useEffect(() => {
+        console.log(`[DEBUG WallManager] mode=${mode} Rendering ${walls.length} walls`)
+        if (mode === '3d') {
+            walls.forEach(w => {
+                const dx = w.end.x - w.start.x
+                const dy = w.end.y - w.start.y
+                const len = Math.sqrt(dx * dx + dy * dy)
+                console.log(`  [Wall] ${w.id}: start=(${w.start.x.toFixed(2)},${w.start.y.toFixed(2)}) end=(${w.end.x.toFixed(2)},${w.end.y.toFixed(2)}) len=${len.toFixed(3)} h=${w.height} t=${w.thickness.toFixed(3)}`)
+            })
+        }
+    }, [walls.length, mode])
 
     const handlePointerDown = useCallback((e: any, id: string, type: 'body' | 'start' | 'end') => {
-        if (mode !== '2d') return
-        if (e.button !== 0) return
         e.stopPropagation()
 
-        // Use startTransition to prevent blocking UI (circle cursor)
-        startTransition(() => {
-            selectObject(id)
-
-            // Handle based on active tool
-            if (activeTool === 'resize' || type !== 'body') {
-                // Resize tool or clicking on handles
-                startInteraction('resizing', id, { x: e.point.x, y: e.point.z }, type === 'body' ? 'end' : type as any)
-            } else if (activeTool === 'rotate') {
-                // User prefers move instead of rotate; treat rotate tool like move/drag
-                startInteraction('dragging', id, { x: e.point.x, y: e.point.z })
-            } else if (activeTool === 'label') {
-                // Just select; label editing happens in the floating menu UI
-                selectObject(id)
-            } else {
-                // Default: move/drag
-                startInteraction('dragging', id, { x: e.point.x, y: e.point.z })
+        if (useFloorplanStore.getState().joinMode) {
+            let clickedPoint = undefined;
+            if (e.point && !isNaN(e.point.x) && !isNaN(e.point.z)) {
+                clickedPoint = { x: e.point.x, y: e.point.z };
             }
-        })
-    }, [mode, activeTool, selectObject, startInteraction, walls, updateWall])
+            useFloorplanStore.getState().setJoinTargetId(id, clickedPoint)
+            return
+        }
 
-    const handleSideHandleDown = useCallback((e: any, id: string) => {
-        if (mode !== '2d') return
         if (e.button !== 0) return
-        e.stopPropagation()
+
         selectObject(id)
-        startInteraction('resizing', id, { x: e.point.x, y: e.point.z }, 'thickness')
-    }, [mode, selectObject, startInteraction])
+        if (mode !== '2d') return
+
+        // Handle based on active tool
+        // NaN guard: prevent corrupt positions from propagating into the store
+        if (!e.point || isNaN(e.point.x) || isNaN(e.point.z)) return
+
+        if (activeTool === 'resize' || type !== 'body') {
+            // Resize tool or clicking on handles
+            startInteraction('resizing', id, { x: e.point.x, y: e.point.z }, type === 'body' ? 'end' : type as any)
+        } else if (activeTool === 'rotate') {
+            // User prefers move instead of rotate; treat rotate tool like move/drag
+            startInteraction('dragging', id, { x: e.point.x, y: e.point.z })
+        } else if (activeTool === 'label') {
+            // Just select; label editing happens in the floating menu UI
+            selectObject(id)
+        } else {
+            // Default: move/drag
+            startInteraction('dragging', id, { x: e.point.x, y: e.point.z })
+        }
+    }, [mode, activeTool, selectObject, startInteraction])
 
     const handleWheel = useCallback((e: any, id: string) => {
         if (mode !== '2d' || activeTool !== 'resize') return
@@ -398,16 +363,29 @@ export function WallManager() {
     return (
         <group>
             {walls.map((wall) => (
-                <WallItem
-                    key={wall.id}
-                    wall={wall}
-                    isSelected={selectedId === wall.id}
-                    is2D={mode === '2d'}
-                    furniture={furniture} // Pass the full list; filtered inside
-                    onPointerDown={handlePointerDown}
-                    onWheel={handleWheel}
-                    onSideHandleDown={handleSideHandleDown}
-                />
+                <WallErrorBoundary key={`eb-${wall.id}`} wallId={wall.id}>
+                    <WallItem
+                        key={wall.id}
+                        wall={wall}
+                        isSelected={selectedId === wall.id}
+                        is2D={mode === '2d'}
+                        furniture={furniture}
+                        onPointerDown={handlePointerDown}
+                        onWheel={handleWheel}
+                    />
+                </WallErrorBoundary>
+            ))}
+            {joinPreviewWalls && joinPreviewWalls.map((wall, idx) => (
+                <WallErrorBoundary key={`eb-preview-${wall.id}-${idx}`} wallId={`preview-${wall.id}`}>
+                    <WallItem
+                        key={`preview-${wall.id}-${idx}`}
+                        wall={wall}
+                        isSelected={false}
+                        is2D={mode === '2d'}
+                        furniture={[]}
+                        isPreview={true}
+                    />
+                </WallErrorBoundary>
             ))}
         </group>
     )

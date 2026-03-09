@@ -5,11 +5,11 @@ import {
     Edit3, Move, Maximize2, RotateCw, Trash2, Tag, ChevronDown,
     Sun, Moon, Lightbulb, Sunset, Camera, Download,
     Plus, Square, AppWindow, DoorOpen, Armchair,
-    Upload, Sparkles, FolderOpen // New Icons
+    Upload, Sparkles, FolderOpen, ArrowLeftRight
 } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { ImportModelModal } from './ImportModelModal' // Import Modal
 import { FurnAIModal } from './FurnAIModal' // Import Furn AI Modal
 // ProjectsModal import already added in previous step or handled by TS if file exists
@@ -28,8 +28,12 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         addFurniture, tutorialStep, triggerDetectRooms,
         user, setUser, setToken, token,
         projectsModalOpen, setProjectsModalOpen, // Use global state
-        runStatus
+        runStatus,
+        furniture,
+        updateFurniture
     } = useFloorplanStore()
+
+    const selectedFurn = useMemo(() => furniture.find(f => f.id === selectedId), [furniture, selectedId])
 
     const isGenerating = runStatus === 'processing'
 
@@ -422,6 +426,42 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             <span className="text-[9px]">Wall</span>
                         </button>
 
+                        <button
+                            onClick={() => {
+                                if (selectedFurn && (selectedFurn.type === 'door' || selectedFurn.type === 'window')) {
+                                    updateFurniture(selectedId!, { type: selectedFurn.type === 'door' ? 'window' : 'door' });
+                                }
+                            }}
+                            disabled={!(selectedFurn && (selectedFurn.type === 'door' || selectedFurn.type === 'window'))}
+                            className={cn(
+                                "flex flex-col items-center p-2 rounded-lg border transition-all",
+                                (selectedFurn && (selectedFurn.type === 'door' || selectedFurn.type === 'window'))
+                                    ? "border-border hover:bg-secondary/50 hover:text-primary cursor-pointer text-muted-foreground"
+                                    : "border-border opacity-50 cursor-not-allowed text-muted-foreground/50"
+                            )}
+                        >
+                            <ArrowLeftRight className="w-4 h-4 mb-1" />
+                            <span className="text-[9px]">Swap</span>
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                if (selectedWall) {
+                                    useFloorplanStore.getState().setJoinMode(true)
+                                }
+                            }}
+                            disabled={!selectedWall}
+                            className={cn(
+                                "flex flex-col items-center p-2 rounded-lg border transition-all",
+                                selectedWall
+                                    ? "border-border hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-400 cursor-pointer text-muted-foreground"
+                                    : "border-border opacity-50 cursor-not-allowed text-muted-foreground/50"
+                            )}
+                        >
+                            <Box className="w-4 h-4 mb-1" />
+                            <span className="text-[9px]">Join Walls</span>
+                        </button>
+
                     </div>
                 </div>
 
@@ -619,12 +659,24 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                                 onClick={async () => {
                                     // 1. Trigger the heavy blender worker job
                                     await useFloorplanStore.getState().triggerBlenderGeneration()
-                                    // 2. Poll for completion or assume the worker takes a while (user might have to wait, so we should really poll here. 
-                                    // But Topbar.tsx already polls for runStatus === 'completed'. Let's just trigger it and let them download it once runStatus is completed)
-                                    // Actually, if they want to download *now*, we should generate and wait for it.
-                                    // For now, let's just trigger it, wait a bit, then try to download.
-                                    // A better UX would be a separate "Generate 3D" button and a separate "Download Blend" button, but let's stick to the user request.
-                                    downloadWithAuth(`/api/runs/${currentRunId}/download/blend?t=${Date.now()}`, 'floorplan.blend')
+
+                                    // 2. Poll the store's runStatus, waiting for 'completed'
+                                    let attempts = 0;
+                                    const maxAttempts = 120; // 60 seconds (at 500ms) or up to a few minutes
+
+                                    const pollInterval = setInterval(async () => {
+                                        attempts++;
+                                        const status = useFloorplanStore.getState().runStatus;
+
+                                        if (status === 'completed') {
+                                            clearInterval(pollInterval);
+                                            // The backend created the blend file, we can download it.
+                                            await downloadWithAuth(`/api/runs/${currentRunId}/download/blend?t=${Date.now()}`, 'floorplan.blend');
+                                        } else if (status === 'failed' || attempts > maxAttempts) {
+                                            clearInterval(pollInterval);
+                                            alert("3D Generation failed or timed out.");
+                                        }
+                                    }, 1500); // Check every 1.5 seconds
                                 }}
                                 disabled={isGenerating || useFloorplanStore.getState().isGenerating3D}
                                 className={cn(

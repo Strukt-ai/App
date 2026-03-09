@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useFloorplanStore } from '@/store/floorplanStore'
-import { X, Sparkles, Upload, Loader2, MousePointer2, Tag, Trash2, Check, Grip, Plus, Layers } from 'lucide-react'
+import { Upload, X, Loader2, Sparkles, Trash2, Layers, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface FurnAIModalProps {
@@ -35,7 +35,7 @@ const COLORS = [
 
 export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
     const [image, setImage] = useState<string | null>(null)
-    const [imageDims, setImageDims] = useState<{ w: number, h: number } | null>(null)
+
     const [labels, setLabels] = useState<AnnotationLabel[]>([])
     const [activePoints, setActivePoints] = useState<AnnotationPoint[]>([])
     const { currentRunId, token } = useFloorplanStore()
@@ -46,7 +46,6 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
     const [previewPolygon, setPreviewPolygon] = useState<number[][] | null>(null)
 
     // UI State
-    // const [isHolding, setIsHolding] = useState(false) // Removed explicitly
     const [labelInput, setLabelInput] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMsg, setStatusMsg] = useState('')

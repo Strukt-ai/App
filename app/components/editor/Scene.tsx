@@ -4,18 +4,20 @@ import { useRef, useEffect, Suspense, useState } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows } from '@react-three/drei'
-import { EffectComposer, Bloom, SMAA, ToneMapping, N8AO } from '@react-three/postprocessing'
+
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { WallManager } from './WallManager'
 import { FurnitureManager } from './FurnitureManager'
 import { Ground } from './Ground'
 import { FloorManager } from './FloorManager'
-import { SelectionTransform } from './SelectionTransform'
 import { FurnAIAssetsManager } from './FurnAIAssetsManager'
 import { ImportedModelsManager } from './ImportedModelsManager'
 import { TutorialOverlay } from './TutorialOverlay'
 import { ReferenceOverlay } from './ReferenceOverlay' // New Import
+import { FloatingMenu } from './FloatingMenu'
+import { ErrorBoundary } from './ErrorBoundary'
 import { cn } from '@/lib/utils'
+import { FloorplanOverlay } from './FloorplanOverlay'
 
 const _EMPTY_TEX_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO4G8m8AAAAASUVORK5CYII='
 
@@ -64,48 +66,48 @@ function SvgOverlayPlane() {
         }
 
         let cancelled = false
-        ;(async () => {
-            try {
-                const res = await fetch(`/api/runs/${currentRunId}/svg`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                if (!res.ok) throw new Error(`svg ${res.status}`)
-                const svgText = await res.text()
+            ; (async () => {
+                try {
+                    const res = await fetch(`/api/runs/${currentRunId}/svg`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    })
+                    if (!res.ok) throw new Error(`svg ${res.status}`)
+                    const svgText = await res.text()
 
-                const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
-                const svgEl = doc.querySelector('svg')
-                const viewBox = (svgEl?.getAttribute('viewBox') || '').trim()
-                const parts = viewBox
-                    .split(/[\s,]+/)
-                    .map(v => parseFloat(v))
-                    .filter(n => !isNaN(n))
-                if (parts.length === 4) {
-                    setVb({ w: Math.max(1, parts[2]), h: Math.max(1, parts[3]) })
-                } else {
-                    const w = parseFloat((svgEl?.getAttribute('width') || '0').replace('px', ''))
-                    const h = parseFloat((svgEl?.getAttribute('height') || '0').replace('px', ''))
-                    if (w > 0 && h > 0) setVb({ w, h })
-                }
+                    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
+                    const svgEl = doc.querySelector('svg')
+                    const viewBox = (svgEl?.getAttribute('viewBox') || '').trim()
+                    const parts = viewBox
+                        .split(/[\s,]+/)
+                        .map(v => parseFloat(v))
+                        .filter(n => !isNaN(n))
+                    if (parts.length === 4) {
+                        setVb({ w: Math.max(1, parts[2]), h: Math.max(1, parts[3]) })
+                    } else {
+                        const w = parseFloat((svgEl?.getAttribute('width') || '0').replace('px', ''))
+                        const h = parseFloat((svgEl?.getAttribute('height') || '0').replace('px', ''))
+                        if (w > 0 && h > 0) setVb({ w, h })
+                    }
 
-                const blob = new Blob([svgText], { type: 'image/svg+xml' })
-                const url = URL.createObjectURL(blob)
-                if (cancelled) {
-                    URL.revokeObjectURL(url)
-                    return
+                    const blob = new Blob([svgText], { type: 'image/svg+xml' })
+                    const url = URL.createObjectURL(blob)
+                    if (cancelled) {
+                        URL.revokeObjectURL(url)
+                        return
+                    }
+                    setBlobUrl((prev) => {
+                        if (prev) URL.revokeObjectURL(prev)
+                        return url
+                    })
+                } catch (e) {
+                    console.error('[SvgOverlayPlane] Failed to load run svg', e)
+                    setVb(null)
+                    setBlobUrl((prev) => {
+                        if (prev) URL.revokeObjectURL(prev)
+                        return null
+                    })
                 }
-                setBlobUrl((prev) => {
-                    if (prev) URL.revokeObjectURL(prev)
-                    return url
-                })
-            } catch (e) {
-                console.error('[SvgOverlayPlane] Failed to load run svg', e)
-                setVb(null)
-                setBlobUrl((prev) => {
-                    if (prev) URL.revokeObjectURL(prev)
-                    return null
-                })
-            }
-        })()
+            })()
 
         return () => {
             cancelled = true
@@ -122,9 +124,9 @@ function SvgOverlayPlane() {
     const height = vb.h * factor
 
     return (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.0015, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} renderOrder={-1}>
             <planeGeometry args={[width, height]} />
-            <meshBasicMaterial map={texture} transparent opacity={0.55} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial map={texture} transparent opacity={0.25} depthWrite={false} toneMapped={false} />
         </mesh>
     )
 }
@@ -133,68 +135,62 @@ function SvgOverlayPlane() {
 function FitHandler() {
     const fitViewTrigger = useFloorplanStore(s => s.fitViewTrigger)
     const { camera, scene, controls } = useThree()
+    const lastProcessedTrigger = useRef(0)
 
     useEffect(() => {
-        if (fitViewTrigger > 0) {
-            console.log('[DEBUG] Auto-fitting view to bounds...')
+        // Only run when fitViewTrigger actually increments (not on camera/scene/controls ref changes)
+        if (fitViewTrigger <= lastProcessedTrigger.current) return
+        lastProcessedTrigger.current = fitViewTrigger
 
-            // Calculate bounding box of relevant objects
-            const box = new Box3()
-            const targets: Object3D[] = []
+        // Calculate bounding box of relevant objects
+        const box = new Box3()
+        const targets: Object3D[] = []
 
-            scene.traverse((obj) => {
-                // Filter what to include in bounds
-                if (obj.type === 'Mesh') {
-                    // Strict filtering to avoid Environment/Skybox/Helpers
-                    // We only want explicitly named parts of the house
-                    if (obj.name === 'Wall' || obj.name === 'Floor' || obj.parent?.name === 'Item') {
-                        targets.push(obj)
-                    }
+        scene.traverse((obj) => {
+            if (obj.type === 'Mesh') {
+                if (obj.name === 'Wall' || obj.name === 'Floor' || obj.parent?.name === 'Item') {
+                    targets.push(obj)
                 }
-            })
+            }
+        })
 
-            if (targets.length === 0) return
+        if (targets.length === 0) return
 
-            box.setFromObject(targets[0])
-            targets.forEach(t => box.expandByObject(t))
+        box.setFromObject(targets[0])
+        targets.forEach(t => box.expandByObject(t))
 
-            if (box.isEmpty()) return
+        if (box.isEmpty()) return
 
-            const center = new Vector3()
-            box.getCenter(center)
+        const center = new Vector3()
+        box.getCenter(center)
 
-            const size = new Vector3()
-            box.getSize(size)
+        const size = new Vector3()
+        box.getSize(size)
 
-            const maxDim = Math.max(size.x, size.z)
-            const padding = 1.2
+        const maxDim = Math.max(size.x, size.z)
+        const padding = 1.2
 
-            // Move camera to center top
-            if (camera.type === 'OrthographicCamera') {
-                const cam = camera as any
+        // Move camera to center top
+        if (camera.type === 'OrthographicCamera') {
+            const cam = camera as any
 
-                const ctrl = controls as any
-                if (ctrl) {
-                    ctrl.target.set(center.x, 0, center.z)
-                    ctrl.object.position.set(center.x, 10, center.z)
+            const ctrl = controls as any
+            if (ctrl) {
+                ctrl.target.set(center.x, 0, center.z)
+                ctrl.object.position.set(center.x, 10, center.z)
 
-                    // Adjust Zoom: Approximate calculation to fit maxDim
-                    // Zoom = CanvasDimension / WorldDimension
-                    // Use min dimension of canvas to ensure full fit
-                    const newZoom = Math.min(window.innerWidth, window.innerHeight) / (maxDim * padding)
-                    cam.zoom = Math.max(newZoom, 5) // Min zoom clamp
-                    cam.updateProjectionMatrix()
-                    ctrl.update()
-                }
-            } else {
-                // Perspective
-                const ctrl = controls as any
-                if (ctrl) {
-                    ctrl.target.copy(center)
-                    const dist = maxDim * padding
-                    ctrl.object.position.set(center.x + dist, center.y + dist, center.z + dist)
-                    ctrl.update()
-                }
+                const newZoom = Math.min(window.innerWidth, window.innerHeight) / (maxDim * padding)
+                cam.zoom = Math.max(newZoom, 5)
+                cam.updateProjectionMatrix()
+                ctrl.update()
+            }
+        } else {
+            const ctrl = controls as any
+            if (ctrl) {
+                ctrl.target.copy(center)
+                const dist = maxDim * padding
+                ctrl.object.position.set(center.x + dist, center.y + dist, center.z + dist)
+                ctrl.update()
             }
         }
     }, [fitViewTrigger, camera, scene, controls])
@@ -206,42 +202,44 @@ function FitHandler() {
 function InteractionLayer() {
     const mode = useFloorplanStore(s => s.mode)
     const activeTool = useFloorplanStore(s => s.activeTool)
+    const interactionType = useFloorplanStore(s => s.interaction.type)
     const startInteraction = useFloorplanStore(s => s.startInteraction)
     const updateInteraction = useFloorplanStore(s => s.updateInteraction)
     const endInteraction = useFloorplanStore(s => s.endInteraction)
     const selectObject = useFloorplanStore(s => s.selectObject)
 
     const onPointerDown = (e: any) => {
-        console.log('[DEBUG] onPointerDown', { mode, activeTool, button: e.button, point: e.point })
         if (mode !== '2d') return
         if (e.button !== 0) return // Left click only
+
+        // Guard: if another interaction is already active (e.g. wall/furniture started
+        // dragging via their own onPointerDown), do NOT start a new drawing here.
+        // This prevents ghost zero-length walls from being created when R3F event
+        // propagation leaks through stopPropagation between sibling meshes.
+        if (interactionType !== 'none') return
+
         e.stopPropagation()
 
-        // CRITICAL FIX: Only draw if tool is strictly 'wall' or 'ruler' or 'floor'
         if (activeTool === 'wall' || activeTool === 'ruler') {
-            console.log('[DEBUG] Starting interaction - drawing')
             selectObject(null)
             startInteraction('drawing', null, { x: e.point.x, y: e.point.z })
         } else if (activeTool === 'floor') {
-            console.log('[DEBUG] Starting interaction - drawing floor')
             selectObject(null)
             startInteraction('drawing_floor', null, { x: e.point.x, y: e.point.z })
         } else {
-            console.log('[DEBUG] Tool not active, just deselecting')
             selectObject(null)
         }
     }
 
     const onPointerMove = (e: any) => {
         if (mode !== '2d') return
-        // Pass boolean for shiftKey if available in nativeEvent, or from the synthetic event if possible.
-        // R3F events wrap native events. e.shiftKey might be available directly on some versions, or e.nativeEvent.shiftKey
         const shiftKey = e.shiftKey || e.nativeEvent?.shiftKey || false
         updateInteraction({ x: e.point.x, y: e.point.z }, { shiftKey })
     }
 
     const onPointerUp = () => {
-        console.log('[DEBUG] onPointerUp - ending interaction')
+        // Only end if there's actually an active interaction
+        if (interactionType === 'none') return
         endInteraction()
     }
 
@@ -267,10 +265,10 @@ function SceneContent() {
 
     // Lighting presets configuration - Mapped to Environment presets + directional tweaks
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 2, sunColor: '#fff8e7' },
-        night: { env: 'night', sunIntensity: 0.1, sunColor: '#aabbff' },
-        studio: { env: 'studio', sunIntensity: 1, sunColor: '#ffffff' },
-        sunset: { env: 'sunset', sunIntensity: 1.5, sunColor: '#ff9944' }
+        day: { env: 'city', sunIntensity: 3.5, sunColor: '#fff5e0', fillIntensity: 1.5, fillColor: '#d4e5ff', ambientIntensity: 0.9 },
+        night: { env: 'night', sunIntensity: 0.3, sunColor: '#8899cc', fillIntensity: 0.1, fillColor: '#334466', ambientIntensity: 0.15 },
+        studio: { env: 'studio', sunIntensity: 2.5, sunColor: '#ffffff', fillIntensity: 1.2, fillColor: '#e8e8ff', ambientIntensity: 1.0 },
+        sunset: { env: 'sunset', sunIntensity: 2.5, sunColor: '#ff8833', fillIntensity: 0.8, fillColor: '#7799cc', ambientIntensity: 0.5 }
     }
     const lighting = lightingConfigs[lightingPreset]
 
@@ -291,20 +289,42 @@ function SceneContent() {
             {/* Solid Background for studio feel - Lightened to Dark Grey */}
             <color attach="background" args={['#252525']} />
 
-            {/* Ambient Light to ensure everything is visible */}
-            <ambientLight intensity={0.7} color="#ffffff" />
+            {/* Ambient Light base */}
+            <ambientLight intensity={lighting.ambientIntensity} color="#ffffff" />
+
+            {/* Hemisphere Light — sky/ground color split for natural feel */}
+            <hemisphereLight args={['#c8deff', '#584830', 0.6]} />
 
             {/* HDRI Environment for realistic reflections and ambient light */}
             <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.8} />
 
-            {/* Main Directional Light (Sun) */}
+            {/* Key Light (Sun) — upper right */}
             <directionalLight
-                position={[5, 10, 5]}
+                position={[8, 15, 6]}
                 intensity={lighting.sunIntensity}
                 color={lighting.sunColor}
                 castShadow
                 shadow-bias={-0.0001}
                 shadow-mapSize={[2048, 2048]}
+                shadow-camera-far={50}
+                shadow-camera-left={-20}
+                shadow-camera-right={20}
+                shadow-camera-top={20}
+                shadow-camera-bottom={-20}
+            />
+
+            {/* Fill Light — opposite side, no shadows */}
+            <directionalLight
+                position={[-6, 8, 4]}
+                intensity={lighting.fillIntensity}
+                color={lighting.fillColor}
+            />
+
+            {/* Rim / Back Light — edge definition */}
+            <directionalLight
+                position={[0, 5, -8]}
+                intensity={0.8}
+                color="#e0e8ff"
             />
 
             {/* Contact Shadows for grounding objects - Tuned for soft studio look */}
@@ -347,20 +367,21 @@ function SceneContent() {
 
             <group>
                 {/* Manual walls are always visible; AI model is separate */}
-                <FloorManager />
-                <WallManager />
-                <FurnitureManager />
+                <ErrorBoundary name="FloorManager"><FloorManager /></ErrorBoundary>
+                <ErrorBoundary name="WallManager"><WallManager /></ErrorBoundary>
+                <ErrorBoundary name="FurnitureManager"><FurnitureManager /></ErrorBoundary>
                 <FurnAIAssetsManager />
                 <ImportedModelsManager />
                 <Ground />
                 <SvgOverlayPlane />
                 {/* <Model3D /> */}
-                <InteractionLayer />
-                <SelectionTransform />
+                <ErrorBoundary name="InteractionLayer"><InteractionLayer /></ErrorBoundary>
                 <FitHandler />
-                {/* <FloatingMenu /> temporarily disabled for testing */}
+                <ErrorBoundary name="FloatingMenu"><FloatingMenu /></ErrorBoundary>
             </group>
 
+            {/* EffectComposer disabled — N8AO halfRes causes walls to visually disappear from certain angles.
+               Re-enable once wall rendering is confirmed stable.
             {mode === '3d' && (
                 <EffectComposer multisampling={0}>
                     <SMAA />
@@ -382,6 +403,7 @@ function SceneContent() {
                     <ToneMapping />
                 </EffectComposer>
             )}
+            */}
 
             <DropResolver />
         </>
@@ -394,28 +416,31 @@ function BackgroundPlane() {
     const showBackground = useFloorplanStore(s => s.showBackground)
     const imageDimensions = useFloorplanStore(s => s.imageDimensions)
     const calibrationFactor = useFloorplanStore(s => s.calibrationFactor)
+    const imageWorldWidth = useFloorplanStore(s => s.imageWorldWidth)
+    const imageWorldHeight = useFloorplanStore(s => s.imageWorldHeight)
 
     const texture = useLoader(TextureLoader, uploadedImage || '')
 
     if (!uploadedImage || !showBackground || !imageDimensions) return null
 
-    // Calculate world dimensions based on pixels * meters/pixel
-    // Default factor is usually 0.05 or similar if not calibrated
-    const factor = calibrationFactor > 0 ? calibrationFactor : 0.02 // Fallback scale
-    const width = imageDimensions.width * factor
-    const height = imageDimensions.height * factor
+    // Use SVG-derived world dimensions if available (set by importFromSVG, scaled by calibrate).
+    // Fall back to pixel × calibrationFactor for cases where user draws manually without SVG import.
+    const factor = calibrationFactor > 0 ? calibrationFactor : 0.02
+    const width = imageWorldWidth != null ? imageWorldWidth : imageDimensions.width * factor
+    const height = imageWorldHeight != null ? imageWorldHeight : imageDimensions.height * factor
 
     return (
         <mesh
             rotation={[-Math.PI / 2, 0, 0]}
-            position={[0, -0.05, 0]} // Slightly below ground
+            position={[0, -0.01, 0]} // On top of Ground
             receiveShadow
+            renderOrder={1} // Render before walls but after ground
         >
             <planeGeometry args={[width, height]} />
             <meshBasicMaterial
                 map={texture}
                 transparent
-                opacity={0.3} // FAINT as requested
+                opacity={0.6} // Increased opacity from 0.3 to be more visible
                 depthWrite={false}
                 toneMapped={false}
             />
@@ -427,16 +452,9 @@ function BackgroundPlane() {
 export function Scene() {
     const activeTool = useFloorplanStore(s => s.activeTool)
     const handleDrop = useFloorplanStore(s => s.handleDrop)
-    const selectedId = useFloorplanStore(s => s.selectedId)
-    const deleteObject = useFloorplanStore(s => s.deleteObject)
     const uploadedImage = useFloorplanStore(s => s.uploadedImage) // For Reference View
     const wrapperRef = useRef<HTMLDivElement>(null)
-
-    // Get undo/redo/copy/paste functions
-    const undo = useFloorplanStore(s => s.undo)
-    const redo = useFloorplanStore(s => s.redo)
-    const copyObject = useFloorplanStore(s => s.copyObject)
-    const pasteObject = useFloorplanStore(s => s.pasteObject)
+    // Local UI State hook
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -445,33 +463,90 @@ export function Scene() {
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
             // Delete selected object
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
-                deleteObject(selectedId)
+            if ((e.key === 'Delete' || e.key === 'Backspace')) {
+                const store = useFloorplanStore.getState()
+                if (store.selectedId) {
+                    store.deleteObject(store.selectedId)
+                }
             }
             // Ctrl+Z - Undo
             if (e.ctrlKey && e.key === 'z') {
                 e.preventDefault()
-                undo()
+                useFloorplanStore.getState().undo()
             }
             // Ctrl+Y - Redo
             if (e.ctrlKey && e.key === 'y') {
                 e.preventDefault()
-                redo()
+                useFloorplanStore.getState().redo()
             }
             // Ctrl+C - Copy
-            if (e.ctrlKey && e.key === 'c' && selectedId) {
-                e.preventDefault()
-                copyObject()
+            if (e.ctrlKey && e.key === 'c') {
+                const store = useFloorplanStore.getState()
+                if (store.selectedId) {
+                    e.preventDefault()
+                    store.copyObject()
+                }
             }
             // Ctrl+V - Paste
             if (e.ctrlKey && e.key === 'v') {
                 e.preventDefault()
-                pasteObject()
+                useFloorplanStore.getState().pasteObject()
+            }
+            // R - Rotate 90 degrees
+            if (e.key.toLowerCase() === 'r') {
+                const store = useFloorplanStore.getState()
+                if (store.selectedId) {
+                    e.preventDefault()
+                    const furn = store.furniture.find(f => f.id === store.selectedId)
+                    if (furn) {
+                        store.updateFurniture(store.selectedId, { rotation: { ...furn.rotation, y: furn.rotation.y + Math.PI / 2 } })
+                    }
+                }
+            }
+            // J - Corner Snap / Join
+            if (e.key.toLowerCase() === 'j' && !e.repeat) { // Prevent repeat triggering
+                const store = useFloorplanStore.getState()
+                if (store.selectedId && store.walls.some(w => w.id === store.selectedId)) {
+                    e.preventDefault()
+                    store.setJoinMode(true)
+                }
+            }
+
+            // Enter - Confirm Join
+            if (e.key === 'Enter') {
+                const store = useFloorplanStore.getState()
+                if (store.joinMode) {
+                    e.preventDefault()
+                    store.applyJoin()
+                }
+            }
+
+            // Escape - Cancel or Deselect
+            if (e.key === 'Escape') {
+                const store = useFloorplanStore.getState()
+                if (store.joinMode) {
+                    e.preventDefault()
+                    store.setJoinMode(false)
+                } else if (store.selectedId) {
+                    e.preventDefault()
+                    store.selectObject(null)
+                }
             }
         }
+
+        const handleKeyUp = () => {
+            // Releasing J no longer auto-applies, user must press Enter to confirm
+            // Kept for future potential hooks
+        }
+
         window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedId, deleteObject, undo, redo, copyObject, pasteObject])
+        window.addEventListener('keyup', handleKeyUp)
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+        }
+    }, []) // Empty dependencies strictly prevents event handlers tearing mid-keystroke
 
     const onDrop = (e: React.DragEvent) => {
         e.preventDefault()
@@ -494,7 +569,7 @@ export function Scene() {
             ref={wrapperRef}
             className={cn(
                 "flex-1 h-full bg-[#1a1a1a] relative overflow-hidden select-none",
-                activeTool === 'wall' ? "cursor-crosshair" : (activeTool === 'ruler' ? "cursor-help" : "cursor-default")
+                activeTool === 'wall' ? "cursor-crosshair" : (activeTool === 'ruler' ? "cursor-default" : "cursor-default")
             )}
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -506,10 +581,12 @@ export function Scene() {
                 }
             }}
         >
+            <DebugOverlay />
             <Canvas shadows className="w-full h-full">
                 <Suspense fallback={null}>
                     <SceneContent />
                     {uploadedImage && <BackgroundPlane />}
+                    <FloorplanOverlay />
                 </Suspense>
             </Canvas>
 
@@ -517,6 +594,22 @@ export function Scene() {
             <ReferenceOverlay />
 
             <TutorialOverlay />
+        </div>
+    )
+}
+
+const DebugOverlay = () => {
+    const s = useFloorplanStore()
+    return (
+        <div className="absolute top-2 left-2 z-[9999] pointer-events-none text-[10px] bg-black/80 text-green-400 p-2 rounded shadow-lg font-mono flex flex-col gap-1 w-[250px] opacity-80 backdrop-blur-sm">
+            <div className="text-white border-b border-white/20 pb-1 mb-1">🔍 DEBUG PANEL</div>
+            <div>Calib: {s.calibrationFactor.toExponential(2)}</div>
+            <div>Ratio: {(s.calibrationFactor / 0.01).toFixed(2)}x</div>
+            <div>ImgPx: {s.imageDimensions ? `${s.imageDimensions.width}x${s.imageDimensions.height}` : 'null'}</div>
+            <div>ImgWorld: {s.imageWorldWidth != null ? `${s.imageWorldWidth.toFixed(1)} x ${s.imageWorldHeight?.toFixed(1)}` : 'null'}</div>
+            <div>Walls: {s.walls.length}</div>
+            {s.walls[0] && <div>W0 Len: {Math.sqrt((s.walls[0].end.x - s.walls[0].start.x) ** 2 + (s.walls[0].end.y - s.walls[0].start.y) ** 2).toFixed(2)}</div>}
+            {s.walls[0] && <div>W0 Pos: {s.walls[0].start.x.toFixed(1)}, {s.walls[0].start.y.toFixed(1)}</div>}
         </div>
     )
 }

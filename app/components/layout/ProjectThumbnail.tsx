@@ -14,7 +14,7 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
     const [svgContent, setSvgContent] = useState<string | null>(null)
     const [imageUrl, setImageUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(false)
+    const [_error, setError] = useState(false)
 
     useEffect(() => {
         let active = true
