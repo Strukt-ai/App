@@ -18,16 +18,18 @@ async function handler(request: NextRequest) {
 
     // Parse body
     let body: unknown = undefined
+    let rawBody: Buffer | undefined = undefined
     if (method !== 'GET' && method !== 'HEAD') {
-      const contentType = headers['content-type']
-      if (contentType && contentType.includes('application/json')) {
+      const contentType = headers['content-type'] || ''
+      if (contentType.includes('application/json')) {
         try {
           body = JSON.parse(await request.text())
         } catch {
           body = await request.text()
         }
       } else if (request.body) {
-        body = await request.blob()
+        // Binary / multipart / SVG — read raw bytes for passthrough
+        rawBody = Buffer.from(await request.arrayBuffer())
       }
     }
 
@@ -41,7 +43,7 @@ async function handler(request: NextRequest) {
     const response = await callBackend({
       path,
       method,
-      body,
+      body: rawBody ?? body,
       query,
       headers
     })

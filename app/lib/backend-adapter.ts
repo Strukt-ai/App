@@ -66,13 +66,14 @@ async function callHttpBackend(request: BackendRequest): Promise<BackendResponse
       })
     }
 
-    // For Blob bodies (multipart/form-data, binary uploads), preserve the
-    // original Content-Type header (which includes the boundary) and pass
-    // the raw bytes through.  Only default to application/json for plain
-    // object bodies.
-    const isBlob = request.body instanceof Blob
+    // Detect raw binary bodies (Buffer from route handler for multipart/form-data,
+    // SVG, etc.).  These must be forwarded as-is with the original Content-Type
+    // (which includes the multipart boundary).  Plain objects are JSON-serialised.
+    const isRawBody = Buffer.isBuffer(request.body)
     const fetchHeaders: Record<string, string> = {
-      ...(isBlob ? {} : { 'Content-Type': 'application/json' }),
+      // Only inject a default Content-Type for JSON bodies; raw bodies already
+      // have the correct Content-Type in request.headers (e.g. multipart boundary).
+      ...(isRawBody ? {} : { 'Content-Type': 'application/json' }),
       ...request.headers
     }
 
@@ -81,12 +82,21 @@ async function callHttpBackend(request: BackendRequest): Promise<BackendResponse
       headers: fetchHeaders
     }
 
-    if (request.body && ['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      fetchOptions.body = isBlob ? request.body : JSON.stringify(request.body)
+    if (request.body != null && ['POST', 'PUT', 'PATCH'].includes(request.method)) {
+      fetchOptions.body = isRawBody ? request.body : JSON.stringify(request.body)
     }
 
     const response = await fetch(url.toString(), fetchOptions)
-    const data = await response.json()
+
+    // Parse response — gracefully handle non-JSON error pages (e.g. Cloudflare 530)
+    let data: any
+    const resCT = response.headers.get('content-type') || ''
+    if (resCT.includes('application/json')) {
+      data = await response.json()
+    } else {
+      const text = await response.text()
+      try { data = JSON.parse(text) } catch { data = { error: text || `HTTP ${response.status}` } }
+    }
 
     return {
       status: response.status,
