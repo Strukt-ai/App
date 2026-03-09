@@ -3,7 +3,7 @@ import { callBackend } from '@/lib/backend-adapter'
 
 async function handler(request: NextRequest) {
   try {
-    const path = request.nextUrl.pathname.replace(/^\/api/, '')
+    const path = request.nextUrl.pathname
     const queryString = request.nextUrl.search
 
     const method = request.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD'
