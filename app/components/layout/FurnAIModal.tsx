@@ -99,12 +99,10 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
         if (!image || !imgRef.current) return
 
         const rect = imgRef.current.getBoundingClientRect()
-        const scaleX = (imgRef.current.naturalWidth || rect.width) / rect.width
-        const scaleY = (imgRef.current.naturalHeight || rect.height) / rect.height
-        const x = (e.clientX - rect.left) * scaleX
-        const y = (e.clientY - rect.top) * scaleY
+        const nx = (e.clientX - rect.left) / rect.width
+        const ny = (e.clientY - rect.top) / rect.height
 
-        const newPoint = { x, y, id: Math.random().toString(36).substr(2, 9) }
+        const newPoint = { x: nx, y: ny, id: Math.random().toString(36).substr(2, 9) }
 
 
 
@@ -123,8 +121,8 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
             setStatusMsg('')
             const formData = new FormData()
             formData.append('job_id', currentRunId)
-            formData.append('x', newPoint.x.toString())
-            formData.append('y', newPoint.y.toString())
+            formData.append('x', Math.round(newPoint.x * (imgRef.current.naturalWidth || 1)).toString())
+            formData.append('y', Math.round(newPoint.y * (imgRef.current.naturalHeight || 1)).toString())
             formData.append('intent', 'user_click')
 
             const tryClick = async () => {
@@ -230,7 +228,11 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
                 id: l.id,
                 name: l.name,
                 color: l.color,
-                points: l.points,
+                points: l.points.map(pt => ({
+                    ...pt,
+                    x: Math.round(pt.x * (imgRef.current?.naturalWidth || 1)),
+                    y: Math.round(pt.y * (imgRef.current?.naturalHeight || 1))
+                })),
                 polygon: l.polygon ?? []
             }))
             formData.append('items', JSON.stringify(itemsPayload))
@@ -356,9 +358,9 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
                                                 const a = p?.[0] ?? 0
                                                 const b = p?.[1] ?? 0
 
-                                                // Backend may return either normalized [0..1] or pixel-space coords.
-                                                const nx = a > 1 ? (a / natW) : a
-                                                const ny = b > 1 ? (b / natH) : b
+                                                // Backend SAM output is usually in natural pixel coordinates
+                                                const nx = a / natW
+                                                const ny = b / natH
 
                                                 const x = nx * dispW
                                                 const y = ny * dispH
