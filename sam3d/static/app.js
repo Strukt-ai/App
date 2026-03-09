@@ -180,14 +180,13 @@ const App = {
         this.setLoading(true, "Segmenting...");
 
         try {
-            // Send the actual image directly to the SAM daemon (matches reference local_sam_click_server.py)
+            // Proxy through the backend /api/sam3d/segment-click which forwards to SAM daemon
             const samFormData = new FormData();
             samFormData.append('image', this.state.uploadedFile);
             samFormData.append('x', x.toString());
             samFormData.append('y', y.toString());
 
-            const samUrl = this.state.config.samDaemonUrl || 'http://127.0.0.1:8003';
-            const res = await fetch(`${samUrl}/segment_click`, { method: 'POST', body: samFormData });
+            const res = await fetch('/api/sam3d/segment-click', { method: 'POST', body: samFormData });
             const data = await res.json();
 
             if (data.polygon && data.polygon.length > 0) {

@@ -128,16 +128,16 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
             const pixelY = Math.round(newPoint.y * (imgRef.current.naturalHeight || 1))
 
             const tryClick = async () => {
-                // Post directly to SAM daemon /segment_click (matches reference local_sam_click_server.py)
+                // Proxy through the backend /api/sam3d/segment-click which forwards to SAM daemon
                 const samFormData = new FormData()
                 samFormData.append('image', imageFileRef.current!)
                 samFormData.append('x', pixelX.toString())
                 samFormData.append('y', pixelY.toString())
 
-                const samUrl = (window as any).__SAM_DAEMON_URL || 'http://127.0.0.1:8003'
-                const res = await fetch(`${samUrl}/segment_click`, {
+                const res = await fetch('/api/sam3d/segment-click', {
                     method: 'POST',
                     body: samFormData,
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                 })
                 const result = await res.json().catch(() => ({} as any))
 
