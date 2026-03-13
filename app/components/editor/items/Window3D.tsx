@@ -24,17 +24,17 @@ export function Window3D({ width, height, depth, isSelected }: WindowProps) {
     }), [isSelected])
 
     const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: '#e8f4f8',
+        color: '#2196F3',
         metalness: 0,
-        roughness: 0,
-        transmission: 0.95,
+        roughness: 0.05,
+        transmission: 0.6,
         thickness: 0.1,
         ior: 1.52,
-        envMapIntensity: 1.5,
+        envMapIntensity: 1.0,
         transparent: true,
-        opacity: 0.3,
-        specularIntensity: 1.0,
-        specularColor: new THREE.Color('#ffffff'),
+        opacity: 0.7,
+        specularIntensity: 0.8,
+        specularColor: new THREE.Color('#a8d4f5'),
     }), [])
 
     return (
