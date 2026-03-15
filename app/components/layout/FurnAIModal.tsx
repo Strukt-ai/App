@@ -161,8 +161,8 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
                 }
 
                 setStatusMsg('Processing mask...')
-                for (let i = 0; i < 30; i++) {  // up to 30s
-                    await new Promise(r => setTimeout(r, 1000))
+                for (let i = 0; i < 60; i++) {  // up to 30s
+                    await new Promise(r => setTimeout(r, 500))
                     try {
                         const pollRes = await fetch(`/api/sam3d/jobs/${jobId}/status`, { headers: authHeaders })
                         const poll = await pollRes.json().catch(() => ({} as any))
