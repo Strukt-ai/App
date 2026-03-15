@@ -31,6 +31,7 @@ export type FurnItem = {
     rotation: { x: number; y: number; z: number }
     dimensions: { width: number; height: number; depth: number }
     modelUrl?: string
+    furnAiId?: string // Link strictly to manifest AI items
     label?: string
     color?: string // Added
 }
@@ -140,6 +141,7 @@ export interface FloorplanState {
 
     addFurniture: (type: string, position: Vector2) => void
     addImportedFurniture: (payload: { id: string; label?: string; relPath: string }) => void
+    importFurnAiModel: (payload: { id: string, type: string, position: Vector2, modelUrl: string, furnAiId: string, label: string }) => void
     updateFurniturePosition: (id: string, position: { x?: number; y?: number; z?: number }) => void
     importFromSVG: (svgText: string) => void
     exportToSVG: () => string
@@ -890,6 +892,23 @@ export const useFloorplanStore = create<FloorplanState>()(
                 }
             }
         }),
+
+        importFurnAiModel: (payload) => {
+            set((state) => {
+                state.furniture.push({
+                    id: payload.id,
+                    type: payload.type || 'imported',
+                    furnAiId: payload.furnAiId,
+                    position: { x: payload.position.x, y: 0, z: payload.position.y },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    // Default fallback size for generic AI generated objects 1m x 1m.
+                    dimensions: { width: 1, height: 1.5, depth: 1 },
+                    modelUrl: payload.modelUrl,
+                    label: payload.label
+                })
+                state.saveHistory()
+            })
+        },
 
         updateLabel: (id, label) => {
             set((state) => {
@@ -1755,14 +1774,16 @@ export const useFloorplanStore = create<FloorplanState>()(
             if (imported.length > 0) {
                 svg += `  <g id="imported-models" opacity="0.95">\n`
                 imported.forEach(it => {
-                    const cx = toPxX(it.position.x)
-                    const cy = toPxY(it.position.z)
+                    const isRotated = Math.abs(it.rotation.y) > 0.1
+                    const svgW = isRotated ? it.dimensions.depth : it.dimensions.width
+                    const svgH = isRotated ? it.dimensions.width : it.dimensions.depth
+                    const rx = it.position.x - svgW / 2
+                    const rz = it.position.z - svgH / 2
+                    const rotAttr = ` data-rotation="${it.rotation.y.toFixed(4)}"`
                     const safeRel = String(it.modelUrl || '').replace(/"/g, '')
                     const safeName = String(it.label || '').replace(/"/g, '')
-                    svg += `    <g id="imported_${it.id}" data-import-id="${it.id}" data-rel-path="${safeRel}" data-name="${safeName}">\n`
-                    svg += `      <circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="#00ffff" stroke-width="2" />\n`
-                    svg += `      <text x="${cx + 14}" y="${cy + 4}" font-size="14" fill="#00ffff" stroke="#000" stroke-width="0.6" paint-order="stroke">IMPORTED</text>\n`
-                    svg += `    </g>\n`
+                    
+                    svg += `    <rect id="imported_${it.id}" x="${toPxX(rx)}" y="${toPxY(rz)}" width="${svgW * pxPerMeter}" height="${svgH * pxPerMeter}" fill="#00ffff" data-rel-path="${safeRel}" data-name="${safeName}"${rotAttr} />\n`
                 })
                 svg += `  </g>\n`
             }

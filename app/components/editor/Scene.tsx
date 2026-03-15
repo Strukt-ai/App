@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, Suspense, useState } from 'react'
-import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping } from 'three'
+import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping, MOUSE } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows } from '@react-three/drei'
 import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast } from '@react-three/postprocessing'
@@ -363,6 +363,7 @@ function SceneContent() {
                 enablePan={true}
                 enableDamping={false} // Fix: Instant camera jumps for "fit view"
                 maxPolarAngle={mode === '3d' ? Math.PI / 2 : 0}
+                mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: null as any, RIGHT: MOUSE.PAN }}
             />
 
             {mode === '2d' && (

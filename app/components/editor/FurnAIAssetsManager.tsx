@@ -21,47 +21,24 @@ type FurnAIAssetManifest = {
     >
 }
 
-function AssetInstance({ url, x, z }: { url: string; x: number; z: number }) {
-    const gltf = useGLTF(url)
-
-    const object = useMemo(() => {
-        // Clone so multiple instances can coexist safely.
-        return gltf.scene.clone(true)
-    }, [gltf.scene])
-
-    return <primitive object={object} position={[x, 0.02, z]} />
-}
+// AssetInstance removed since items are now handled by ImportedModelsManager via the unified Store
 
 export function FurnAIAssetsManager() {
     const mode = useFloorplanStore(s => s.mode)
     const currentRunId = useFloorplanStore(s => s.currentRunId)
     const token = useFloorplanStore(s => s.token)
     const pxToM = useFloorplanStore(s => s.calibrationFactor)
+    const furniture = useFloorplanStore(s => s.furniture)
+    const importFurnAiModel = useFloorplanStore(s => s.importFurnAiModel)
 
     const [manifest, setManifest] = useState<FurnAIAssetManifest | null>(null)
     const [offsetPx, setOffsetPx] = useState<{ x: number; y: number } | null>(null)
-    const [blobUrls, setBlobUrls] = useState<Record<string, string>>({})
-
-    useEffect(() => {
-        // Cleanup blob URLs when run changes/unmounts
-        return () => {
-            for (const u of Object.values(blobUrls)) {
-                try {
-                    URL.revokeObjectURL(u)
-                } catch {
-                    // ignore
-                }
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentRunId])
 
     useEffect(() => {
         const runId = currentRunId
         if (!runId || !token || mode !== '3d') {
             setManifest(null)
             setOffsetPx(null)
-            setBlobUrls({})
             return
         }
 
@@ -102,40 +79,38 @@ export function FurnAIAssetsManager() {
                     setManifest(m)
                     setOffsetPx({ x: ox, y: oy })
 
-                    // Download GLBs as blobs so we can include auth headers.
+                    // Automatically inject missing models into the Store
                     const items = m?.items || {}
-                    const nextUrls: Record<string, string> = {}
                     for (const [key, it] of Object.entries(items)) {
                         const rel = (it?.glb || '').trim()
                         if (!rel) continue
 
-                        const path = encodeURI(rel)
-                        const glbRes = await fetch(`/api/runs/${runId}/assets/${path}`, { headers })
-                        if (!glbRes.ok) continue
+                        const pose = it?.pose_px
+                        if (!pose) continue
+                        
+                        // Check if this AI item was already injected into our store
+                        const alreadyExists = useFloorplanStore.getState().furniture.some(f => f.furnAiId === key)
+                        if (alreadyExists) continue
 
-                        const blob = await glbRes.blob()
-                        const url = URL.createObjectURL(blob)
-                        nextUrls[key] = url
+                        // Add to store
+                        importFurnAiModel({
+                            id: `furn_ai_${key.substring(0, 8)}`,
+                            furnAiId: key,
+                            type: it?.category || 'imported',
+                            modelUrl: rel, // Let ImportedModelsManager handle the fetching
+                            position: {
+                                x: (pose.x_px - ox) * pxToM,
+                                y: (pose.y_px - oy) * pxToM
+                            },
+                            label: `AI ${it?.category || 'Model'}`
+                        })
                     }
 
-                    if (cancelled) return
-
-                    // Revoke previous URLs (avoid leaks)
-                    for (const u of Object.values(blobUrls)) {
-                        try {
-                            URL.revokeObjectURL(u)
-                        } catch {
-                            // ignore
-                        }
-                    }
-
-                    setBlobUrls(nextUrls)
                 } catch (e) {
                     console.error('[FurnAIAssetsManager] Failed to load assets', e)
                     if (!cancelled) {
                         setManifest(null)
                         setOffsetPx(null)
-                        setBlobUrls({})
                     }
                 }
             })()
@@ -146,23 +121,6 @@ export function FurnAIAssetsManager() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentRunId, token])
 
-    if (mode !== '3d') return null
-    if (!manifest || !offsetPx) return null
-
-    const items = manifest.items || {}
-
-    return (
-        <group name="FurnAIAssets">
-            {Object.entries(items).map(([key, it]) => {
-                const pose = it?.pose_px
-                const url = blobUrls[key]
-                if (!pose || !url) return null
-
-                const x = (pose.x_px - offsetPx.x) * pxToM
-                const z = (pose.y_px - offsetPx.y) * pxToM
-
-                return <AssetInstance key={key} url={url} x={x} z={z} />
-            })}
-        </group>
-    )
+    // Headless syncer, rendering handled by ImportedModelsManager + FurnitureManager
+    return null
 }
