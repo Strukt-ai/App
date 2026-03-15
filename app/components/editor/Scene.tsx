@@ -396,8 +396,9 @@ function SceneContent() {
             {/* Post-processing: Bloom, Tone Mapping, Vignette
                 Note: SSAO/N8AO disabled — postprocessing v6 incompatible with Three.js 0.182 (unpackRGBAToDepth removed).
                 Upgrade to postprocessing v7 when stable to re-enable AO. */}
+            {/* Fix: multisampling=0 to avoid MSAA conflicts with main Canvas */}
             {mode === '3d' && (
-                <EffectComposer multisampling={0}> {/* Fix: 0 to avoid MSAA conflicts with main Canvas */}
+                <EffectComposer multisampling={0}>
                     <SMAA />
                     <Bloom
                         luminanceThreshold={0.9}
