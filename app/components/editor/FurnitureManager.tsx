@@ -34,6 +34,14 @@ const edgeLineMaterial = new THREE.LineBasicMaterial({ color: 0x3b82f6 })
 // Static handle geometries (Canva-style rounded discs)
 const widthHandleGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 24)
 const depthHandleGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.08, 24)
+const uniformHandleGeo = new THREE.SphereGeometry(0.18, 16, 16)
+const uniformHandleMaterial = new THREE.MeshStandardMaterial({
+    color: 0x00ffcc,
+    roughness: 0.2,
+    metalness: 0.1,
+    emissive: 0x00ffcc,
+    emissiveIntensity: 0.5
+})
 
 const FurnitureItem = memo(function FurnitureItem({
     item,
@@ -48,7 +56,7 @@ const FurnitureItem = memo(function FurnitureItem({
     mode: '2d' | '3d'
     onClick: (e: any) => void
     onPointerDown: (e: any, id: string) => void
-    onResizeDown: (e: any, id: string, subType: 'resize-width' | 'resize-depth') => void
+    onResizeDown: (e: any, id: string, subType: 'resize-width' | 'resize-depth' | 'resize-uniform') => void
 }) {
     const isOpening = item.type === 'door' || item.type === 'window'
     const width = item.dimensions.width || 1
@@ -143,6 +151,32 @@ const FurnitureItem = memo(function FurnitureItem({
                         geometry={depthHandleGeo}
                         material={depthHandleMaterial}
                     />
+
+                    {/* Corner Uniform Scale Handles */}
+                    <mesh
+                        position={[width / 2 + 0.2, 0, depth / 2 + 0.2]}
+                        onPointerDown={(e) => { e.stopPropagation(); onResizeDown(e, item.id, 'resize-uniform') }}
+                        geometry={uniformHandleGeo}
+                        material={uniformHandleMaterial}
+                    />
+                    <mesh
+                        position={[-width / 2 - 0.2, 0, depth / 2 + 0.2]}
+                        onPointerDown={(e) => { e.stopPropagation(); onResizeDown(e, item.id, 'resize-uniform') }}
+                        geometry={uniformHandleGeo}
+                        material={uniformHandleMaterial}
+                    />
+                    <mesh
+                        position={[width / 2 + 0.2, 0, -depth / 2 - 0.2]}
+                        onPointerDown={(e) => { e.stopPropagation(); onResizeDown(e, item.id, 'resize-uniform') }}
+                        geometry={uniformHandleGeo}
+                        material={uniformHandleMaterial}
+                    />
+                    <mesh
+                        position={[-width / 2 - 0.2, 0, -depth / 2 - 0.2]}
+                        onPointerDown={(e) => { e.stopPropagation(); onResizeDown(e, item.id, 'resize-uniform') }}
+                        geometry={uniformHandleGeo}
+                        material={uniformHandleMaterial}
+                    />
                 </group>
             )}
         </group>
@@ -191,7 +225,7 @@ export function FurnitureManager() {
         }
     }, [mode, activeTool, selectObject, startInteraction, updateFurniture, furniture])
 
-    const handleResizeDown = useCallback((e: any, id: string, subType: 'resize-width' | 'resize-depth') => {
+    const handleResizeDown = useCallback((e: any, id: string, subType: 'resize-width' | 'resize-depth' | 'resize-uniform') => {
         if (mode !== '2d') return
         e.stopPropagation()
         selectObject(id)

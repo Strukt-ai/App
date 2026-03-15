@@ -3,15 +3,39 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { useFloorplanStore } from '@/store/floorplanStore'
+import { Box3, Vector3 } from 'three'
 
-function ImportedInstance({ url, x, y, z, rotY }: { url: string; x: number; y: number; z: number; rotY: number }) {
+function ImportedInstance({
+    url, x, y, z, rotY,
+    targetWidth, targetDepth
+}: {
+    url: string; x: number; y: number; z: number; rotY: number;
+    targetWidth: number; targetDepth: number;
+}) {
     const gltf = useGLTF(url)
 
-    const object = useMemo(() => {
-        return gltf.scene.clone(true)
-    }, [gltf.scene])
+    const { object, scale } = useMemo(() => {
+        const cloned = gltf.scene.clone(true)
 
-    return <primitive object={object} position={[x, y, z]} rotation={[0, rotY, 0]} />
+        // Compute native bounding box of the GLTF model
+        const box = new Box3().setFromObject(cloned)
+        const size = new Vector3()
+        box.getSize(size)
+
+        const nativeW = Math.max(size.x, 0.001)
+        const nativeD = Math.max(size.z, 0.001)
+        const nativeH = Math.max(size.y, 0.001)
+
+        // Calculate scale factors from 2D dimensions
+        const sx = targetWidth / nativeW
+        const sz = targetDepth / nativeD
+        // Uniform height scale = average of width/depth scales to keep proportions
+        const sy = Math.max(sx, sz)
+
+        return { object: cloned, scale: [sx, sy, sz] as [number, number, number] }
+    }, [gltf.scene, targetWidth, targetDepth])
+
+    return <primitive object={object} position={[x, y, z]} rotation={[0, rotY, 0]} scale={scale} />
 }
 
 export function ImportedModelsManager() {
@@ -93,12 +117,14 @@ export function ImportedModelsManager() {
 
                 return (
                     <ImportedInstance
-                        key={it.id}
+                        key={`${it.id}-${it.dimensions.width}-${it.dimensions.depth}`}
                         url={url}
                         x={it.position.x}
                         y={it.position.y || 0}
                         z={it.position.z}
                         rotY={it.rotation?.y || 0}
+                        targetWidth={it.dimensions.width || 1}
+                        targetDepth={it.dimensions.depth || 1}
                     />
                 )
             })}

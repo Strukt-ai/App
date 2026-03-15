@@ -91,7 +91,7 @@ export interface FloorplanState {
     interaction: {
         type: 'none' | 'drawing' | 'dragging' | 'resizing' | 'pending_draw' | 'drawing_floor'
         targetId: string | null
-        subType?: 'start' | 'end' | 'thickness' | 'resize-width' | 'resize-depth'
+        subType?: 'start' | 'end' | 'thickness' | 'resize-width' | 'resize-depth' | 'resize-uniform'
         lastPoint: Vector2 | null
     }
 
@@ -124,7 +124,7 @@ export interface FloorplanState {
     deleteObject: (id: string) => void
 
     // Unified Interaction Actions
-    startInteraction: (type: 'drawing' | 'dragging' | 'resizing' | 'drawing_floor', targetId: string | null, point: Vector2, subType?: 'start' | 'end' | 'thickness' | 'resize-width' | 'resize-depth') => void
+    startInteraction: (type: 'drawing' | 'dragging' | 'resizing' | 'drawing_floor', targetId: string | null, point: Vector2, subType?: 'start' | 'end' | 'thickness' | 'resize-width' | 'resize-depth' | 'resize-uniform') => void
     updateInteraction: (point: Vector2, options?: { shiftKey: boolean }) => void
     endInteraction: () => void
 
@@ -556,11 +556,6 @@ export const useFloorplanStore = create<FloorplanState>()(
                     }
                 } else if (furn && subType) {
                     // Handle furniture resizing
-                    // Assume furniture is axis-aligned locally (rotation treated separately or handled by projecting?)
-                    // For simplicity, we calculate distance from center in local space?
-                    // Or simpler: just use delta.x and delta.y rotated by item rotation?
-                    // Let's stick to simple "drag handle away from center" logic.
-
                     const dx = point.x - furn.position.x
                     const dy = point.y - furn.position.z
 
@@ -570,13 +565,19 @@ export const useFloorplanStore = create<FloorplanState>()(
                     const localX = dx * cos - dy * sin
                     const localZ = dx * sin + dy * cos
 
-                    if (subType === 'resize-width') {
-                        // Width corresponds to local X
-                        // Handle is at width/2. 
-                        // New width = 2 * abs(localX)
+                    if (subType === 'resize-uniform' || options?.shiftKey) {
+                        // Uniform scale: scale both width and depth proportionally
+                        const dist = Math.sqrt(localX * localX + localZ * localZ)
+                        const oldDiag = Math.sqrt(
+                            (furn.dimensions.width / 2) ** 2 + (furn.dimensions.depth / 2) ** 2
+                        ) || 0.5
+                        const ratio = dist / oldDiag
+                        furn.dimensions.width = Math.max(0.2, furn.dimensions.width * ratio)
+                        furn.dimensions.depth = Math.max(0.2, furn.dimensions.depth * ratio)
+                        furn.dimensions.height = Math.max(0.2, furn.dimensions.height * ratio)
+                    } else if (subType === 'resize-width') {
                         furn.dimensions.width = Math.max(0.2, Math.abs(localX) * 2)
                     } else if (subType === 'resize-depth') {
-                        // Depth corresponds to local Z
                         furn.dimensions.depth = Math.max(0.2, Math.abs(localZ) * 2)
                     }
                 }
