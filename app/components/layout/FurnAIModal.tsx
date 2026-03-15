@@ -128,28 +128,61 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
             const pixelY = Math.round(newPoint.y * (imgRef.current.naturalHeight || 1))
 
             const tryClick = async () => {
-                // Proxy through the backend /api/sam3d/segment-click which forwards to SAM daemon
                 const samFormData = new FormData()
                 samFormData.append('image', imageFileRef.current!)
                 samFormData.append('x', pixelX.toString())
                 samFormData.append('y', pixelY.toString())
                 if (currentRunId) samFormData.append('run_id', currentRunId)
 
+                const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined
+
                 const res = await fetch('/api/sam3d/segment-click', {
                     method: 'POST',
                     body: samFormData,
-                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    headers: authHeaders,
                 })
-                const result = await res.json().catch(() => ({} as any))
+                const queued = await res.json().catch(() => ({} as any))
 
-                setIsProcessing(false)
-                setStatusMsg('')
-                if (result?.polygon && result.polygon.length > 0) {
-                    setPreviewPolygon(result.polygon)
-                    console.log("[FurnAI] Received Polygon:", result.polygon.length, "points")
-                } else {
-                    setStatusMsg('No mask found. Try clicking on a different area.')
+                // If result already has polygon (legacy sync path), use it directly
+                if (queued?.polygon && queued.polygon.length > 0) {
+                    setIsProcessing(false)
+                    setStatusMsg('')
+                    setPreviewPolygon(queued.polygon)
+                    console.log("[FurnAI] Received Polygon (sync):", queued.polygon.length, "points")
+                    return
                 }
+
+                // Job queued — poll until worker finishes
+                const jobId = queued?.job_id
+                if (!jobId) {
+                    setIsProcessing(false)
+                    setStatusMsg('No mask found. Try clicking on a different area.')
+                    return
+                }
+
+                setStatusMsg('Processing mask...')
+                for (let i = 0; i < 30; i++) {  // up to 30s
+                    await new Promise(r => setTimeout(r, 1000))
+                    try {
+                        const pollRes = await fetch(`/api/sam3d/jobs/${jobId}/status`, { headers: authHeaders })
+                        const poll = await pollRes.json().catch(() => ({} as any))
+                        if (poll.status === 'COMPLETED') {
+                            setIsProcessing(false)
+                            setStatusMsg('')
+                            if (poll.polygon && poll.polygon.length > 0) {
+                                setPreviewPolygon(poll.polygon)
+                                console.log("[FurnAI] Received Polygon (async):", poll.polygon.length, "points")
+                            } else {
+                                setStatusMsg('No mask found. Try clicking on a different area.')
+                            }
+                            return
+                        } else if (poll.status === 'FAILED') {
+                            break
+                        }
+                    } catch (_) { /* keep polling */ }
+                }
+                setIsProcessing(false)
+                setStatusMsg('No mask found. Try clicking on a different area.')
             }
 
             Promise.resolve(tryClick())
