@@ -8,9 +8,10 @@ interface WindowProps {
     height: number
     depth: number
     isSelected?: boolean
+    mode?: '2d' | '3d'
 }
 
-export function Window3D({ width, height, depth, isSelected }: WindowProps) {
+export function Window3D({ width, height, depth, isSelected, mode }: WindowProps) {
     const frameThickness = 0.08
     const frameDepth = depth
 
@@ -71,11 +72,13 @@ export function Window3D({ width, height, depth, isSelected }: WindowProps) {
                 <boxGeometry args={[width / 2 - frameThickness * 2, height - frameThickness * 2, 0.02]} />
             </mesh>
 
-            {/* 2D top-down indicator — blue fill visible when viewed from above */}
-            <mesh position={[0, height / 2, 0]}>
-                <boxGeometry args={[width - frameThickness * 2, 0.01, depth]} />
-                <meshBasicMaterial color="#2196F3" transparent opacity={0.65} />
-            </mesh>
+            {/* 2D-only blue indicator — only rendered in top-down view */}
+            {mode === '2d' && (
+                <mesh position={[0, height + 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <planeGeometry args={[width, depth]} />
+                    <meshBasicMaterial color="#2196F3" transparent opacity={0.75} side={THREE.DoubleSide} depthWrite={false} />
+                </mesh>
+            )}
         </group>
     )
 }

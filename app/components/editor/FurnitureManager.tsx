@@ -91,6 +91,7 @@ const FurnitureItem = memo(function FurnitureItem({
                     height={height}
                     depth={depth}
                     isSelected={isSelected}
+                    mode={mode}
                 />
             ) : (
                 (mode === '3d' && item.modelUrl) ? null : (
