@@ -327,7 +327,7 @@ export function RightSidebar() {
                             )}
                         </div>
 
-                        <div className="p-4 border-b bg-primary/5">
+                        <div className="p-4 bg-primary/5 rounded-lg">
                             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">AI Status</h3>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between text-[11px]">
@@ -346,9 +346,11 @@ export function RightSidebar() {
                             </div>
                         </div>
 
-                        <JobQueuePanel />
-
                     </div>
+
+                    {/* Job Queue — always visible at bottom, outside scroll */}
+                    <JobQueuePanel />
+
                 </div>
             )}
         </div>
