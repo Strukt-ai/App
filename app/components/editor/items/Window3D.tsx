@@ -70,6 +70,12 @@ export function Window3D({ width, height, depth, isSelected }: WindowProps) {
             <mesh position={[width / 4, height / 2, 0]} material={glassMaterial}>
                 <boxGeometry args={[width / 2 - frameThickness * 2, height - frameThickness * 2, 0.02]} />
             </mesh>
+
+            {/* 2D top-down indicator — blue fill visible when viewed from above */}
+            <mesh position={[0, height / 2, 0]}>
+                <boxGeometry args={[width - frameThickness * 2, 0.01, depth]} />
+                <meshBasicMaterial color="#2196F3" transparent opacity={0.65} />
+            </mesh>
         </group>
     )
 }
