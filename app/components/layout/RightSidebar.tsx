@@ -4,6 +4,7 @@ import { Upload, Loader2, MousePointer2, Box } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { useState, useRef, useEffect } from 'react'
+import { JobQueuePanel } from '@/components/layout/JobQueuePanel'
 
 export function RightSidebar() {
     const activeTool = useFloorplanStore(s => s.activeTool)
@@ -345,7 +346,7 @@ export function RightSidebar() {
                             </div>
                         </div>
 
-
+                        <JobQueuePanel />
 
                     </div>
                 </div>
