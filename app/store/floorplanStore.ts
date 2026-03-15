@@ -1208,6 +1208,43 @@ export const useFloorplanStore = create<FloorplanState>()(
             // 3b. Parse imported model placemarks (written by backend upload)
             const importedGroup = doc.getElementById('imported-models')
             if (importedGroup) {
+                // NEW FORMAT: direct <rect> elements with data-rel-path
+                importedGroup.querySelectorAll('rect').forEach(r => {
+                    const relPath = r.getAttribute('data-rel-path') || ''
+                    const name = r.getAttribute('data-name') || ''
+                    if (!relPath) return
+
+                    const x = parseFloat(r.getAttribute('x') || 'NaN')
+                    const y = parseFloat(r.getAttribute('y') || 'NaN')
+                    const w = parseFloat(r.getAttribute('width') || '0') * pxToM
+                    const h = parseFloat(r.getAttribute('height') || '0') * pxToM
+                    if (isNaN(x) || isNaN(y)) return
+
+                    const cx = x + parseFloat(r.getAttribute('width') || '0') / 2
+                    const cy = y + parseFloat(r.getAttribute('height') || '0') / 2
+
+                    const rawId = (r.getAttribute('id') || '').replace(/^imported_/, '')
+                    const id = rawId || uuidv4()
+
+                    const savedRotation = r.getAttribute('data-rotation')
+                    let rotY = 0
+                    if (savedRotation !== null) {
+                        rotY = parseFloat(savedRotation)
+                        if (!isFinite(rotY)) rotY = 0
+                    }
+
+                    furniture.push({
+                        id,
+                        type: 'imported',
+                        position: { x: (cx - offsetX) * pxToM, y: 0, z: (cy - offsetY) * pxToM },
+                        rotation: { x: 0, y: rotY, z: 0 },
+                        dimensions: { width: Math.max(w, 0.5), height: 1.5, depth: Math.max(h, 0.5) },
+                        modelUrl: relPath,
+                        label: name,
+                    })
+                })
+
+                // LEGACY FORMAT: <g> wrappers with <circle> center points
                 importedGroup.querySelectorAll('g').forEach(g => {
                     const importId = g.getAttribute('data-import-id') || g.getAttribute('id') || ''
                     const relPath = g.getAttribute('data-rel-path') || ''
@@ -1244,6 +1281,9 @@ export const useFloorplanStore = create<FloorplanState>()(
                     if (cx === null || cy === null) return
 
                     const id = String(importId).replace(/^imported_/, '') || uuidv4()
+                    // Skip if already parsed from rect format above
+                    if (furniture.some(f => f.id === id)) return
+
                     furniture.push({
                         id,
                         type: 'imported',
