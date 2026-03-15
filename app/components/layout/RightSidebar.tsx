@@ -353,6 +353,10 @@ export function RightSidebar() {
 
                 </div>
             )}
+
+            {/* Job Queue — always show when sidebar is open */}
+            {activeTool !== 'furniture' && <JobQueuePanel />}
+
         </div>
     )
 }
