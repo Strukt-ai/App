@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { LayoutGrid, Box, Download, Play, Eye, EyeOff } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
+import { DebugPanel } from './DebugPanel'
 
 export function Topbar() {
     const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token } = useFloorplanStore()
@@ -418,6 +419,7 @@ export function Topbar() {
                     </label>
                 </div>
             </div>
+            <DebugPanel />
         </div >
     )
 }
