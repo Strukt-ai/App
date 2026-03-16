@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, FolderOpen, Trash2, Calendar, Loader2 } from 'lucide-react'
+import { X, FolderOpen, Trash2, Calendar, Loader2, AlertTriangle, Clock } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { ProjectThumbnail } from './ProjectThumbnail'
@@ -11,11 +11,21 @@ interface ProjectsModalProps {
     onClose: () => void
 }
 
+function formatTimestamp(iso: string): string {
+    if (!iso) return ''
+    const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'))
+    return d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    })
+}
+
 export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
     const { token, currentRunId, setRunId, setRunStatus, setMode, setCalibrationFactor, setTutorialStep } = useFloorplanStore()
     const [projects, setProjects] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [deletingAll, setDeletingAll] = useState(false)
 
     useEffect(() => {
         if (isOpen && token) {
@@ -54,7 +64,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                 setProjects(prev => prev.filter(p => p.job_id !== runId))
                 if (runId === currentRunId) {
                     setRunId(null)
-                    useFloorplanStore.getState().setUploadedImage(null) // clear to prevent clicking on ghost
+                    useFloorplanStore.getState().setUploadedImage(null)
                 }
             } else {
                 alert("Failed to delete project")
@@ -66,21 +76,40 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
         }
     }
 
+    const handleDeleteAll = async () => {
+        if (!confirm(`Delete all ${projects.length} project(s)? This cannot be undone.`)) return
+        setDeletingAll(true)
+        try {
+            const res = await fetch('/api/runs', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (res.ok) {
+                setProjects([])
+                setRunId(null)
+                useFloorplanStore.getState().setUploadedImage(null)
+            } else {
+                alert("Failed to delete all projects")
+            }
+        } catch (e) {
+            console.error("Delete all failed", e)
+        } finally {
+            setDeletingAll(false)
+        }
+    }
+
     const handleLoad = async (project: any) => {
         const runId = project.job_id
         if (!runId) return
 
         setRunId(runId)
         setRunStatus(project.status === 'COMPLETED' ? 'completed' : 'processing')
-        setMode('2d') // Switch to editor view
+        setMode('2d')
         onClose()
 
-        // CRITICAL: When reopening an existing project, we must fetch/import its SVG.
-        // Otherwise the editor shows a blank state even though the run has a saved SVG.
         try {
             if (!token) return
 
-            // Restore per-run calibration/scale from run_meta.json (if present)
             try {
                 const metaRes = await fetch(`/api/runs/${runId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -88,8 +117,6 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                 if (metaRes.ok) {
                     const meta = await metaRes.json().catch(() => ({} as any))
                     const rm = meta?.run_meta || {}
-
-                    // Prefer explicit scale fields saved by calibration flow
                     const scale = rm?.scale ?? rm?.exportScale ?? rm?.calibrationFactor
                     const parsed = typeof scale === 'number' ? scale : parseFloat(String(scale || 'NaN'))
                     if (Number.isFinite(parsed) && parsed > 0) {
@@ -98,7 +125,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                     }
                 }
             } catch {
-                // ignore, we'll fall back to whatever is in store
+                // ignore
             }
 
             const svgRes = await fetch(`/api/runs/${runId}/svg`, {
@@ -125,10 +152,30 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                     <div className="flex items-center gap-2">
                         <FolderOpen className="w-5 h-5 text-primary" />
                         <h2 className="text-lg font-semibold">My Projects</h2>
+                        {projects.length > 0 && (
+                            <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                                {projects.length}
+                            </span>
+                        )}
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-secondary rounded-full transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {projects.length > 0 && (
+                            <button
+                                onClick={handleDeleteAll}
+                                disabled={deletingAll}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 rounded-lg transition-colors disabled:opacity-50"
+                                title="Delete all projects"
+                            >
+                                {deletingAll
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    : <AlertTriangle className="w-3.5 h-3.5" />}
+                                Delete All
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-2 hover:bg-secondary rounded-full transition-colors">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
@@ -152,7 +199,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                                     onClick={() => handleLoad(project)}
                                     className="group relative border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-all cursor-pointer bg-card hover:shadow-md flex flex-col"
                                 >
-                                    {/* Thumbnail Placeholder or Image */}
+                                    {/* Thumbnail */}
                                     <div className="aspect-video bg-secondary/20 flex items-center justify-center relative overflow-hidden border-b border-border/50">
                                         <ProjectThumbnail
                                             runId={project.job_id}
@@ -160,7 +207,6 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                                             token={token}
                                             status={project.status}
                                         />
-
                                         {/* Status Badge */}
                                         <div className={cn(
                                             "absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-md z-10",
@@ -174,22 +220,22 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
 
                                     {/* Info */}
                                     <div className="p-3">
-                                        <div className="text-sm font-semibold truncate mb-1 text-foreground" title={project.job_id}>
+                                        <div className="text-sm font-semibold truncate mb-1.5 text-foreground" title={project.job_id}>
                                             {project.job_id}
                                         </div>
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                                <Calendar className="w-3 h-3" />
-                                                <span>{new Date(project.created_at).toLocaleDateString()}</span>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground min-w-0">
+                                                <Clock className="w-3 h-3 flex-shrink-0" />
+                                                <span className="truncate">{formatTimestamp(project.created_at)}</span>
                                             </div>
-
-                                            {/* Delete Action - Always Visible */}
                                             <button
                                                 onClick={(e) => handleDelete(project.job_id, e)}
-                                                className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                                                className="p-1.5 flex-shrink-0 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
                                                 title="Delete Project"
                                             >
-                                                {deletingId === project.job_id ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <Trash2 className="w-4 h-4" />}
+                                                {deletingId === project.job_id
+                                                    ? <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+                                                    : <Trash2 className="w-4 h-4" />}
                                             </button>
                                         </div>
                                     </div>
