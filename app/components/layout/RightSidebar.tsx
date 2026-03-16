@@ -138,15 +138,12 @@ export function RightSidebar() {
                     while (Date.now() - pollStart < 15000) { // 15s timeout
                         await new Promise(r => setTimeout(r, 150));
                         try {
-                            const check = await fetch(`/api/runs/${clickJobId}/status?t=${Date.now()}`);
+                            const check = await fetch(`/api/sam3d/jobs/${clickJobId}/status`);
                             if (check.ok) {
                                 const statusData = await check.json();
-                                // The worker writes the mask polygon into the DB result column when COMPLETED
-                                if (statusData.status === 'COMPLETED' && statusData.result) {
-                                    if (statusData.result.polygon && statusData.result.polygon.length > 0) {
-                                        result = statusData.result;
-                                        break;
-                                    }
+                                if (statusData.status === 'COMPLETED' && statusData.polygon && statusData.polygon.length > 0) {
+                                    result = statusData;
+                                    break;
                                 } else if (statusData.status === 'FAILED') {
                                     setStatusMsg("Segmentation failed internally.");
                                     break;
