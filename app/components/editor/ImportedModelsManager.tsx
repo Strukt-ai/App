@@ -76,9 +76,13 @@ export function ImportedModelsManager() {
                 for (const it of furniture) {
                     const rel = (it.modelUrl || '').trim()
                     if (!rel) continue
-                    const safe = encodeURI(rel)
 
-                    const res = await fetch(`/api/runs/${runId}/assets/${safe}`, { headers })
+                    // S3 presigned URLs are absolute — fetch directly, no auth header needed
+                    const isAbsolute = rel.startsWith('http://') || rel.startsWith('https://')
+                    const fetchUrl = isAbsolute ? rel : `/api/runs/${runId}/assets/${encodeURI(rel)}`
+                    const fetchHeaders = isAbsolute ? {} : headers
+
+                    const res = await fetch(fetchUrl, { headers: fetchHeaders })
                     if (!res.ok) continue
                     const blob = await res.blob()
                     nextUrls[it.id] = URL.createObjectURL(blob)
