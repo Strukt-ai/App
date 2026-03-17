@@ -1501,7 +1501,8 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
 
             // Also look for text elements as room labels
-            // Always run this so OCR text attached to existing rooms is hydrated properly.
+            // If room polygons exist, try to assign OCR text as room names via proximity.
+            // Otherwise, push to standalone labels array.
             doc.querySelectorAll('text').forEach(textEl => {
                 const textContent = textEl.textContent?.trim() || ''
                 // Skip dimension numbers (just digits/decimal)
@@ -1513,10 +1514,32 @@ export const useFloorplanStore = create<FloorplanState>()(
 
                 // Check if this looks like a room name (has letters)
                 if (textContent.match(/[a-zA-Z]/)) {
-                    // *** USER REQUEST: Stop generating individual floors. We just want labels. ***
-                    // We no longer snap to existing rooms, because there is only one giant master floor.
-                    // Instead, we just push all OCR'd labels to the isolated labels array
-                    // so they appear exactly at their parsed coordinates.
+                    // If we have room polygons, try to match this label to the nearest room
+                    // and update its name (rooms from geometry often have generic names)
+                    let matched = false
+                    if (rooms.length > 0) {
+                        let bestRoom: typeof rooms[0] | null = null
+                        let bestDist = Infinity
+                        for (const r of rooms) {
+                            const dx = r.center.x - textX
+                            const dy = r.center.y - textY
+                            const dist = Math.sqrt(dx * dx + dy * dy)
+                            if (dist < bestDist) {
+                                bestDist = dist
+                                bestRoom = r
+                            }
+                        }
+                        // Match if label is within 3m of room center
+                        if (bestRoom && bestDist < 3.0) {
+                            // Only override generic names (Room 1, geo_room_0, etc.)
+                            if (!bestRoom.name || bestRoom.name.startsWith('Room ') || bestRoom.name.startsWith('geo_room')) {
+                                bestRoom.name = textContent
+                            }
+                            matched = true
+                        }
+                    }
+
+                    // Always add to labels array for 2D display
                     labels.push({
                         id: uuidv4(),
                         text: textContent,
@@ -1569,8 +1592,8 @@ export const useFloorplanStore = create<FloorplanState>()(
 
             console.log('[DEBUG importFromSVG] Parsed:', { walls: walls.length, furniture: furniture.length, rooms: rooms.length })
 
-            // Create a single master floor — always when walls exist
-            if (walls.length > 0) {
+            // Create a single master floor — only when no per-room polygons exist
+            if (walls.length > 0 && !hasBackendGeomRooms) {
                 let floorMinX = Infinity, floorMinY = Infinity
                 let floorMaxX = -Infinity, floorMaxY = -Infinity
 
