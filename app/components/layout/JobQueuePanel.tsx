@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Download, Loader2, CheckCircle2, XCircle, Clock, RefreshCw, Box, Plus } from 'lucide-react'
+import { Download, Loader2, CheckCircle2, XCircle, Clock, RefreshCw, Box, Plus, Zap } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 
@@ -30,7 +30,7 @@ interface S3Asset {
 
 function elapsed(iso?: string): string {
     if (!iso) return ''
-    const s = Math.floor((Date.now() - new Date(iso + 'Z').getTime()) / 1000)
+    const s = Math.floor((Date.now() - new Date(iso + (iso.endsWith('Z') ? '' : 'Z')).getTime()) / 1000)
     if (s < 60) return `${s}s ago`
     if (s < 3600) return `${Math.floor(s / 60)}m ago`
     return `${Math.floor(s / 3600)}h ago`
@@ -41,11 +41,10 @@ function fakeProgress(job: Job): number {
     if (job.status === 'FAILED') return 100
     if (job.status === 'PENDING') return 5
     const start = job.started_at ? new Date(job.started_at + 'Z').getTime() : Date.now()
-    const elapsed = (Date.now() - start) / 1000
-    return Math.min(95, Math.max(10, (elapsed / 240) * 100))
+    const el = (Date.now() - start) / 1000
+    return Math.min(95, Math.max(10, (el / 240) * 100))
 }
 
-/** Returns human phase label + ETA for PROCESSING jobs */
 function getPhaseInfo(job: Job): { phase: string; eta: string } {
     if (job.status === 'PENDING') {
         return { phase: 'Waiting for Lambda...', eta: '~4-5 min' }
@@ -53,11 +52,26 @@ function getPhaseInfo(job: Job): { phase: string; eta: string } {
     const start = job.started_at ? new Date(job.started_at + 'Z').getTime() : Date.now()
     const sec = (Date.now() - start) / 1000
 
-    if (sec < 30)  return { phase: 'Lambda dispatching EC2...', eta: '~4 min left' }
+    if (sec < 30) return { phase: 'Lambda dispatching EC2...', eta: '~4 min left' }
     if (sec < 100) return { phase: 'EC2 booting up...', eta: `~${Math.ceil((100 - sec) / 60 + 2)}m left` }
     if (sec < 160) return { phase: 'Loading AI model...', eta: '~2 min left' }
     if (sec < 220) return { phase: 'Running 3D inference...', eta: '~1 min left' }
     return { phase: 'Uploading result...', eta: 'Almost done' }
+}
+
+/** EC2 runs every hour for 10 min. Show next window. */
+function getEc2Schedule(): { label: string; isActive: boolean } {
+    const now = new Date()
+    const min = now.getMinutes()
+
+    // EC2 runs at minute 0-10 of every hour (triggered by EventBridge)
+    if (min < 10) {
+        const remaining = 10 - min
+        return { label: `EC2 active now (${remaining}m left)`, isActive: true }
+    }
+
+    const nextHour = 60 - min
+    return { label: `EC2 next run in ${nextHour}m`, isActive: false }
 }
 
 function assetName(f: GlbFile): string {
@@ -143,25 +157,28 @@ export function JobQueuePanel() {
     const activeJobs = jobs.filter(j => j.status === 'PENDING' || j.status === 'PROCESSING')
     const failedJobs = jobs.filter(j => j.status === 'FAILED')
 
-    // Build asset list: from my-jobs GLB files first, then fill from S3 scan (deduped by job_id)
+    // Only show assets that have actual downloadable GLB URLs (from S3)
     const jobAssets: { uid: string; jobId: string; name: string; url: string; createdAt: string }[] = []
     const seenJobIds = new Set<string>()
 
-    for (const job of jobs.filter(j => j.status === 'COMPLETED' && j.glb_files.length > 0)) {
-        for (const f of job.glb_files) {
-            const uid = `${job.job_id}_${f.name}`
-            jobAssets.push({ uid, jobId: job.job_id, name: assetName(f), url: f.url, createdAt: job.created_at })
-            seenJobIds.add(job.job_id)
-        }
-    }
-
-    // Fill in S3 assets not already covered by job DB
+    // From S3 scan — these are guaranteed to exist
     for (const a of s3Assets) {
-        if (seenJobIds.has(a.job_id)) continue
         const uid = `${a.job_id}_${a.filename}`
         jobAssets.push({ uid, jobId: a.job_id, name: a.label, url: a.url, createdAt: a.last_modified })
         seenJobIds.add(a.job_id)
     }
+
+    // From job DB — only if they have actual GLB files AND aren't already covered by S3
+    for (const job of jobs.filter(j => j.status === 'COMPLETED' && j.glb_files.length > 0)) {
+        if (seenJobIds.has(job.job_id)) continue
+        for (const f of job.glb_files) {
+            const uid = `${job.job_id}_${f.name}`
+            jobAssets.push({ uid, jobId: job.job_id, name: assetName(f), url: f.url, createdAt: job.created_at })
+        }
+        seenJobIds.add(job.job_id)
+    }
+
+    const ec2 = getEc2Schedule()
 
     return (
         <div className="border-t border-border mt-2">
@@ -177,7 +194,18 @@ export function JobQueuePanel() {
                 </button>
             </div>
 
-            {activeJobs.length === 0 && jobAssets.length === 0 && !loading && (
+            {/* EC2 Schedule Banner */}
+            <div className={cn(
+                "mx-3 mb-2 px-3 py-1.5 rounded-md flex items-center gap-2 text-[10px] font-medium",
+                ec2.isActive
+                    ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                    : "bg-secondary/40 border border-border/50 text-muted-foreground"
+            )}>
+                <Zap className={cn("w-3 h-3", ec2.isActive && "text-green-400")} />
+                {ec2.label}
+            </div>
+
+            {activeJobs.length === 0 && jobAssets.length === 0 && failedJobs.length === 0 && !loading && (
                 <p className="text-[10px] text-muted-foreground/50 px-4 pb-3 italic">
                     No 3D jobs yet. Segment an object and click Generate 3D.
                 </p>
@@ -218,7 +246,7 @@ export function JobQueuePanel() {
                     )
                 })}
 
-                {/* Failed jobs */}
+                {/* Failed jobs — max 3, auto-dismiss */}
                 {failedJobs.slice(0, 3).map(job => (
                     <div key={job.job_id} className="rounded-lg p-3 border bg-red-500/5 border-red-500/20">
                         <div className="flex items-center justify-between">
@@ -232,12 +260,12 @@ export function JobQueuePanel() {
                     </div>
                 ))}
 
-                {/* My 3D Assets Library */}
+                {/* My 3D Assets — only items with actual GLBs available */}
                 {jobAssets.length > 0 && (
                     <>
                         <div className="pt-2 pb-1">
                             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1 flex items-center gap-1.5">
-                                <Box className="w-3 h-3" /> My 3D Assets
+                                <Box className="w-3 h-3" /> My 3D Assets ({jobAssets.length})
                             </p>
                         </div>
                         {jobAssets.map(asset => {
