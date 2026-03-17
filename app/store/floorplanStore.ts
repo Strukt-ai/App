@@ -1327,11 +1327,14 @@ export const useFloorplanStore = create<FloorplanState>()(
                         let openingWidth = isHorizontal ? w : h;
                         let thickness = 0.15; // Standardize door/window depth to match standard wall thickness
 
-                        // Force ALL doors/windows to standard size — no threshold
                         if (type === 'door') {
-                            openingWidth = 0.9;
+                            if (openingWidth > 0.54 && openingWidth < 1.26) {
+                                openingWidth = 0.9;
+                            }
                         } else if (type === 'window') {
-                            openingWidth = 1.2;
+                            if (openingWidth > 0.72 && openingWidth < 1.68) {
+                                openingWidth = 1.2;
+                            }
                         }
 
                         furniture.push({
