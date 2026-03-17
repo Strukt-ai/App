@@ -949,15 +949,6 @@ export const useFloorplanStore = create<FloorplanState>()(
                         scale: state.exportScale || state.calibrationFactor
                     })
                 })
-
-                // Pre-trigger gen_3d in background so .blend is ready when user clicks download
-                const genHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-                if (state.token) genHeaders['Authorization'] = `Bearer ${state.token}`
-                fetch(`/api/runs/${state.currentRunId}/generate-3d`, {
-                    method: 'POST',
-                    headers: genHeaders,
-                    body: JSON.stringify({ scale: state.exportScale || state.calibrationFactor })
-                }).catch(() => {}) // fire-and-forget
             } catch (e) {
                 console.error("SVG Sync Error:", e)
             }
