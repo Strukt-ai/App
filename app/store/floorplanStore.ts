@@ -1104,6 +1104,8 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
 
         importFromSVG: (svgText) => set((state) => {
+            console.log('[DEBUG importFromSVG] SVG length:', svgText.length, 'starts with:', svgText.substring(0, 200))
+            console.log('[DEBUG importFromSVG] has rooms-geometry?', svgText.includes('rooms-geometry'), 'polygon count in text:', (svgText.match(/<polygon/g) || []).length)
             const parser = new DOMParser()
             const doc = parser.parseFromString(svgText, "image/svg+xml")
 
@@ -1458,9 +1460,12 @@ export const useFloorplanStore = create<FloorplanState>()(
 
             // Prefer backend geometric rooms if present
             const roomsGeomGroup = doc.getElementById('rooms-geometry')
-            if (roomsGeomGroup) {
-                roomsGeomGroup.querySelectorAll('polygon').forEach(p => addRoomFromSvgPolygon(p))
+            const geomPolygons = roomsGeomGroup ? roomsGeomGroup.querySelectorAll('polygon') : null
+            console.log('[DEBUG importFromSVG] rooms-geometry group:', roomsGeomGroup ? `found (${geomPolygons?.length} polygons)` : 'NOT FOUND')
+            if (roomsGeomGroup && geomPolygons) {
+                geomPolygons.forEach(p => addRoomFromSvgPolygon(p))
             }
+            console.log('[DEBUG importFromSVG] After geom parse:', rooms.length, 'rooms')
 
             const hasBackendGeomRooms = rooms.length > 0
 
