@@ -350,6 +350,59 @@ export function Topbar() {
                             <Download className="w-3.5 h-3.5" />
                             {isGenerating3D ? 'Wait...' : 'SKP'}
                         </button>
+                        <button
+                            disabled={isGenerating3D}
+                            onClick={async () => {
+                                if (!token) return showToast("Please login to download", "error")
+
+                                const doDownload = async () => {
+                                    try {
+                                        const res = await fetch(`/api/runs/${currentRunId}/download/ifc`, {
+                                            headers: { 'Authorization': `Bearer ${token}` }
+                                        })
+                                        if (!res.ok) throw new Error(await res.text())
+                                        const blob = await res.blob()
+                                        const url = window.URL.createObjectURL(blob)
+                                        const a = document.createElement('a')
+                                        a.href = url
+                                        a.download = `floorplan-${currentRunId}.ifc`
+                                        document.body.appendChild(a)
+                                        a.click()
+                                        a.remove()
+                                        window.URL.revokeObjectURL(url)
+                                    } catch (e: any) {
+                                        showToast("Failed to download IFC. Wait a moment and try again.", "error")
+                                    }
+                                }
+
+                                if (runStatus !== 'processing') {
+                                    showToast("Generating 3D Model for Revit...", "info")
+                                    await useFloorplanStore.getState().triggerBlenderGeneration()
+                                    let attempts = 0;
+                                    const pollInterval = setInterval(async () => {
+                                        attempts++;
+                                        const status = useFloorplanStore.getState().runStatus;
+                                        if (status === 'completed') {
+                                            clearInterval(pollInterval);
+                                            await doDownload();
+                                        } else if (status === 'failed' || attempts > 120) {
+                                            clearInterval(pollInterval);
+                                            showToast("3D Generation failed or timed out.", "error");
+                                        }
+                                    }, 1500);
+                                } else {
+                                    await doDownload()
+                                }
+                            }}
+                            className={cn(
+                                "px-2.5 py-1.5 rounded-md text-xs font-medium bg-orange-600/80 hover:bg-orange-600 text-white flex items-center gap-1.5 transition-colors",
+                                isGenerating3D && "animate-pulse opacity-50 cursor-not-allowed"
+                            )}
+                            title="Download for Revit / BIM (IFC)"
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                            {isGenerating3D ? 'Wait...' : 'IFC'}
+                        </button>
                     </div>
                 )}
 
