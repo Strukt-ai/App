@@ -77,14 +77,27 @@ export function ImportedModelsManager() {
                     const rel = (it.modelUrl || '').trim()
                     if (!rel) continue
 
-                    // S3 presigned URLs are absolute — fetch directly, no auth header needed
+                    // Always proxy through backend to avoid S3 CORS issues
+                    let fetchUrl: string
+                    let fetchHeaders: Record<string, string>
                     const isAbsolute = rel.startsWith('http://') || rel.startsWith('https://')
-                    const fetchUrl = isAbsolute ? rel : `/api/runs/${runId}/assets/${encodeURI(rel)}`
-                    const fetchHeaders = isAbsolute ? {} : headers
+                    if (isAbsolute) {
+                        // Proxy S3 URL through backend
+                        fetchUrl = `/api/proxy-glb?url=${encodeURIComponent(rel)}`
+                        fetchHeaders = headers
+                    } else {
+                        fetchUrl = `/api/runs/${runId}/assets/${encodeURI(rel)}`
+                        fetchHeaders = headers
+                    }
 
+                    console.log(`[ImportedModelsManager] Fetching ${it.id}: ${fetchUrl.substring(0, 120)}...`)
                     const res = await fetch(fetchUrl, { headers: fetchHeaders })
-                    if (!res.ok) continue
+                    if (!res.ok) {
+                        console.error(`[ImportedModelsManager] FAILED ${it.id}: ${res.status} ${res.statusText}`)
+                        continue
+                    }
                     const blob = await res.blob()
+                    console.log(`[ImportedModelsManager] Loaded ${it.id}: ${blob.size} bytes`)
                     nextUrls[it.id] = URL.createObjectURL(blob)
                 }
 
