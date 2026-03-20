@@ -293,8 +293,8 @@ function SceneContent() {
 
     return (
         <>
-            {/* Clean architectural background — warm off-white */}
-            <color attach="background" args={['#f0eeeb']} />
+            {/* Clean architectural background — dark studio */}
+            <color attach="background" args={['#1a1a1a']} />
 
             {/* Soft shadows for realistic penumbra */}
             {mode === '3d' && <SoftShadows size={25} samples={16} focus={0.5} />}
@@ -379,8 +379,8 @@ function SceneContent() {
                     fadeDistance={30}
                     fadeStrength={5}
                     sectionSize={1}
-                    cellColor="#d5d0ca"
-                    sectionColor="#bbb5ae"
+                    cellColor="#353535"
+                    sectionColor="#454545"
                     position={[0, 0.02, 0]}
                 />
             )}
@@ -583,7 +583,7 @@ export function Scene() {
         <div
             ref={wrapperRef}
             className={cn(
-                "flex-1 h-full bg-[#f0eeeb] relative overflow-hidden select-none",
+                "flex-1 h-full bg-[#1a1a1a] relative overflow-hidden select-none",
                 activeTool === 'wall' ? "cursor-crosshair" : (activeTool === 'ruler' ? "cursor-default" : "cursor-default")
             )}
             onDrop={onDrop}
@@ -624,8 +624,8 @@ export function Scene() {
 const DebugOverlay = () => {
     const s = useFloorplanStore()
     return (
-        <div className="absolute top-2 left-2 z-[9999] pointer-events-none text-[10px] bg-white/90 text-gray-700 p-2 rounded shadow-lg font-mono flex flex-col gap-1 w-[250px] opacity-80 backdrop-blur-sm border border-gray-200">
-            <div className="text-gray-900 border-b border-gray-200 pb-1 mb-1">DEBUG PANEL</div>
+        <div className="absolute top-2 left-2 z-[9999] pointer-events-none text-[10px] bg-black/80 text-green-400 p-2 rounded shadow-lg font-mono flex flex-col gap-1 w-[250px] opacity-80 backdrop-blur-sm">
+            <div className="text-white border-b border-white/20 pb-1 mb-1">DEBUG PANEL</div>
             <div>Calib: {s.calibrationFactor.toExponential(2)}</div>
             <div>Ratio: {(s.calibrationFactor / 0.01).toFixed(2)}x</div>
             <div>ImgPx: {s.imageDimensions ? `${s.imageDimensions.width}x${s.imageDimensions.height}` : 'null'}</div>
