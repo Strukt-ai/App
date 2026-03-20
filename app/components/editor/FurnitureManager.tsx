@@ -105,9 +105,9 @@ const FurnitureItem = memo(function FurnitureItem({
                 (mode === '3d' && item.modelUrl) ? null : (
                     <Box args={[width, height, depth]} position={[0, height / 2, 0]} castShadow>
                         <meshStandardMaterial
-                            color={isSelected ? "#3b82f6" : "#4a5568"}
-                            roughness={0.7}
-                            metalness={0.1}
+                            color={isSelected ? "#3b82f6" : "#a89e94"}
+                            roughness={0.75}
+                            metalness={0.0}
                         />
                     </Box>
                 )

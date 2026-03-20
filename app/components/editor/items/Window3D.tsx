@@ -15,27 +15,27 @@ export function Window3D({ width, height, depth, isSelected, mode }: WindowProps
     const frameThickness = 0.08
     const frameDepth = depth
 
-    // Materials — upgraded for realism
+    // Materials — clean minimal look
     const upvcMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: isSelected ? '#3b82f6' : '#f5f5f5', // White UPVC (realistic)
-        roughness: 0.3,
+        color: isSelected ? '#3b82f6' : '#f0eeeb',
+        roughness: 0.35,
         metalness: 0.0,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.2,
+        clearcoat: 0.4,
+        clearcoatRoughness: 0.25,
     }), [isSelected])
 
     const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: '#2196F3',
+        color: '#b8d4e8',
         metalness: 0,
-        roughness: 0.05,
-        transmission: 0.6,
-        thickness: 0.1,
-        ior: 1.52,
-        envMapIntensity: 1.0,
+        roughness: 0.02,
+        transmission: 0.75,
+        thickness: 0.08,
+        ior: 1.5,
+        envMapIntensity: 1.2,
         transparent: true,
-        opacity: 0.7,
-        specularIntensity: 0.8,
-        specularColor: new THREE.Color('#a8d4f5'),
+        opacity: 0.6,
+        specularIntensity: 0.6,
+        specularColor: new THREE.Color('#c8dce8'),
     }), [])
 
     return (

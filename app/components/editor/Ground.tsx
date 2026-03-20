@@ -15,16 +15,16 @@ export function Ground() {
             <planeGeometry args={[100, 100]} />
             {mode === '3d' ? (
                 <meshPhysicalMaterial
-                    color="#1a1a1a"
-                    roughness={0.85}
-                    metalness={0.05}
-                    clearcoat={0.15}
-                    clearcoatRoughness={0.4}
-                    envMapIntensity={0.5}
+                    color="#e8e4df"
+                    roughness={0.92}
+                    metalness={0.0}
+                    clearcoat={0.05}
+                    clearcoatRoughness={0.8}
+                    envMapIntensity={0.3}
                 />
             ) : (
                 <meshStandardMaterial
-                    color="#151515"
+                    color="#eae6e1"
                     roughness={1}
                     metalness={0}
                 />

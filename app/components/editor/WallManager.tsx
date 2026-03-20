@@ -182,18 +182,17 @@ const WallItem = memo(function WallItem({
             })
         }
         const mat = new MeshPhysicalMaterial({
-            color: isSelected ? 0x3b82f6 : (wall.color || 0xe0e0e0),
-            roughness: isSelected ? 0.5 : 0.75,
+            color: isSelected ? 0x3b82f6 : (wall.color || 0xf5f0eb),
+            roughness: isSelected ? 0.5 : 0.82,
             metalness: isSelected ? 0.1 : 0.0,
             emissive: isSelected ? 0x1a365d : 0x000000,
             emissiveIntensity: isSelected ? 0.2 : 0,
-            clearcoat: isSelected ? 0 : 0.08,
-            clearcoatRoughness: 0.6,
-            envMapIntensity: 0.6,
+            clearcoat: isSelected ? 0 : 0.04,
+            clearcoatRoughness: 0.7,
+            envMapIntensity: 0.4,
             side: DoubleSide,
             depthTest: true,
             depthWrite: true,
-            // Prevent z-fighting where angled walls meet or overlap
             polygonOffset: true,
             polygonOffsetFactor: 1,
             polygonOffsetUnits: 1,

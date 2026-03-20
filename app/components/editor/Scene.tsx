@@ -270,12 +270,12 @@ function SceneContent() {
     const mode = useFloorplanStore(s => s.mode)
     const lightingPreset = useFloorplanStore(s => s.lightingPreset)
 
-    // Lighting presets configuration - Mapped to Environment presets + directional tweaks
+    // Lighting presets — tuned for clean architectural rendering
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 2.8, sunColor: '#fff5e0', fillIntensity: 1.2, fillColor: '#d4e5ff', ambientIntensity: 0.4 },
-        night: { env: 'night', sunIntensity: 0.3, sunColor: '#8899cc', fillIntensity: 0.1, fillColor: '#334466', ambientIntensity: 0.15 },
-        studio: { env: 'studio', sunIntensity: 2.0, sunColor: '#ffffff', fillIntensity: 1.0, fillColor: '#e8e8ff', ambientIntensity: 0.5 },
-        sunset: { env: 'sunset', sunIntensity: 2.2, sunColor: '#ff8833', fillIntensity: 0.6, fillColor: '#7799cc', ambientIntensity: 0.3 }
+        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6 },
+        night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2 },
+        studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6 },
+        sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35 }
     }
     const lighting = lightingConfigs[lightingPreset]
 
@@ -293,29 +293,29 @@ function SceneContent() {
 
     return (
         <>
-            {/* Solid Background for studio feel */}
-            <color attach="background" args={['#1a1a1a']} />
+            {/* Clean architectural background — warm off-white */}
+            <color attach="background" args={['#f0eeeb']} />
 
             {/* Soft shadows for realistic penumbra */}
             {mode === '3d' && <SoftShadows size={25} samples={16} focus={0.5} />}
 
-            {/* Ambient Light base — lowered to let AO and directional lights do the work */}
-            <ambientLight intensity={lighting.ambientIntensity} color="#ffffff" />
+            {/* Ambient base — raised for clean, even illumination */}
+            <ambientLight intensity={lighting.ambientIntensity} color="#faf8f5" />
 
-            {/* Hemisphere Light — sky/ground color split for natural feel */}
-            <hemisphereLight args={['#b4c8e8', '#3d2b1a', 0.4]} />
+            {/* Hemisphere Light — warm sky, neutral ground for natural fill */}
+            <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
 
-            {/* HDRI Environment for realistic reflections and ambient light */}
-            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.6} environmentIntensity={0.8} />
+            {/* HDRI Environment — apartment preset for best interior reflections */}
+            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.4} environmentIntensity={1.0} />
 
-            {/* Key Light (Sun) — upper right, higher res shadows */}
+            {/* Key Light — soft directional from upper right */}
             <directionalLight
-                position={[8, 15, 6]}
+                position={[10, 18, 8]}
                 intensity={lighting.sunIntensity}
                 color={lighting.sunColor}
                 castShadow
-                shadow-bias={-0.0002}
-                shadow-normalBias={0.02}
+                shadow-bias={-0.0001}
+                shadow-normalBias={0.03}
                 shadow-mapSize={[4096, 4096]}
                 shadow-camera-far={60}
                 shadow-camera-left={-25}
@@ -324,30 +324,37 @@ function SceneContent() {
                 shadow-camera-bottom={-25}
             />
 
-            {/* Fill Light — opposite side, no shadows */}
+            {/* Fill Light — soft opposite-side fill for shadow lift */}
             <directionalLight
-                position={[-6, 8, 4]}
+                position={[-8, 10, 6]}
                 intensity={lighting.fillIntensity}
                 color={lighting.fillColor}
             />
 
-            {/* Rim / Back Light — edge definition */}
+            {/* Rim Light — subtle back edge definition */}
             <directionalLight
-                position={[0, 5, -8]}
-                intensity={0.6}
-                color="#c8d4e8"
+                position={[-2, 6, -10]}
+                intensity={0.4}
+                color="#d8e0ec"
             />
 
-            {/* Contact Shadows for grounding objects */}
+            {/* Bottom Fill — lifts dark underside of objects */}
+            <directionalLight
+                position={[0, -2, 4]}
+                intensity={0.15}
+                color="#f0ece6"
+            />
+
+            {/* Contact Shadows — soft grounding, subtle on light background */}
             <ContactShadows
                 position={[0, 0.01, 0]}
-                opacity={0.65}
+                opacity={0.35}
                 scale={50}
-                blur={2.5}
+                blur={3.0}
                 far={10}
                 resolution={2048}
-                color="#000000"
-                frames={1} // Fix: Render once to prevent flickering/perf hit on load
+                color="#8a8580"
+                frames={1}
             />
 
             {mode === '3d' ? (
@@ -372,8 +379,8 @@ function SceneContent() {
                     fadeDistance={30}
                     fadeStrength={5}
                     sectionSize={1}
-                    cellColor="#353535"
-                    sectionColor="#454545"
+                    cellColor="#d5d0ca"
+                    sectionColor="#bbb5ae"
                     position={[0, 0.02, 0]}
                 />
             )}
@@ -393,23 +400,20 @@ function SceneContent() {
                 <ErrorBoundary name="FloatingMenu"><FloatingMenu /></ErrorBoundary>
             </group>
 
-            {/* Post-processing: Bloom, Tone Mapping, Vignette
-                Note: SSAO/N8AO disabled — postprocessing v6 incompatible with Three.js 0.182 (unpackRGBAToDepth removed).
-                Upgrade to postprocessing v7 when stable to re-enable AO. */}
-            {/* Fix: multisampling=0 to avoid MSAA conflicts with main Canvas */}
+            {/* Post-processing — clean architectural look */}
             {mode === '3d' && (
                 <EffectComposer multisampling={0}>
                     <SMAA />
                     <Bloom
-                        luminanceThreshold={0.9}
+                        luminanceThreshold={0.95}
                         mipmapBlur
-                        intensity={0.5}
-                        radius={0.5}
+                        intensity={0.15}
+                        radius={0.4}
                     />
-                    <BrightnessContrast contrast={0.05} brightness={0.0} />
+                    <BrightnessContrast contrast={0.08} brightness={0.02} />
                     <Vignette
-                        offset={0.3}
-                        darkness={0.4}
+                        offset={0.35}
+                        darkness={0.25}
                         blendFunction={BlendFunction.NORMAL}
                     />
                     <ToneMapping mode={ToneMappingMode.AGX} />
@@ -579,7 +583,7 @@ export function Scene() {
         <div
             ref={wrapperRef}
             className={cn(
-                "flex-1 h-full bg-[#1a1a1a] relative overflow-hidden select-none",
+                "flex-1 h-full bg-[#f0eeeb] relative overflow-hidden select-none",
                 activeTool === 'wall' ? "cursor-crosshair" : (activeTool === 'ruler' ? "cursor-default" : "cursor-default")
             )}
             onDrop={onDrop}
@@ -620,8 +624,8 @@ export function Scene() {
 const DebugOverlay = () => {
     const s = useFloorplanStore()
     return (
-        <div className="absolute top-2 left-2 z-[9999] pointer-events-none text-[10px] bg-black/80 text-green-400 p-2 rounded shadow-lg font-mono flex flex-col gap-1 w-[250px] opacity-80 backdrop-blur-sm">
-            <div className="text-white border-b border-white/20 pb-1 mb-1">🔍 DEBUG PANEL</div>
+        <div className="absolute top-2 left-2 z-[9999] pointer-events-none text-[10px] bg-white/90 text-gray-700 p-2 rounded shadow-lg font-mono flex flex-col gap-1 w-[250px] opacity-80 backdrop-blur-sm border border-gray-200">
+            <div className="text-gray-900 border-b border-gray-200 pb-1 mb-1">DEBUG PANEL</div>
             <div>Calib: {s.calibrationFactor.toExponential(2)}</div>
             <div>Ratio: {(s.calibrationFactor / 0.01).toFixed(2)}x</div>
             <div>ImgPx: {s.imageDimensions ? `${s.imageDimensions.width}x${s.imageDimensions.height}` : 'null'}</div>
