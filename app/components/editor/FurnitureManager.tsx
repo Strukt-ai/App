@@ -59,10 +59,15 @@ const FurnitureItem = memo(function FurnitureItem({
     onResizeDown: (e: any, id: string, subType: 'resize-width' | 'resize-depth' | 'resize-uniform') => void
 }) {
     const isOpening = item.type === 'door' || item.type === 'window'
-    const width = item.dimensions.width || 1
+    // Clamp doors to standard residential size regardless of prediction
+    const width = item.type === 'door'
+        ? Math.min(Math.max(item.dimensions.width || 0.9, 0.7), 1.0)
+        : (item.dimensions.width || 1)
     // Doors/windows should be thin (wall thickness ~15cm), not the generic 1m fallback
     const depth = item.dimensions.depth || (isOpening ? 0.15 : 1)
-    const height = item.dimensions.height || (item.type === 'door' ? 2.1 : item.type === 'window' ? 1.2 : 0.5)
+    const height = item.type === 'door'
+        ? 2.1
+        : (item.dimensions.height || (item.type === 'window' ? 1.2 : 0.5))
     const yPos = mode === '2d' && isOpening ? 3.1 : (item.position.y || 0)
 
     // Memoize the edge geometry so it's only recreated when dimensions actually change

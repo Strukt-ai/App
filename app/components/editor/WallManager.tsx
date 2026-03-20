@@ -151,12 +151,12 @@ const WallItem = memo(function WallItem({
         // Calculate 't' (0 to 1) position along the wall
         const t = projectPointOntoLine({ x: f.position.x, y: f.position.z }, wall.start, wall.end)
 
-        // Calculate width in 't' units
-        // f.dimensions.width is in meters. wall length is in meters.
-        // widthT = (width / length)
-        const widthT = f.dimensions.width / length
-        // Default height logic if missing/zero to prevents solid walls
-        const height = f.dimensions.height || (f.type === 'door' ? 2.1 : 1.2)
+        // Clamp door width to standard size for wall cutout
+        const openingW = f.type === 'door'
+            ? Math.min(Math.max(f.dimensions.width || 0.9, 0.7), 1.0)
+            : f.dimensions.width
+        const widthT = openingW / length
+        const height = f.type === 'door' ? 2.1 : (f.dimensions.height || 1.2)
         const yBottom = f.position.y || 0
 
         return {
