@@ -17,6 +17,10 @@ __pycache__/
 
 # Ignore Secrets and Configuration
 .env
+.env.local
+.env.development
+.env.production
+.env.*.local
 .ngrok_authtoken
 secrets.bat
 secrets_aws_dispatcher.bat

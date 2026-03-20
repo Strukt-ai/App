@@ -6,37 +6,21 @@ import { cn } from '@/lib/utils'
 
 type TabMode = 'texture' | 'pbr'
 
-interface PbrFiles {
-    albedo: File | null
-    normal: File | null
-    roughness: File | null
-    metallic: File | null
-    ao: File | null
-}
-
 interface TexturizeModalProps {
     isOpen: boolean
     onClose: () => void
     targetName: string
     onApply: (file: File, tileWidthFt: number, tileHeightFt: number) => Promise<void>
-    onApplyPbr: (files: PbrFiles, tileWidthFt: number, tileHeightFt: number) => Promise<void>
+    onApplyPbr: (file: File, tileWidthFt: number, tileHeightFt: number) => Promise<void>
 }
-
-const PBR_SLOTS = [
-    { key: 'albedo' as const, label: 'Albedo / Base Color', required: true },
-    { key: 'normal' as const, label: 'Normal Map', required: false },
-    { key: 'roughness' as const, label: 'Roughness', required: false },
-    { key: 'metallic' as const, label: 'Metallic', required: false },
-    { key: 'ao' as const, label: 'Ambient Occlusion', required: false },
-]
 
 export function TexturizeModal({ isOpen, onClose, targetName, onApply, onApplyPbr }: TexturizeModalProps) {
     const [tab, setTab] = useState<TabMode>('texture')
     const [file, setFile] = useState<File | null>(null)
+    const [pbrFile, setPbrFile] = useState<File | null>(null)
     const [tileWidthFt, setTileWidthFt] = useState('')
     const [tileHeightFt, setTileHeightFt] = useState('')
     const [isApplying, setIsApplying] = useState(false)
-    const [pbrFiles, setPbrFiles] = useState<PbrFiles>({ albedo: null, normal: null, roughness: null, metallic: null, ao: null })
 
     if (!isOpen) return null
 
@@ -45,7 +29,7 @@ export function TexturizeModal({ isOpen, onClose, targetName, onApply, onApplyPb
     const validDims = Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0
 
     const canApplyTexture = !isApplying && file && validDims
-    const canApplyPbr = !isApplying && pbrFiles.albedo && validDims
+    const canApplyPbr = !isApplying && pbrFile && validDims
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -98,24 +82,15 @@ export function TexturizeModal({ isOpen, onClose, targetName, onApply, onApplyPb
                     )}
 
                     {tab === 'pbr' && (
-                        <div className="mb-4 space-y-2">
-                            {PBR_SLOTS.map(slot => (
-                                <div key={slot.key} className="flex items-center gap-3">
-                                    <label className="text-[10px] text-white/50 uppercase font-semibold tracking-wider w-28 shrink-0">
-                                        {slot.label} {slot.required && <span className="text-orange-400">*</span>}
-                                    </label>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            const f = e.target.files?.[0] || null
-                                            setPbrFiles(prev => ({ ...prev, [slot.key]: f }))
-                                        }}
-                                        className="flex-1 bg-white/5 border border-white/10 rounded-lg p-1.5 text-[10px] text-white/80 focus:outline-none focus:border-orange-500/50"
-                                    />
-                                </div>
-                            ))}
-                            <p className="text-[10px] text-white/30 mt-2">Upload PBR maps for realistic 3D rendering in Blender export. Only Albedo is required.</p>
+                        <div className="mb-4">
+                            <label className="text-xs text-white/50 uppercase font-semibold tracking-wider mb-2 block">Upload PBR Material (ZIP)</label>
+                            <input
+                                type="file"
+                                accept=".zip,application/zip,application/x-zip-compressed"
+                                onChange={(e) => setPbrFile(e.target.files?.[0] || null)}
+                                className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white/80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50"
+                            />
+                            <p className="text-[10px] text-white/30 mt-2">Upload a ZIP from ambientCG or similar. Maps are auto-detected from filenames (Color, Normal, Roughness, Metallic, AO).</p>
                         </div>
                     )}
 
@@ -164,12 +139,12 @@ export function TexturizeModal({ isOpen, onClose, targetName, onApply, onApplyPb
                                     if (!file) { alert('Please upload a texture image.'); return }
                                     await onApply(file, w, h)
                                 } else {
-                                    if (!pbrFiles.albedo) { alert('Please upload at least an Albedo map.'); return }
-                                    await onApplyPbr(pbrFiles, w, h)
+                                    if (!pbrFile) { alert('Please upload a PBR texture.'); return }
+                                    await onApplyPbr(pbrFile, w, h)
                                 }
                                 onClose()
                                 setFile(null)
-                                setPbrFiles({ albedo: null, normal: null, roughness: null, metallic: null, ao: null })
+                                setPbrFile(null)
                                 setTileWidthFt('')
                                 setTileHeightFt('')
                             } finally {

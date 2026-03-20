@@ -50,7 +50,11 @@ async function handler(request: NextRequest) {
 
     // Create headers for response
     const newHeaders = new Headers(response.headers)
-    newHeaders.set('Access-Control-Allow-Origin', '*')
+    const allowedOrigins = (process.env.NEXT_PUBLIC_ALLOWED_ORIGINS || 'http://localhost:3000').split(',')
+    const reqOrigin = request.headers.get('origin') || ''
+    if (allowedOrigins.includes(reqOrigin)) {
+      newHeaders.set('Access-Control-Allow-Origin', reqOrigin)
+    }
     newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
     newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 

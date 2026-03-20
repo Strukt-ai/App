@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
 }
 
-const CLIENT_ID = "56909186950-20kpuogci6mlge54871pks80e06941cr.apps.googleusercontent.com"
+const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""
 
 export default function RootLayout({
   children,

@@ -120,12 +120,15 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
     }
 
     if (svgContent) {
+        // Sanitize: strip <script> tags and event handlers to prevent XSS
+        const sanitized = svgContent
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
+            .replace(/<svg /, '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet" ')
         return (
             <div
                 className="w-full h-full bg-white/5 p-2 overflow-hidden flex items-center justify-center"
-                dangerouslySetInnerHTML={{
-                    __html: svgContent.replace(/<svg /, '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet" ')
-                }}
+                dangerouslySetInnerHTML={{ __html: sanitized }}
             />
         )
     }

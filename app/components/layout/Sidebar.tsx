@@ -883,7 +883,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         alert('Failed to apply texture')
                     }
                 }}
-                onApplyPbr={async (pbrFiles, tileWidthFt, tileHeightFt) => {
+                onApplyPbr={async (pbrFile, tileWidthFt, tileHeightFt) => {
                     try {
                         if (!currentRunId || !token || !selectedId || (!selectedWall && !selectedRoom)) {
                             alert('Select a wall or floor and sign in first.')
@@ -907,11 +907,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         form.append('surface_type', selectedWall ? 'wall' : 'floor')
                         form.append('tile_width_ft', String(tileWidthFt))
                         form.append('tile_height_ft', String(tileHeightFt))
-                        if (pbrFiles.albedo) form.append('albedo', pbrFiles.albedo)
-                        if (pbrFiles.normal) form.append('normal', pbrFiles.normal)
-                        if (pbrFiles.roughness) form.append('roughness', pbrFiles.roughness)
-                        if (pbrFiles.metallic) form.append('metallic', pbrFiles.metallic)
-                        if (pbrFiles.ao) form.append('ao', pbrFiles.ao)
+                        form.append('albedo', pbrFile)
 
                         console.log('[PBR] POST /texturize/pbr', { runId: currentRunId, targetId: selectedId, surfaceType: selectedWall ? 'wall' : 'floor' })
                         const res = await fetch(`/api/runs/${currentRunId}/texturize/pbr`, {
@@ -921,40 +917,38 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         })
                         if (!res.ok) {
                             console.error('[PBR] upload failed', res.status, await res.text())
-                            alert('Failed to upload PBR textures')
+                            alert('Failed to upload PBR texture')
                             return
                         }
 
-                        // Also apply albedo as SVG texture for 2D/3D preview
-                        if (pbrFiles.albedo) {
-                            const albedoUrl = await new Promise<string>((resolve, reject) => {
-                                const reader = new FileReader()
-                                reader.onload = () => resolve(String(reader.result || ''))
-                                reader.onerror = () => reject(new Error('read failed'))
-                                reader.readAsDataURL(pbrFiles.albedo!)
+                        // Apply as SVG texture for 2D/3D preview
+                        const dataUrl = await new Promise<string>((resolve, reject) => {
+                            const reader = new FileReader()
+                            reader.onload = () => resolve(String(reader.result || ''))
+                            reader.onerror = () => reject(new Error('read failed'))
+                            reader.readAsDataURL(pbrFile)
+                        })
+                        const tileWidthM = tileWidthFt * 0.3048
+                        const tileHeightM = tileHeightFt * 0.3048
+                        if (useFloorplanStore.getState().walls.some(w => w.id === selectedId)) {
+                            useFloorplanStore.getState().updateWall(selectedId, {
+                                textureDataUrl: dataUrl,
+                                textureTileWidthM: tileWidthM,
+                                textureTileHeightM: tileHeightM,
                             })
-                            const tileWidthM = tileWidthFt * 0.3048
-                            const tileHeightM = tileHeightFt * 0.3048
-                            if (useFloorplanStore.getState().walls.some(w => w.id === selectedId)) {
-                                useFloorplanStore.getState().updateWall(selectedId, {
-                                    textureDataUrl: albedoUrl,
-                                    textureTileWidthM: tileWidthM,
-                                    textureTileHeightM: tileHeightM,
-                                })
-                            }
-                            if (useFloorplanStore.getState().rooms.some(r => r.id === selectedId)) {
-                                useFloorplanStore.getState().updateRoom(selectedId, {
-                                    textureDataUrl: albedoUrl,
-                                    textureTileWidthM: tileWidthM,
-                                    textureTileHeightM: tileHeightM,
-                                })
-                            }
+                        }
+                        if (useFloorplanStore.getState().rooms.some(r => r.id === selectedId)) {
+                            useFloorplanStore.getState().updateRoom(selectedId, {
+                                textureDataUrl: dataUrl,
+                                textureTileWidthM: tileWidthM,
+                                textureTileHeightM: tileHeightM,
+                            })
                         }
 
-                        alert('PBR textures uploaded! They will be applied in the next Blender export.')
+                        alert('PBR texture uploaded! It will be applied in the next Blender export.')
                     } catch (e) {
                         console.error('[PBR] crashed', e)
-                        alert('Failed to upload PBR textures')
+                        alert('Failed to upload PBR texture')
                     }
                 }}
             />
