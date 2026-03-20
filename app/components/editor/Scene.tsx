@@ -405,10 +405,10 @@ function SceneContent() {
                 <EffectComposer multisampling={0}>
                     <SMAA />
                     <Bloom
-                        luminanceThreshold={0.95}
+                        luminanceThreshold={1.2}
                         mipmapBlur
-                        intensity={0.15}
-                        radius={0.4}
+                        intensity={0.05}
+                        radius={0.3}
                     />
                     <BrightnessContrast contrast={0.08} brightness={0.02} />
                     <Vignette
