@@ -379,9 +379,11 @@ function SceneContent() {
                     fadeDistance={30}
                     fadeStrength={5}
                     sectionSize={1}
-                    cellColor="#353535"
-                    sectionColor="#454545"
-                    position={[0, 0.02, 0]}
+                    cellColor="#333333"
+                    sectionColor="#444444"
+                    cellThickness={0.6}
+                    sectionThickness={1.0}
+                    position={[0, -0.14, 0]}
                 />
             )}
 
