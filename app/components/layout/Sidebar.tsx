@@ -922,6 +922,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         }
 
                         const result = await res.json()
+                        console.log('[PBR] backend response:', result)
 
                         // Extract PBR maps from ZIP for browser 3D preview
                         const extracted: Record<string, string> = {}
