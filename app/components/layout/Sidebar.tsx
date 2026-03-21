@@ -926,7 +926,12 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
                         // Use backend-extracted PBR map data URLs (no client-side ZIP needed)
                         const urls = result.mapDataUrls || {}
+                        // Backwards compat: old backend returns albedoDataUrl instead of mapDataUrls
+                        if (!urls.basecolor && result.albedoDataUrl) {
+                            urls.basecolor = result.albedoDataUrl
+                        }
                         if (!urls.basecolor) {
+                            console.error('[PBR] No basecolor in response:', result)
                             alert('No color/albedo image found. Make sure the ZIP contains PNG/JPG files with "Color", "Albedo", or "BaseColor" in the filename.')
                             return
                         }
