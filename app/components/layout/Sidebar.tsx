@@ -924,68 +924,23 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         const result = await res.json()
                         console.log('[PBR] backend response:', result)
 
-                        // Extract PBR maps from ZIP for browser 3D preview
-                        const extracted: Record<string, string> = {}
-                        try {
-                            const JSZip = (await import('jszip')).default
-                            const zip = await JSZip.loadAsync(pbrFile)
-                            const imageExts = ['.jpg', '.jpeg', '.png']
-                            const mapPatterns: Record<string, RegExp[]> = {
-                                color:     [/color/i, /diffuse/i, /albedo/i, /basecolor/i, /base_color/i],
-                                normal:    [/normal/i, /nor_gl/i, /nor_dx/i, /nrm/i],
-                                roughness: [/roughness/i, /rough/i, /rgh/i],
-                                ao:        [/ambientocclusion/i, /ambient_occlusion/i, /\bao\b/i, /occlusion/i],
-                                metalness: [/metallic/i, /metalness/i, /metal/i, /mtl/i],
-                            }
-
-                            for (const [name, entry] of Object.entries(zip.files)) {
-                                if ((entry as any).dir) continue
-                                const lower = name.toLowerCase()
-                                if (!imageExts.some(ext => lower.endsWith(ext))) continue
-
-                                for (const [mapType, patterns] of Object.entries(mapPatterns)) {
-                                    if (extracted[mapType]) continue
-                                    if (patterns.some(p => p.test(lower))) {
-                                        const blob = await (entry as any).async('blob')
-                                        const mimeType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg'
-                                        const imageBlob = new Blob([blob], { type: mimeType })
-                                        extracted[mapType] = await new Promise<string>((resolve, reject) => {
-                                            const reader = new FileReader()
-                                            reader.onload = () => resolve(String(reader.result || ''))
-                                            reader.onerror = () => reject(new Error('read failed'))
-                                            reader.readAsDataURL(imageBlob)
-                                        })
-                                        console.log(`[PBR] extracted ${mapType} from ZIP:`, name)
-                                        break
-                                    }
-                                }
-                            }
-                        } catch (zipErr) {
-                            console.warn('[PBR] ZIP extraction failed, using backend albedo:', zipErr)
-                        }
-
-                        // Fallback: if no color extracted from ZIP, use backend's albedo data URL
-                        if (!extracted.color && result.albedoDataUrl) {
-                            extracted.color = result.albedoDataUrl
-                            console.log('[PBR] using backend albedo data URL as fallback')
-                        }
-
-                        if (!extracted.color) {
-                            console.warn('[PBR] no color/albedo found — not a valid PBR ZIP')
-                            alert('No color/albedo image found. Make sure the ZIP contains image files (PNG/JPG) with "Color", "Albedo", or "BaseColor" in the filename.')
+                        // Use backend-extracted PBR map data URLs (no client-side ZIP needed)
+                        const urls = result.mapDataUrls || {}
+                        if (!urls.basecolor) {
+                            alert('No color/albedo image found. Make sure the ZIP contains PNG/JPG files with "Color", "Albedo", or "BaseColor" in the filename.')
                             return
                         }
 
                         const tileWidthM = tileWidthFt * 0.3048
                         const tileHeightM = tileHeightFt * 0.3048
                         const pbrUpdate = {
-                            textureDataUrl: extracted.color,
+                            textureDataUrl: urls.basecolor,
                             textureTileWidthM: tileWidthM,
                             textureTileHeightM: tileHeightM,
-                            pbrNormalUrl: extracted.normal || undefined,
-                            pbrRoughnessUrl: extracted.roughness || undefined,
-                            pbrAoUrl: extracted.ao || undefined,
-                            pbrMetalnessUrl: extracted.metalness || undefined,
+                            pbrNormalUrl: urls.normal || undefined,
+                            pbrRoughnessUrl: urls.roughness || undefined,
+                            pbrAoUrl: urls.ao || undefined,
+                            pbrMetalnessUrl: urls.metallic || undefined,
                         }
                         if (useFloorplanStore.getState().walls.some(w => w.id === selectedId)) {
                             useFloorplanStore.getState().updateWall(selectedId, pbrUpdate)
@@ -994,8 +949,8 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             useFloorplanStore.getState().updateRoom(selectedId, pbrUpdate)
                         }
 
-                        const mapCount = Object.keys(extracted).length
-                        alert(`PBR applied! ${mapCount} map(s): ${Object.keys(extracted).join(', ')}`)
+                        const mapCount = Object.keys(urls).length
+                        alert(`PBR applied! ${mapCount} map(s): ${Object.keys(urls).join(', ')}`)
                     } catch (e) {
                         console.error('[PBR] crashed', e)
                         alert('Failed to upload PBR texture')
