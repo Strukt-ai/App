@@ -932,7 +932,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         }
                         if (!urls.basecolor) {
                             console.error('[PBR] No basecolor in response:', result)
-                            alert('No color/albedo image found. Make sure the ZIP contains PNG/JPG files with "Color", "Albedo", or "BaseColor" in the filename.')
+                            alert(`PBR upload failed — no albedo map returned.\n\nBackend response keys: ${Object.keys(result).join(', ')}\nMaps: ${JSON.stringify(result.maps || {})}\n\nMake sure:\n1. FILES backend is redeployed with latest code\n2. ZIP contains PNG/JPG files with "Color" in the filename`)
                             return
                         }
 
