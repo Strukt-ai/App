@@ -22,6 +22,11 @@ export type Wall = {
     textureDataUrl?: string
     textureTileWidthM?: number
     textureTileHeightM?: number
+    // PBR map data URLs (extracted from ZIP for browser 3D preview)
+    pbrNormalUrl?: string
+    pbrRoughnessUrl?: string
+    pbrAoUrl?: string
+    pbrMetalnessUrl?: string
 }
 
 export type FurnItem = {
@@ -45,6 +50,11 @@ export type Room = {
     textureDataUrl?: string
     textureTileWidthM?: number
     textureTileHeightM?: number
+    // PBR map data URLs (extracted from ZIP for browser 3D preview)
+    pbrNormalUrl?: string
+    pbrRoughnessUrl?: string
+    pbrAoUrl?: string
+    pbrMetalnessUrl?: string
 }
 
 export type TextLabel = {
@@ -1544,12 +1554,15 @@ export const useFloorplanStore = create<FloorplanState>()(
                         }
                     }
 
-                    // Always add to labels array for 2D display
-                    labels.push({
-                        id: uuidv4(),
-                        text: textContent,
-                        position: { x: textX, y: textY }
-                    })
+                    // Only add standalone label if it wasn't matched to a room
+                    // (matched labels are already displayed as room.name)
+                    if (!matched) {
+                        labels.push({
+                            id: uuidv4(),
+                            text: textContent,
+                            position: { x: textX, y: textY }
+                        })
+                    }
                 }
             })
 
