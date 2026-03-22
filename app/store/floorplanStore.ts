@@ -303,12 +303,22 @@ export const useFloorplanStore = create<FloorplanState>()(
                 headers
             })
             if (!res.ok) {
+                const errText = await res.text()
                 set((s) => {
                     s.runStatus = 'failed'
                     s.lastQueuedTask = 'none'
                 })
                 state.setShowProcessingModal(false)
-                throw new Error(await res.text())
+                if (res.status === 429) {
+                    try {
+                        const errData = JSON.parse(errText)
+                        state.showToast(errData.detail || 'Token limit reached. Upgrade to Pro.', 'error')
+                    } catch {
+                        state.showToast('Token limit reached. Upgrade to Pro for more.', 'error')
+                    }
+                    return
+                }
+                throw new Error(errText)
             }
         },
 
@@ -990,7 +1000,18 @@ export const useFloorplanStore = create<FloorplanState>()(
                     state.setRunStatus('processing')
                     state.setLastQueuedTask('gen_3d')
                 } else {
-                    console.error("Blender Gen Trigger Failed:", await res.text())
+                    const errText = await res.text()
+                    if (res.status === 429) {
+                        try {
+                            const errData = JSON.parse(errText)
+                            state.showToast(errData.detail || 'Token limit reached. Upgrade to Pro.', 'error')
+                        } catch {
+                            state.showToast('Token limit reached. Upgrade to Pro for more.', 'error')
+                        }
+                    } else {
+                        console.error("Blender Gen Trigger Failed:", errText)
+                        state.showToast('3D generation failed. Please try again.', 'error')
+                    }
                 }
             } catch (e) {
                 console.error("Blender Gen Trigger Error:", e)

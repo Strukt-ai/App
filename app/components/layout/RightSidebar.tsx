@@ -51,13 +51,20 @@ export function RightSidebar() {
         formData.append('image', file)
 
         try {
-            const res = await fetch('/api/runs', { method: 'POST', body: formData })
+            const headers: Record<string, string> = {}
+            if (token) headers['Authorization'] = `Bearer ${token}`
+            const res = await fetch('/api/runs', { method: 'POST', headers, body: formData })
+            if (res.status === 429) {
+                const errData = await res.json().catch(() => ({ detail: 'Token limit reached.' }))
+                setStatusMsg(errData.detail || "Token limit reached. Upgrade to Pro.")
+                return
+            }
             const data = await res.json()
             if (data.ok) {
                 setJobId(data.run_id)
                 setStatusMsg("Ready. Click object to segment.")
             } else {
-                setStatusMsg("Upload failed.")
+                setStatusMsg(data.detail || "Upload failed.")
             }
         } catch (err) {
             console.error(err)
@@ -154,8 +161,11 @@ export function RightSidebar() {
                 }
 
                 if (result.polygon) {
-                    setMasks([result]);
-                    drawMasks([result]);
+                    setMasks(prev => {
+                        const next = [...prev, result];
+                        drawMasks(next);
+                        return next;
+                    });
                     setStatusMsg("Segmented! Ready to generate.");
                 } else {
                     setStatusMsg("Segmentation timed out.");

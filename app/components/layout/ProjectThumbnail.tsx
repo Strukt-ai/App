@@ -120,10 +120,20 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
     }
 
     if (svgContent) {
-        // Sanitize: strip <script> tags and event handlers to prevent XSS
+        // Sanitize: strip dangerous elements and event handlers to prevent XSS
         const sanitized = svgContent
-            .replace(/<script[\s\S]*?<\/script>/gi, '')
-            .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
+            // Strip dangerous tags (script, foreignObject, iframe, embed, object)
+            .replace(/<\s*(script|foreignObject|iframe|embed|object|handler)\b[\s\S]*?<\/\s*\1\s*>/gi, '')
+            .replace(/<\s*(script|foreignObject|iframe|embed|object|handler)\b[^>]*\/?>/gi, '')
+            // Strip ALL on* event handlers (quoted, unquoted, entity-encoded)
+            .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s/>]+)/gi, '')
+            // Strip javascript: and vbscript: URIs
+            .replace(/javascript\s*:/gi, '')
+            .replace(/vbscript\s*:/gi, '')
+            // Strip data:text/* URIs (XSS vector) but keep data:image/* (textures)
+            .replace(/data\s*:\s*text\/[^"'>\s]*/gi, '')
+            // Strip animate/set with event attributes
+            .replace(/<\s*(animate|set|animateTransform|animateMotion)\b[^>]*\bon(?:begin|end|repeat)\s*=[^>]*\/?>/gi, '')
             .replace(/<svg /, '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet" ')
         return (
             <div

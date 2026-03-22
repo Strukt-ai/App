@@ -42,8 +42,13 @@ const _EMPTY_TEX_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAA
 // Static Geometries to prevent memory leaks/GC thrashing during rapid updates
 const wallGeometry = new BoxGeometry(1, 1, 1)
 const selectionGeometry = new BoxGeometry(1.002, 1.002, 1.002)
+const skirtingGeometry = new BoxGeometry(1, 1, 1)
 // Rounded, disc-like handles for a cleaner look (end handles slightly larger)
 const endHandleGeometry = new CylinderGeometry(0.24, 0.24, 0.16, 24)
+
+// Skirting (baseboard) constants — matches Blender script parameters
+const SKIRTING_H = 0.12    // 12cm tall
+const SKIRTING_OUT = 0.003 // 3mm proud of wall face
 
 const wireframeMaterial = new MeshStandardMaterial({
     color: 0xffffff,
@@ -56,6 +61,15 @@ const handleMaterial = new MeshStandardMaterial({
     metalness: 0.05,
     emissive: 0x7dd3fc,
     emissiveIntensity: 0.35
+})
+// Skirting material: warm wood tone matching Blender's SkirtingMat
+const skirtingMaterial = new MeshPhysicalMaterial({
+    color: 0x8c6b47,
+    roughness: 0.3,
+    metalness: 0.0,
+    clearcoat: 0.08,
+    clearcoatRoughness: 0.5,
+    side: DoubleSide,
 })
 
 // Helper to check if a point projects onto a line segment
@@ -109,21 +123,42 @@ const WallItem = memo(function WallItem({
 
     const textureUrl = wall.textureDataUrl
     const texture = useLoader(TextureLoader, textureUrl || _EMPTY_TEX_DATA_URL) as Texture
+
+    // Load PBR maps (fallback to empty 1px texture if not present)
+    const normalTex = useLoader(TextureLoader, wall.pbrNormalUrl || _EMPTY_TEX_DATA_URL) as Texture
+    const roughnessTex = useLoader(TextureLoader, wall.pbrRoughnessUrl || _EMPTY_TEX_DATA_URL) as Texture
+    const aoTex = useLoader(TextureLoader, wall.pbrAoUrl || _EMPTY_TEX_DATA_URL) as Texture
+    const metalnessTex = useLoader(TextureLoader, wall.pbrMetalnessUrl || _EMPTY_TEX_DATA_URL) as Texture
+
     const wallLen = useMemo(() => Math.max(0.0001, length), [length])
     const wallH = useMemo(() => Math.max(0.0001, wall.height || 2.5), [wall.height])
 
+    // Configure tiling for all textures
     useEffect(() => {
         if (!textureUrl) return
         const tw = Number(wall.textureTileWidthM || 0)
         const th = Number(wall.textureTileHeightM || 0)
         if (!(tw > 0) || !(th > 0)) return
 
-        texture.wrapS = RepeatWrapping
-        texture.wrapT = RepeatWrapping
-        // Map U along wall length, V along wall height
-        texture.repeat.set(wallLen / tw, wallH / th)
-        texture.needsUpdate = true
-    }, [textureUrl, wall.textureTileWidthM, wall.textureTileHeightM, wallLen, wallH, texture])
+        const repeatX = wallLen / tw
+        const repeatY = wallH / th
+
+        // Apply tiling to all loaded textures
+        const textures = [texture]
+        if (wall.pbrNormalUrl) textures.push(normalTex)
+        if (wall.pbrRoughnessUrl) textures.push(roughnessTex)
+        if (wall.pbrAoUrl) textures.push(aoTex)
+        if (wall.pbrMetalnessUrl) textures.push(metalnessTex)
+
+        textures.forEach(t => {
+            t.wrapS = RepeatWrapping
+            t.wrapT = RepeatWrapping
+            t.repeat.set(repeatX, repeatY)
+            t.needsUpdate = true
+        })
+    }, [textureUrl, wall.textureTileWidthM, wall.textureTileHeightM, wallLen, wallH,
+        texture, normalTex, roughnessTex, aoTex, metalnessTex,
+        wall.pbrNormalUrl, wall.pbrRoughnessUrl, wall.pbrAoUrl, wall.pbrMetalnessUrl])
 
     // Detect openings (Windows/Doors) that intersect this wall
     // 1. Filter furniture that is strictly ON the wall or very close.
@@ -171,6 +206,7 @@ const WallItem = memo(function WallItem({
     }).sort((a, b) => a.tStart - b.tStart)
 
     // Create wall material with DoubleSide GUARANTEED at Three.js object level
+    const hasPbr = !!(wall.pbrNormalUrl || wall.pbrRoughnessUrl || wall.pbrAoUrl || wall.pbrMetalnessUrl)
     const wallMaterial = useMemo(() => {
         if (isPreview) {
             return new MeshStandardMaterial({
@@ -204,8 +240,29 @@ const WallItem = memo(function WallItem({
             mat.metalness = 0.0
             mat.clearcoat = 0.05
         }
+        // Apply PBR maps for realistic rendering in-browser
+        if (hasPbr && !isSelected) {
+            if (wall.pbrNormalUrl) {
+                mat.normalMap = normalTex
+                mat.normalScale.set(1, 1)
+            }
+            if (wall.pbrRoughnessUrl) {
+                mat.roughnessMap = roughnessTex
+                mat.roughness = 1.0 // Let the map drive roughness
+            }
+            if (wall.pbrAoUrl) {
+                mat.aoMap = aoTex
+                mat.aoMapIntensity = 1.0
+            }
+            if (wall.pbrMetalnessUrl) {
+                mat.metalnessMap = metalnessTex
+                mat.metalness = 1.0 // Let the map drive metalness
+            }
+        }
         return mat
-    }, [isSelected, isPreview, textureUrl, wall.color, texture])
+    }, [isSelected, isPreview, textureUrl, wall.color, texture, hasPbr,
+        normalTex, roughnessTex, aoTex, metalnessTex,
+        wall.pbrNormalUrl, wall.pbrRoughnessUrl, wall.pbrAoUrl, wall.pbrMetalnessUrl])
 
 
     // Simple block renderer (used for 2D, no-openings, or CSG fallback)
@@ -232,6 +289,20 @@ const WallItem = memo(function WallItem({
                     <mesh geometry={selectionGeometry} material={wireframeMaterial} />
                 )}
             </mesh>
+            {/* Skirting / Baseboard — only in 3D mode, not preview */}
+            {!is2D && !isPreview && (
+                <mesh
+                    name="Skirting"
+                    position={[centerX, SKIRTING_H / 2, centerY]}
+                    rotation={[0, -angle, 0]}
+                    scale={[Math.max(length, 0.01) + SKIRTING_OUT * 2, SKIRTING_H, wall.thickness + SKIRTING_OUT * 2]}
+                    geometry={skirtingGeometry}
+                    material={skirtingMaterial}
+                    castShadow
+                    receiveShadow
+                    frustumCulled={false}
+                />
+            )}
             {/* Handles */}
             {is2D && isSelected && !isPreview && onPointerDown && (
                 <>
@@ -285,6 +356,19 @@ const WallItem = memo(function WallItem({
 
                     <primitive object={wallMaterial} attach="material" />
                 </mesh>
+
+                {/* Skirting / Baseboard */}
+                <mesh
+                    name="Skirting"
+                    position={[centerX, SKIRTING_H / 2, centerY]}
+                    rotation={[0, -angle, 0]}
+                    scale={[Math.max(length, 0.01) + SKIRTING_OUT * 2, SKIRTING_H, wall.thickness + SKIRTING_OUT * 2]}
+                    geometry={skirtingGeometry}
+                    material={skirtingMaterial}
+                    castShadow
+                    receiveShadow
+                    frustumCulled={false}
+                />
 
                 {/* End Handles (mostly active in 2D or edge cases where they trigger) */}
                 {is2D && isSelected && !isPreview && onPointerDown && (
