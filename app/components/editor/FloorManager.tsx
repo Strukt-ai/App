@@ -15,10 +15,11 @@ function createFloorGeometry(points: { x: number; y: number }[]) {
     if (points.length < 3) return null
 
     const shape = new Shape()
-    // Positive Y aligns with Wall Z-axis (+Y in store -> +Z in world after -90deg rotation)
-    shape.moveTo(points[0].x, points[0].y)
+    // The mesh is rotated -PI/2 around X, which maps shape-Y to world -Z.
+    // Walls use world Z = store.y (positive), so we negate Y here to compensate.
+    shape.moveTo(points[0].x, -points[0].y)
     for (let i = 1; i < points.length; i++) {
-        shape.lineTo(points[i].x, points[i].y)
+        shape.lineTo(points[i].x, -points[i].y)
     }
     shape.closePath()
 
@@ -42,6 +43,13 @@ const RoomItem = memo(function RoomItem({
 
     const textureUrl = room.textureDataUrl
     const texture = useLoader(TextureLoader, textureUrl || _EMPTY_TEX_DATA_URL) as Texture
+
+    // Load PBR maps (fallback to empty 1px texture if not present)
+    const normalTex = useLoader(TextureLoader, room.pbrNormalUrl || _EMPTY_TEX_DATA_URL) as Texture
+    const roughnessTex = useLoader(TextureLoader, room.pbrRoughnessUrl || _EMPTY_TEX_DATA_URL) as Texture
+    const aoTex = useLoader(TextureLoader, room.pbrAoUrl || _EMPTY_TEX_DATA_URL) as Texture
+    const metalnessTex = useLoader(TextureLoader, room.pbrMetalnessUrl || _EMPTY_TEX_DATA_URL) as Texture
+
     const bounds = useMemo(() => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         for (const p of room.points) {
@@ -54,19 +62,35 @@ const RoomItem = memo(function RoomItem({
         return { w: Math.max(0.0001, maxX - minX), h: Math.max(0.0001, maxY - minY) }
     }, [room.points])
 
+    // Configure tiling for all textures
     useEffect(() => {
         if (!textureUrl) return
         const tw = Number(room.textureTileWidthM || 0)
         const th = Number(room.textureTileHeightM || 0)
         if (!(tw > 0) || !(th > 0)) return
 
-        texture.wrapS = RepeatWrapping
-        texture.wrapT = RepeatWrapping
-        texture.repeat.set(bounds.w / tw, bounds.h / th)
-        texture.needsUpdate = true
-    }, [textureUrl, room.textureTileWidthM, room.textureTileHeightM, bounds.w, bounds.h, texture])
+        const repeatX = bounds.w / tw
+        const repeatY = bounds.h / th
+
+        const textures = [texture]
+        if (room.pbrNormalUrl) textures.push(normalTex)
+        if (room.pbrRoughnessUrl) textures.push(roughnessTex)
+        if (room.pbrAoUrl) textures.push(aoTex)
+        if (room.pbrMetalnessUrl) textures.push(metalnessTex)
+
+        textures.forEach(t => {
+            t.wrapS = RepeatWrapping
+            t.wrapT = RepeatWrapping
+            t.repeat.set(repeatX, repeatY)
+            t.needsUpdate = true
+        })
+    }, [textureUrl, room.textureTileWidthM, room.textureTileHeightM, bounds.w, bounds.h,
+        texture, normalTex, roughnessTex, aoTex, metalnessTex,
+        room.pbrNormalUrl, room.pbrRoughnessUrl, room.pbrAoUrl, room.pbrMetalnessUrl])
 
     if (!geometry) return null
+
+    const hasPbr = !!(room.pbrNormalUrl || room.pbrRoughnessUrl || room.pbrAoUrl || room.pbrMetalnessUrl)
 
     return (
         <group>
@@ -85,9 +109,13 @@ const RoomItem = memo(function RoomItem({
                 {mode === '3d' ? (
                     <meshPhysicalMaterial
                         map={textureUrl ? texture : null}
+                        normalMap={hasPbr && room.pbrNormalUrl ? normalTex : null}
+                        roughnessMap={hasPbr && room.pbrRoughnessUrl ? roughnessTex : null}
+                        aoMap={hasPbr && room.pbrAoUrl ? aoTex : null}
+                        metalnessMap={hasPbr && room.pbrMetalnessUrl ? metalnessTex : null}
                         color={selected ? '#fbbf24' : (textureUrl ? '#ffffff' : (room.color || '#ddd8d0'))}
-                        roughness={0.7}
-                        metalness={0.0}
+                        roughness={hasPbr && room.pbrRoughnessUrl ? 1.0 : 0.7}
+                        metalness={hasPbr && room.pbrMetalnessUrl ? 1.0 : 0.0}
                         clearcoat={0.15}
                         clearcoatRoughness={0.4}
                         envMapIntensity={0.3}
