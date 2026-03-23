@@ -1188,10 +1188,10 @@ export const useFloorplanStore = create<FloorplanState>()(
             state.imageDimensions = { width: 0, height: 0 }
             state.calibrationFactor = 1
             state.isCalibrated = false
-            state.selectedObjectId = null
+            state.selectedId = null
             state.currentRunId = null
             state.runStatus = null
-            state.tutorialStep = 'upload'
+            state.tutorialStep = 'none'
             ;(state as any).history = []
             ;(state as any).historyIndex = -1
         }),
