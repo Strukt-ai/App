@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 import { DebugPanel } from './DebugPanel'
 
 export function Topbar() {
-    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token } = useFloorplanStore()
-    const [fileToUpload, setFileToUpload] = useState<File | null>(null)
+    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile } = useFloorplanStore()
+    const [fileToUpload, setFileToUpload] = useState<File | null>(pendingFile)
     const [workerCount, setWorkerCount] = useState(1) // Optimistic: Assume 1 worker online until proven otherwise
     const [isDragging, setIsDragging] = useState(false)
 
@@ -33,6 +33,14 @@ export function Topbar() {
         reader.readAsDataURL(file)
         setRunStatus('idle')
     }
+
+    // Pick up file from dashboard if set
+    useEffect(() => {
+        if (pendingFile && !fileToUpload) {
+            setFileToUpload(pendingFile)
+            setPendingFile(null)
+        }
+    }, [pendingFile])
 
     // Poll Worker Status
     useEffect(() => {
@@ -451,6 +459,13 @@ export function Topbar() {
                                 setRunStatus('processing')
                                 const formData = new FormData()
                                 formData.append('image', fileToUpload)
+
+                                // Pick up project name from NewProjectDialog
+                                const pendingName = sessionStorage.getItem('pendingProjectName') || ''
+                                if (pendingName) {
+                                    formData.append('name', pendingName)
+                                    sessionStorage.removeItem('pendingProjectName')
+                                }
 
                                 try {
                                     const res = await fetch('/api/runs', {

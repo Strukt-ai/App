@@ -97,6 +97,8 @@ export interface FloorplanState {
     renders: string[]
     fitViewTrigger: number
     exportScale: number // Ratio to send to backend for 3D generation
+    pendingFile: File | null
+    setPendingFile: (file: File | null) => void
 
     interaction: {
         type: 'none' | 'drawing' | 'dragging' | 'resizing' | 'pending_draw' | 'drawing_floor'
@@ -216,6 +218,8 @@ export const useFloorplanStore = create<FloorplanState>()(
         },
         fitViewTrigger: 0,
         exportScale: 1,
+        pendingFile: null,
+        setPendingFile: (file) => set({ pendingFile: file } as any),
         toast: null,
         cornerSnapMode: false,
         snapCorners: [],

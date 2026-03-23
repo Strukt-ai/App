@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { FolderOpen, Trash2, Clock, Loader2, AlertTriangle, Plus, LogOut, Upload, Box } from 'lucide-react'
+import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { ProjectThumbnail } from './ProjectThumbnail'
@@ -21,7 +21,7 @@ function formatTimestamp(iso: string): string {
 }
 
 export function ProjectsDashboard({ onOpenEditor, onLogout }: Props) {
-    const { token, user, setToken, setUser, currentRunId, setRunId, setRunStatus, setMode, setCalibrationFactor, setTutorialStep, setUploadedImage } = useFloorplanStore()
+    const { token, user, setToken, setUser, currentRunId, setRunId, setRunStatus, setMode, setCalibrationFactor, setTutorialStep, setUploadedImage, setPendingFile } = useFloorplanStore()
     const [projects, setProjects] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -138,6 +138,9 @@ export function ProjectsDashboard({ onOpenEditor, onLogout }: Props) {
                 }
             }
             reader.readAsDataURL(selectedFile)
+
+            // Store file in global state so Topbar can use it for processing
+            setPendingFile(selectedFile)
 
             // Store project name for Topbar to pick up
             if (projectName.trim()) {
