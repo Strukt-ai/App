@@ -114,20 +114,8 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
                     </div>
 
                     <div className={cn("transition-opacity duration-300 flex flex-col items-center gap-4", !termsAccepted && "opacity-50 grayscale pointer-events-none")}>
-                        <button
-                            onClick={handleStart}
-                            disabled={!termsAccepted}
-                            className="group relative px-8 py-4 bg-white/10 hover:bg-white/15 border border-white/10 rounded-full text-white font-medium transition-all duration-300 overflow-hidden disabled:cursor-not-allowed"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl" />
-                            <span className="relative flex items-center gap-3">
-                                Enter Studio (Guest)
-                                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                            </span>
-                        </button>
-
-                        <div className="flex flex-col items-center gap-2">
-                            <span className="text-white/30 text-xs uppercase tracking-widest">or sign in to save projects</span>
+                        <div className="flex flex-col items-center gap-3">
+                            <span className="text-white/40 text-xs uppercase tracking-widest mb-1">Sign in to get started</span>
                             <div className="scale-110">
                                 <GoogleLogin
                                     onSuccess={handleGoogleSuccess}

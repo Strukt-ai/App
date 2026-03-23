@@ -358,20 +358,10 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                         </div>
                     )}
 
-                    {/* Guest mode - no token */}
+                    {/* No token — prompt sign in */}
                     {!token && (
                         <div className="flex flex-col items-center justify-center h-64">
                             <p className="text-white/40 text-sm mb-4">Sign in to save and manage projects</p>
-                            <button
-                                onClick={() => {
-                                    // Guest mode: go directly to editor with blank canvas
-                                    setMode('2d')
-                                    onOpenEditor()
-                                }}
-                                className="px-6 py-3 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-white font-medium transition-colors"
-                            >
-                                Continue as Guest
-                            </button>
                         </div>
                     )}
                 </div>
