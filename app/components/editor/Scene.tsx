@@ -4,7 +4,7 @@ import { useRef, useEffect, Suspense, useState } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping, MOUSE } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows } from '@react-three/drei'
-import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast } from '@react-three/postprocessing'
+import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast, N8AO } from '@react-three/postprocessing'
 import { ToneMappingMode, BlendFunction } from 'postprocessing'
 
 import { useFloorplanStore } from '@/store/floorplanStore'
@@ -306,7 +306,7 @@ function SceneContent() {
             <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
 
             {/* HDRI Environment — apartment preset for best interior reflections */}
-            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.4} environmentIntensity={1.0} />
+            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.3} environmentIntensity={0.8} />
 
             {/* Key Light — soft directional from upper right */}
             <directionalLight
@@ -348,12 +348,12 @@ function SceneContent() {
             {/* Contact Shadows — soft grounding, subtle on light background */}
             <ContactShadows
                 position={[0, 0.01, 0]}
-                opacity={0.35}
+                opacity={0.5}
                 scale={50}
-                blur={3.0}
-                far={10}
+                blur={2.5}
+                far={12}
                 resolution={2048}
-                color="#8a8580"
+                color="#4a4540"
                 frames={1}
             />
 
@@ -402,20 +402,27 @@ function SceneContent() {
                 <ErrorBoundary name="FloatingMenu"><FloatingMenu /></ErrorBoundary>
             </group>
 
-            {/* Post-processing — clean architectural look */}
+            {/* Post-processing — cinematic architectural look */}
             {mode === '3d' && (
                 <EffectComposer multisampling={0}>
                     <SMAA />
-                    <Bloom
-                        luminanceThreshold={2.0}
-                        mipmapBlur
-                        intensity={0.02}
-                        radius={0.2}
+                    {/* N8AO — fast high-quality ambient occlusion for realistic depth in corners */}
+                    <N8AO
+                        aoRadius={0.8}
+                        intensity={2.5}
+                        distanceFalloff={0.5}
+                        quality="medium"
                     />
-                    <BrightnessContrast contrast={0.08} brightness={0.02} />
+                    <Bloom
+                        luminanceThreshold={1.5}
+                        mipmapBlur
+                        intensity={0.08}
+                        radius={0.3}
+                    />
+                    <BrightnessContrast contrast={0.1} brightness={0.03} />
                     <Vignette
-                        offset={0.35}
-                        darkness={0.25}
+                        offset={0.3}
+                        darkness={0.35}
                         blendFunction={BlendFunction.NORMAL}
                     />
                     <ToneMapping mode={ToneMappingMode.AGX} />

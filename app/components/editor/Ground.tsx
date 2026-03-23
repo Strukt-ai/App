@@ -16,11 +16,11 @@ export function Ground() {
             {mode === '3d' ? (
                 <meshPhysicalMaterial
                     color="#2a2a2a"
-                    roughness={0.95}
+                    roughness={0.75}
                     metalness={0.0}
-                    clearcoat={0.02}
-                    clearcoatRoughness={0.9}
-                    envMapIntensity={0.15}
+                    clearcoat={0.05}
+                    clearcoatRoughness={0.6}
+                    envMapIntensity={0.3}
                 />
             ) : (
                 <meshStandardMaterial
