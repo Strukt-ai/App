@@ -16,6 +16,9 @@ const RenderGallery = dynamic(
 )
 import { RightSidebar } from '@/components/layout/RightSidebar'
 import { FloatingUpgradeCard } from '@/components/layout/FloatingUpgradeCard'
+import { FloatingToolbar } from '@/components/layout/FloatingToolbar'
+import { ContextToolbar } from '@/components/layout/ContextToolbar'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { PremiumModal } from '@/components/layout/PremiumModal'
 import { FurnAIProcessingModal } from '@/components/layout/FurnAIProcessingModal'
 import { FurnAIQueueModal } from '@/components/layout/FurnAIQueueModal'
@@ -25,6 +28,7 @@ import { TemplateGrid } from '@/components/TemplateGrid'
 import { useFloorplanStore } from '@/store/floorplanStore'
 
 function App() {
+  useKeyboardShortcuts()
   const searchParams = useSearchParams()
   const template = searchParams.get('template')
 
@@ -70,6 +74,8 @@ function App() {
         <div className="flex flex-1 overflow-hidden relative">
           <Sidebar onLogout={handleLogout} />
           <Scene />
+          <FloatingToolbar />
+          <ContextToolbar />
           <RightSidebar />
           {showUpgradeCard && (
             <FloatingUpgradeCard

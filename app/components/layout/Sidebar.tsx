@@ -1,15 +1,13 @@
 'use client'
 
 import {
-    PenTool, Ruler, Send, Box,
-    Edit3, Move, Maximize2, RotateCw, Trash2, Tag, ChevronDown,
+    Send, Box,
     Sun, Moon, Lightbulb, Sunset, Camera, Download,
-    Plus, Square, AppWindow, DoorOpen, Armchair,
-    Upload, Sparkles, FolderOpen, ArrowLeftRight
+    Upload, Sparkles, FolderOpen, Tag, Trash2
 } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { ImportModelModal } from './ImportModelModal' // Import Modal
 import { FurnAIModal } from './FurnAIModal' // Import Furn AI Modal
 // ProjectsModal import already added in previous step or handled by TS if file exists
@@ -22,18 +20,13 @@ import { LogOut } from 'lucide-react'
 export function Sidebar({ onLogout }: { onLogout?: () => void }) {
     const {
         selectedId, walls, calibrate,
-        activeTool, setActiveTool, deleteObject,
+        activeTool, setActiveTool,
         rooms, updateRoom, selectObject,
         mode, lightingPreset, setLightingPreset, triggerRender, isRendering, currentRunId,
-        addFurniture, tutorialStep, triggerDetectRooms,
         user, setUser, setToken, token,
-        projectsModalOpen, setProjectsModalOpen, // Use global state
-        runStatus,
-        furniture,
-        updateFurniture
+        projectsModalOpen, setProjectsModalOpen,
+        runStatus
     } = useFloorplanStore()
-
-    const selectedFurn = useMemo(() => furniture.find(f => f.id === selectedId), [furniture, selectedId])
 
     const isGenerating = runStatus === 'processing'
 
@@ -47,9 +40,6 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         if (onLogout) onLogout()
     }
     const [realLen, setRealLen] = useState('')
-    const [editMenuOpen, setEditMenuOpen] = useState(false)
-    const [addMenuOpen, setAddMenuOpen] = useState(false)
-    const [furnMenuOpen, setFurnMenuOpen] = useState(false) // New State
     const [importModalOpen, setImportModalOpen] = useState(false)
     const [furnAIModalOpen, setFurnAIModalOpen] = useState(false)
 
@@ -151,8 +141,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         }
     }
 
-    const canFindRooms = tutorialStep === 'rooms' || tutorialStep === 'floor_review' || tutorialStep === 'none'
-    const canUseFurniture = true // Always allow FurnAI
+    const canUseFurniture = true
 
     const onCalibrate = async () => {
         if (!selectedWall || !realLen) return
@@ -188,280 +177,50 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         // User requested no alert
     }
 
-    const handleAddObject = (type: string) => {
-        if (type === 'wall') {
-            setActiveTool('wall')
-        } else if (type === 'floor') {
-            setActiveTool('floor')
-        } else {
-            addFurniture(type, { x: 0, y: 0 })
-            setActiveTool('select') // Switch to select so they can move it
-        }
-    }
 
     return (
         <>
-            <div className="w-64 border-r bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-y-auto custom-scrollbar">
-                <div className="p-4 border-b">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tools</h3>
-                    <div className="flex flex-col gap-2">
-                        {/* Add Element Button */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setAddMenuOpen(!addMenuOpen)}
-                                disabled={tutorialStep === 'calibration'}
-                                className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-lg border transition-all group",
-                                    addMenuOpen
-                                        ? "bg-primary/20 border-primary text-primary shadow-inner"
-                                        : "border-border bg-secondary/20 hover:bg-secondary/50 hover:border-primary/50 text-muted-foreground",
-                                    tutorialStep === 'calibration' && "opacity-30 cursor-not-allowed"
-                                )}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Plus className="w-5 h-5" />
-                                    <span className="text-[11px] font-medium uppercase tracking-wider">Add Element</span>
-                                </div>
-                                <ChevronDown className={cn("w-4 h-4 transition-transform", addMenuOpen && "rotate-180")} />
-                            </button>
-                        </div>
-
-                        {/* Add Elements Submenu */}
-                        <div className={cn(
-                            "grid grid-cols-2 gap-2 overflow-hidden transition-all duration-300",
-                            addMenuOpen ? "max-h-[200px] mt-2 opacity-100" : "max-h-0 opacity-0"
-                        )}>
-                            <button onClick={() => handleAddObject('floor')} className="flex flex-col items-center p-2 rounded-lg border border-border hover:bg-secondary/50 transition-all text-muted-foreground hover:text-primary">
-                                <Square className="w-4 h-4 mb-1" />
-                                <span className="text-[9px]">Floor</span>
-                            </button>
-                            <button onClick={() => handleAddObject('wall')} className="flex flex-col items-center p-2 rounded-lg border border-border hover:bg-secondary/50 transition-all text-muted-foreground hover:text-primary">
-                                <PenTool className="w-4 h-4 mb-1" />
-                                <span className="text-[9px]">Wall</span>
-                            </button>
-                            <button onClick={() => handleAddObject('window')} className="flex flex-col items-center p-2 rounded-lg border border-border hover:bg-secondary/50 transition-all text-muted-foreground hover:text-primary">
-                                <AppWindow className="w-4 h-4 mb-1" />
-                                <span className="text-[9px]">Window</span>
-                            </button>
-                            <button onClick={() => handleAddObject('door')} className="flex flex-col items-center p-2 rounded-lg border border-border hover:bg-secondary/50 transition-all text-muted-foreground hover:text-primary">
-                                <DoorOpen className="w-4 h-4 mb-1" />
-                                <span className="text-[9px]">Door</span>
-                            </button>
-                        </div>
-
-                        {/* Find Rooms */}
-                        <div className="mt-2">
-                            <button
-                                disabled={!canFindRooms || !currentRunId}
-                                onClick={() => triggerDetectRooms()}
-                                className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-lg border transition-all",
-                                    (!canFindRooms || !currentRunId)
-                                        ? "border-border bg-secondary/10 text-muted-foreground opacity-50 cursor-not-allowed"
-                                        : "border-border bg-secondary/20 hover:bg-secondary/50 hover:border-primary/50 text-muted-foreground"
-                                )}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Box className="w-5 h-5" />
-                                    <span className="text-[11px] font-medium uppercase tracking-wider">Find Rooms</span>
-                                </div>
-                                {!canFindRooms
-                                    ? <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">Locked</span>
-                                    : <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">Run</span>
-                                }
-                            </button>
-                        </div>
-
-                        {/* Furniture Dropdown */}
-                        <div className="relative mt-2">
-                            <button
-                                onClick={() => setFurnMenuOpen(!furnMenuOpen)}
-                                disabled={!canUseFurniture}
-                                className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-lg border transition-all group",
-                                    furnMenuOpen
-                                        ? "bg-primary/20 border-primary text-primary shadow-inner"
-                                        : "border-border bg-secondary/20 hover:bg-secondary/50 hover:border-primary/50 text-muted-foreground",
-                                    !canUseFurniture && "opacity-50 cursor-not-allowed"
-                                )}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Armchair className="w-5 h-5" />
-                                    <span className="text-[11px] font-medium uppercase tracking-wider">Add Furniture</span>
-                                </div>
-                                <ChevronDown className={cn("w-4 h-4 transition-transform", furnMenuOpen && "rotate-180")} />
-                            </button>
-                        </div>
-
-                        {/* Furniture Submenu */}
-                        <div className={cn(
-                            "flex flex-col gap-2 overflow-hidden transition-all duration-300",
-                            furnMenuOpen ? "max-h-[200px] mt-2 opacity-100" : "max-h-0 opacity-0"
-                        )}>
-                            {/* Option 1: Import */}
-                            <button
-                                onClick={() => setImportModalOpen(true)}
-                                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-all text-muted-foreground hover:text-white group text-left"
-                            >
-                                <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center border border-blue-500/20 group-hover:border-blue-500/50 transition-colors">
-                                    <Upload className="w-4 h-4 text-blue-400" />
-                                </div>
-                                <div>
-                                    <span className="text-[11px] font-semibold block text-white/90">Import 3D Model</span>
-                                    <span className="text-[9px] text-white/40 block">GLB / OBJ / FBX</span>
-                                </div>
-                            </button>
-
-                            {/* Option 2: Furn AI (Pro) */}
-                            <button
-                                onClick={() => setFurnAIModalOpen(true)}
-                                disabled={!canUseFurniture || !currentRunId}
-                                className={cn(
-                                    "w-full flex items-center gap-3 p-3 rounded-lg border border-border text-left relative overflow-hidden transition-all",
-                                    (!canUseFurniture || !currentRunId)
-                                        ? "bg-secondary/10 text-muted-foreground/60 opacity-50 cursor-not-allowed"
-                                        : "bg-secondary/20 hover:bg-secondary/50 hover:border-purple-500/40 text-muted-foreground"
-                                )}
-                            >
-                                <div className="w-8 h-8 rounded bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-purple-500/20 group-hover:border-purple-500/50 transition-colors">
-                                    <Sparkles className="w-4 h-4 text-purple-300" />
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[11px] font-semibold block text-white/90">Furn AI</span>
-                                        <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1 rounded border border-purple-500/20">PRO</span>
-                                    </div>
-                                    <span className="text-[9px] text-white/40 block">SAM 3D Segmentation</span>
-                                </div>
-                            </button>
-                        </div>
-
-                        {/* Edit Button with Dropdown (Keep existing) */}
-                        <div className="relative mt-2">
-                            <button
-                                onClick={() => setEditMenuOpen(!editMenuOpen)}
-                                disabled={tutorialStep === 'calibration'}
-                                className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-lg border transition-all group",
-                                    ['select', 'move', 'resize', 'rotate', 'delete', 'label', 'wall'].includes(activeTool)
-                                        ? "bg-primary/20 border-primary text-primary shadow-inner"
-                                        : "border-border bg-secondary/20 hover:bg-secondary/50 hover:border-primary/50 text-muted-foreground",
-                                    tutorialStep === 'calibration' && "opacity-30 cursor-not-allowed"
-                                )}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Edit3 className="w-5 h-5" />
-                                    <span className="text-[11px] font-medium uppercase tracking-wider">Edit</span>
-                                </div>
-                                <ChevronDown className={cn("w-4 h-4 transition-transform", editMenuOpen && "rotate-180")} />
-                            </button>
-                        </div>
-
-                        {/* Ruler Button */}
+            <div className="w-56 border-r bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-y-auto custom-scrollbar">
+                {/* AI & Furniture Section */}
+                <div className="p-3 border-b">
+                    <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Furniture & AI</h3>
+                    <div className="flex flex-col gap-1.5">
+                        {/* Import 3D */}
                         <button
-                            onClick={() => setActiveTool(activeTool === 'ruler' ? 'none' : 'ruler')}
+                            onClick={() => setImportModalOpen(true)}
+                            className="w-full flex items-center gap-2.5 p-2.5 rounded-lg border border-border hover:bg-secondary/50 transition-all text-muted-foreground hover:text-white group text-left"
+                        >
+                            <div className="w-7 h-7 rounded bg-blue-500/10 flex items-center justify-center border border-blue-500/20 group-hover:border-blue-500/50 transition-colors shrink-0">
+                                <Upload className="w-3.5 h-3.5 text-blue-400" />
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-semibold block text-white/90">Import Model</span>
+                                <span className="text-[8px] text-white/40 block">GLB / OBJ / FBX</span>
+                            </div>
+                        </button>
+
+                        {/* Furn AI */}
+                        <button
+                            onClick={() => setFurnAIModalOpen(true)}
+                            disabled={!canUseFurniture || !currentRunId}
                             className={cn(
-                                "flex items-center gap-3 p-3 rounded-lg border transition-all group",
-                                activeTool === 'ruler'
-                                    ? "bg-primary/20 border-primary text-primary shadow-inner"
-                                    : "border-border bg-secondary/20 hover:bg-secondary/50 hover:border-primary/50 text-muted-foreground",
-                                tutorialStep === 'calibration' && "ring-2 ring-primary ring-offset-2 ring-offset-[#111] animate-pulse"
+                                "w-full flex items-center gap-2.5 p-2.5 rounded-lg border border-border text-left relative overflow-hidden transition-all",
+                                (!canUseFurniture || !currentRunId)
+                                    ? "bg-secondary/10 text-muted-foreground/60 opacity-50 cursor-not-allowed"
+                                    : "bg-secondary/20 hover:bg-secondary/50 hover:border-purple-500/40 text-muted-foreground"
                             )}
                         >
-                            <Ruler className="w-5 h-5 group-hover:text-primary transition-colors" />
-                            <span className="text-[11px] font-medium uppercase tracking-wider">Ruler Tool</span>
+                            <div className="w-7 h-7 rounded bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-purple-500/20 shrink-0">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-semibold text-white/90">Furn AI</span>
+                                    <span className="text-[7px] bg-purple-500/20 text-purple-300 px-1 rounded border border-purple-500/20">PRO</span>
+                                </div>
+                                <span className="text-[8px] text-white/40 block">SAM 3D Segmentation</span>
+                            </div>
                         </button>
-
-
-                    </div>
-                </div>
-
-                {/* Edit Tools Section - Expands when Edit button is clicked */}
-                <div className={cn(
-                    "p-4 border-b bg-primary/5 transition-all duration-300",
-                    editMenuOpen ? "opacity-100 max-h-[400px]" : "opacity-0 max-h-0 py-0 overflow-hidden border-none"
-                )}>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Edit Tools</h3>
-                    <div className="grid grid-cols-3 gap-2">
-                        <button
-                            onClick={() => setActiveTool('move')}
-                            className={cn("flex flex-col items-center p-2 rounded-lg border transition-all", activeTool === 'move' ? "bg-primary/20 border-primary text-primary" : "border-border hover:bg-secondary/50")}
-                        >
-                            <Move className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Move</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTool('resize')}
-                            className={cn("flex flex-col items-center p-2 rounded-lg border transition-all", activeTool === 'resize' ? "bg-primary/20 border-primary text-primary" : "border-border hover:bg-secondary/50")}
-                        >
-                            <Maximize2 className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Resize</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTool('rotate')}
-                            className={cn("flex flex-col items-center p-2 rounded-lg border transition-all", activeTool === 'rotate' ? "bg-primary/20 border-primary text-primary" : "border-border hover:bg-secondary/50")}
-                        >
-                            <RotateCw className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Rotate</span>
-                        </button>
-                        <button
-                            onClick={() => { if (selectedId) deleteObject(selectedId) }}
-                            className="flex flex-col items-center p-2 rounded-lg border border-border hover:bg-red-500/20 text-red-400 transition-all"
-                        >
-                            <Trash2 className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Delete</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTool('label')}
-                            className={cn("flex flex-col items-center p-2 rounded-lg border transition-all", activeTool === 'label' ? "bg-primary/20 border-primary text-primary" : "border-border hover:bg-secondary/50")}
-                        >
-                            <Tag className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Label</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTool('wall')}
-                            className={cn("flex flex-col items-center p-2 rounded-lg border transition-all", activeTool === 'wall' ? "bg-primary/20 border-primary text-primary" : "border-border hover:bg-secondary/50")}
-                        >
-                            <PenTool className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Wall</span>
-                        </button>
-
-                        <button
-                            onClick={() => {
-                                if (selectedFurn && (selectedFurn.type === 'door' || selectedFurn.type === 'window')) {
-                                    updateFurniture(selectedId!, { type: selectedFurn.type === 'door' ? 'window' : 'door' });
-                                }
-                            }}
-                            disabled={!(selectedFurn && (selectedFurn.type === 'door' || selectedFurn.type === 'window'))}
-                            className={cn(
-                                "flex flex-col items-center p-2 rounded-lg border transition-all",
-                                (selectedFurn && (selectedFurn.type === 'door' || selectedFurn.type === 'window'))
-                                    ? "border-border hover:bg-secondary/50 hover:text-primary cursor-pointer text-muted-foreground"
-                                    : "border-border opacity-50 cursor-not-allowed text-muted-foreground/50"
-                            )}
-                        >
-                            <ArrowLeftRight className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Swap</span>
-                        </button>
-
-                        <button
-                            onClick={() => {
-                                if (selectedWall) {
-                                    useFloorplanStore.getState().setJoinMode(true)
-                                }
-                            }}
-                            disabled={!selectedWall}
-                            className={cn(
-                                "flex flex-col items-center p-2 rounded-lg border transition-all",
-                                selectedWall
-                                    ? "border-border hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-400 cursor-pointer text-muted-foreground"
-                                    : "border-border opacity-50 cursor-not-allowed text-muted-foreground/50"
-                            )}
-                        >
-                            <Box className="w-4 h-4 mb-1" />
-                            <span className="text-[9px]">Join Walls</span>
-                        </button>
-
                     </div>
                 </div>
 
