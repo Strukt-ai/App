@@ -142,7 +142,14 @@ export function TemplateGrid() {
 
   useEffect(() => { if (token) fetchProjects() }, [token, fetchProjects])
 
+  const MAX_PROJECTS = 5
+
   const handleNewProject = (name: string) => {
+    if (loadingProjects) return // Block while projects are loading
+    if (projects.length >= MAX_PROJECTS) {
+      alert(`You can have up to ${MAX_PROJECTS} projects. Please delete an existing project first.`)
+      return
+    }
     setShowNewDialog(false)
     // Store name in sessionStorage so RightSidebar can pick it up when uploading
     sessionStorage.setItem('pendingProjectName', name)
@@ -150,6 +157,16 @@ export function TemplateGrid() {
   }
 
   const openTemplate = (templateId: string) => {
+    if (templateId !== 'blank') {
+      router.push(`/?template=${templateId}`)
+      return
+    }
+    // Blank canvas = new project, enforce limit
+    if (loadingProjects) return
+    if (projects.length >= MAX_PROJECTS) {
+      alert(`You can have up to ${MAX_PROJECTS} projects. Please delete an existing project first.`)
+      return
+    }
     router.push(`/?template=${templateId}`)
   }
 
@@ -163,10 +180,10 @@ export function TemplateGrid() {
     // Load project data in background
     setTimeout(async () => {
       try {
+        const headers = { 'Authorization': `Bearer ${token}` }
+
         // 1. Restore calibration from run meta
-        const metaRes = await fetch(`/api/runs/${project.job_id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+        const metaRes = await fetch(`/api/runs/${project.job_id}`, { headers })
         if (metaRes.ok) {
           const meta = await metaRes.json()
           const rm = meta?.run_meta || {}
@@ -178,10 +195,24 @@ export function TemplateGrid() {
           }
         }
 
-        // 2. Load SVG (walls, rooms, furniture placements)
-        const svgRes = await fetch(`/api/runs/${project.job_id}/svg`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+        // 2. Restore background image from server
+        try {
+          const imgRes = await fetch(`/api/runs/${project.job_id}/download/input_image.png`, { headers })
+          if (imgRes.ok) {
+            const blob = await imgRes.blob()
+            const url = URL.createObjectURL(blob)
+            const img = new window.Image()
+            img.onload = () => {
+              useFloorplanStore.getState().setUploadedImage(url, img.naturalWidth, img.naturalHeight)
+            }
+            img.src = url
+          }
+        } catch (e) {
+          console.warn('[TemplateGrid] Could not restore background image', e)
+        }
+
+        // 3. Load SVG (walls, rooms, furniture placements)
+        const svgRes = await fetch(`/api/runs/${project.job_id}/svg`, { headers })
         if (svgRes.ok) {
           const svgText = await svgRes.text()
           useFloorplanStore.getState().importFromSVG(svgText)
@@ -257,11 +288,26 @@ export function TemplateGrid() {
           </div>
 
           <button
-            onClick={() => setShowNewDialog(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl hover:opacity-90 transition-opacity text-sm font-medium shadow-lg shadow-purple-500/20"
+            onClick={() => {
+              if (loadingProjects) return
+              if (projects.length >= MAX_PROJECTS) {
+                alert(`You can have up to ${MAX_PROJECTS} projects. Please delete an existing project first.`)
+                return
+              }
+              setShowNewDialog(true)
+            }}
+            disabled={loadingProjects}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium shadow-lg transition-opacity",
+              loadingProjects
+                ? "bg-white/10 text-white/40 cursor-wait"
+                : projects.length >= MAX_PROJECTS
+                  ? "bg-white/10 text-white/40 cursor-not-allowed"
+                  : "bg-gradient-to-r from-purple-500 to-blue-500 hover:opacity-90 shadow-purple-500/20"
+            )}
           >
-            <Plus className="w-4 h-4" />
-            New Project
+            {loadingProjects ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {loadingProjects ? 'Loading...' : projects.length >= MAX_PROJECTS ? `${MAX_PROJECTS}/${MAX_PROJECTS} Projects` : 'New Project'}
           </button>
         </div>
       </header>
