@@ -50,6 +50,13 @@ export function RightSidebar() {
         const formData = new FormData()
         formData.append('image', file)
 
+        // Pick up project name from NewProjectDialog (stored in sessionStorage)
+        const pendingName = sessionStorage.getItem('pendingProjectName') || ''
+        if (pendingName) {
+            formData.append('name', pendingName)
+            sessionStorage.removeItem('pendingProjectName')
+        }
+
         try {
             const headers: Record<string, string> = {}
             if (token) headers['Authorization'] = `Bearer ${token}`

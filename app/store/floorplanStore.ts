@@ -945,14 +945,27 @@ export const useFloorplanStore = create<FloorplanState>()(
 
         importFurnAiModel: (payload) => {
             set((state) => {
+                // Calculate a reasonable size relative to the floorplan
+                // Default 2m x 2m works for most furniture at typical calibrations
+                const targetSize = 2
+
+                // Place at center of existing walls if no position provided
+                let cx = payload.position.x
+                let cz = payload.position.y
+                if (cx === 0 && cz === 0 && state.walls.length > 0) {
+                    const allX = state.walls.flatMap(w => [w.start.x, w.end.x])
+                    const allY = state.walls.flatMap(w => [w.start.y, w.end.y])
+                    cx = (Math.min(...allX) + Math.max(...allX)) / 2
+                    cz = (Math.min(...allY) + Math.max(...allY)) / 2
+                }
+
                 state.furniture.push({
                     id: payload.id,
                     type: payload.type || 'imported',
                     furnAiId: payload.furnAiId,
-                    position: { x: payload.position.x, y: 0, z: payload.position.y },
+                    position: { x: cx, y: 0, z: cz },
                     rotation: { x: 0, y: 0, z: 0 },
-                    // Default fallback size for generic AI generated objects 1m x 1m.
-                    dimensions: { width: 1, height: 1.5, depth: 1 },
+                    dimensions: { width: targetSize, height: targetSize, depth: targetSize },
                     modelUrl: payload.modelUrl,
                     label: payload.label
                 })

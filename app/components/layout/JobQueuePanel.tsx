@@ -286,16 +286,16 @@ export function JobQueuePanel() {
                                             <button
                                                 onClick={() => handleLoadIntoScene(asset.jobId, asset.name, asset.url, asset.uid)}
                                                 className={cn(
-                                                    'flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors',
+                                                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors',
                                                     loaded
-                                                        ? 'bg-green-600/20 text-green-400'
-                                                        : 'bg-primary/10 hover:bg-primary/20 text-primary'
+                                                        ? 'bg-green-600/20 text-green-400 border border-green-500/30'
+                                                        : 'bg-primary hover:bg-primary/90 text-primary-foreground'
                                                 )}
                                             >
                                                 {loaded
-                                                    ? <CheckCircle2 className="w-2.5 h-2.5" />
-                                                    : <Plus className="w-2.5 h-2.5" />}
-                                                {loaded ? 'Added' : 'Add to Scene'}
+                                                    ? <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    : <Plus className="w-3.5 h-3.5" />}
+                                                {loaded ? 'Added' : 'Add to Floorplan'}
                                             </button>
                                             <a
                                                 href={asset.url}
