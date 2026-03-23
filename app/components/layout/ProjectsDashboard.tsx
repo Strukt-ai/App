@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box } from 'lucide-react'
+import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box, X } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { ProjectThumbnail } from './ProjectThumbnail'
 
 interface Props {
     onOpenEditor: () => void
+    onClose: () => void
     onLogout: () => void
 }
 
@@ -20,7 +21,7 @@ function formatTimestamp(iso: string): string {
     })
 }
 
-export function ProjectsDashboard({ onOpenEditor, onLogout }: Props) {
+export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
     const { token, user, setToken, setUser, currentRunId, setRunId, setRunStatus, setMode, setCalibrationFactor, setTutorialStep, setUploadedImage, setPendingFile } = useFloorplanStore()
     const [projects, setProjects] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
@@ -193,6 +194,13 @@ export function ProjectsDashboard({ onOpenEditor, onLogout }: Props) {
                             </button>
                         </div>
                     )}
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
+                        title="Close"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
                 </div>
             </div>
 

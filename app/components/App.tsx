@@ -33,31 +33,26 @@ function App() {
   const setShowQueueModal = useFloorplanStore(s => s.setShowQueueModal)
   const [showPremiumModal, setShowPremiumModal] = useState(false)
   const [showUpgradeCard, setShowUpgradeCard] = useState(true)
-  const [view, setView] = useState<'welcome' | 'dashboard' | 'editor'>('welcome')
+  const [showWelcome, setShowWelcome] = useState(true)
+  const [showDashboard, setShowDashboard] = useState(true)
+  const projectsModalOpen = useFloorplanStore(s => s.projectsModalOpen)
+  const setProjectsModalOpen = useFloorplanStore(s => s.setProjectsModalOpen)
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
-      {/* 1. Welcome Screen (Login/Enter) */}
-      {view === 'welcome' && (
-        <WelcomeScreen onStart={() => setView('dashboard')} />
+      {/* Welcome Screen */}
+      {showWelcome && (
+        <WelcomeScreen onStart={() => setShowWelcome(false)} />
       )}
 
-      {/* 2. Project Dashboard (Create New / Load Existing) */}
-      {view === 'dashboard' && (
-        <ProjectsDashboard
-          onOpenEditor={() => setView('editor')}
-          onLogout={() => setView('welcome')}
-        />
-      )}
-
-      {/* 3. Editor */}
-      {view === 'editor' && (
+      {/* Editor - always rendered after welcome */}
+      {!showWelcome && (
         <>
           <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
           <GlobalToast />
           <Topbar />
           <div className="flex flex-1 overflow-hidden relative">
-            <Sidebar onLogout={() => setView('dashboard')} />
+            <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
             <Scene />
             <FloatingToolbar />
             <ContextToolbar />
@@ -70,6 +65,15 @@ function App() {
             )}
           </div>
           <RenderGallery />
+
+          {/* Projects Dashboard - closable overlay */}
+          {(showDashboard || projectsModalOpen) && (
+            <ProjectsDashboard
+              onOpenEditor={() => { setShowDashboard(false); setProjectsModalOpen(false) }}
+              onClose={() => { setShowDashboard(false); setProjectsModalOpen(false) }}
+              onLogout={() => { setShowWelcome(true); setShowDashboard(true); setProjectsModalOpen(false) }}
+            />
+          )}
         </>
       )}
 
