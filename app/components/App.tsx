@@ -23,6 +23,7 @@ import { FurnAIProcessingModal } from '@/components/layout/FurnAIProcessingModal
 import { FurnAIQueueModal } from '@/components/layout/FurnAIQueueModal'
 import { GlobalToast } from '@/components/layout/GlobalToast'
 import { WelcomeScreen } from '@/components/layout/WelcomeScreen'
+import { ProjectsDashboard } from '@/components/layout/ProjectsDashboard'
 import { useFloorplanStore } from '@/store/floorplanStore'
 
 function App() {
@@ -32,31 +33,31 @@ function App() {
   const setShowQueueModal = useFloorplanStore(s => s.setShowQueueModal)
   const [showPremiumModal, setShowPremiumModal] = useState(false)
   const [showUpgradeCard, setShowUpgradeCard] = useState(true)
-  const [showWelcome, setShowWelcome] = useState(true)
-
-  // After welcome screen (login or guest), go straight to editor
-  const handleWelcomeComplete = () => {
-    setShowWelcome(false)
-  }
-
-  // Logout - go back to welcome
-  const handleLogout = () => {
-    setShowWelcome(true)
-  }
+  const [view, setView] = useState<'welcome' | 'dashboard' | 'editor'>('welcome')
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
       {/* 1. Welcome Screen (Login/Enter) */}
-      {showWelcome && <WelcomeScreen onStart={handleWelcomeComplete} />}
+      {view === 'welcome' && (
+        <WelcomeScreen onStart={() => setView('dashboard')} />
+      )}
 
-      {/* 2. Editor - After Welcome (login opens Projects modal automatically) */}
-      {!showWelcome && (
+      {/* 2. Project Dashboard (Create New / Load Existing) */}
+      {view === 'dashboard' && (
+        <ProjectsDashboard
+          onOpenEditor={() => setView('editor')}
+          onLogout={() => setView('welcome')}
+        />
+      )}
+
+      {/* 3. Editor */}
+      {view === 'editor' && (
         <>
           <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
           <GlobalToast />
           <Topbar />
           <div className="flex flex-1 overflow-hidden relative">
-            <Sidebar onLogout={handleLogout} />
+            <Sidebar onLogout={() => setView('dashboard')} />
             <Scene />
             <FloatingToolbar />
             <ContextToolbar />
