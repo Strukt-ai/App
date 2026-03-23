@@ -1,10 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callBackend } from '@/lib/backend-adapter'
 
+// Allowed API path prefixes — block unknown routes from reaching backend
+const ALLOWED_PREFIXES = [
+  '/api/runs',
+  '/api/sam3d',
+  '/api/system',
+  '/api/worker',
+  '/api/admin',
+  '/api/debug',
+  '/api/proxy-glb',
+  '/api/payments',
+  '/api/user',
+]
+
+// Max request body size (50MB for image uploads, enforced client-side too)
+const MAX_BODY_BYTES = 50 * 1024 * 1024
+
 async function handler(request: NextRequest) {
   try {
     const path = request.nextUrl.pathname
     const queryString = request.nextUrl.search
+
+    // Block requests to unknown API paths
+    const isAllowed = ALLOWED_PREFIXES.some(prefix => path.startsWith(prefix))
+    if (!isAllowed) {
+      return NextResponse.json({ error: 'Unknown API endpoint' }, { status: 404 })
+    }
 
     const method = request.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD'
     const headers: Record<string, string> = {}
@@ -30,6 +52,9 @@ async function handler(request: NextRequest) {
       } else if (request.body) {
         // Binary / multipart / SVG — read raw bytes for passthrough
         rawBody = Buffer.from(await request.arrayBuffer())
+        if (rawBody.length > MAX_BODY_BYTES) {
+          return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+        }
       }
     }
 
@@ -50,7 +75,7 @@ async function handler(request: NextRequest) {
 
     // Create headers for response
     const newHeaders = new Headers(response.headers)
-    const allowedOrigins = (process.env.NEXT_PUBLIC_ALLOWED_ORIGINS || 'http://localhost:3000').split(',')
+    const allowedOrigins = (process.env.NEXT_PUBLIC_ALLOWED_ORIGINS || 'http://localhost:3000').split(',').map(o => o.trim())
     const reqOrigin = request.headers.get('origin') || ''
     if (allowedOrigins.includes(reqOrigin)) {
       newHeaders.set('Access-Control-Allow-Origin', reqOrigin)

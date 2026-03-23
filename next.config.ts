@@ -10,11 +10,11 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Cross-Origin-Opener-Policy',
-            value: 'unsafe-none',
+            value: 'same-origin-allow-popups',
           },
           {
             key: 'Cross-Origin-Embedder-Policy',
-            value: 'unsafe-none',
+            value: 'credentialless',
           },
         ],
       },
@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
         {
           source: '/sidecar/:path*',
           destination: `${backendUrl}/sidecar/:path*`,
+        },
+        {
+          source: '/admin',
+          destination: `${backendUrl}/admin`,
         },
       ],
     };

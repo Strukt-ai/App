@@ -273,10 +273,10 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                                     </button>
                                     <button
                                         onClick={handleCreateNew}
-                                        disabled={!selectedFile || creating}
+                                        disabled={!selectedFile || !projectName.trim() || creating}
                                         className={cn(
                                             "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all",
-                                            selectedFile
+                                            selectedFile && projectName.trim()
                                                 ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
                                                 : "bg-white/5 text-white/30 cursor-not-allowed"
                                         )}

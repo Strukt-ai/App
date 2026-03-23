@@ -13,7 +13,18 @@ export function Topbar() {
     const [isDragging, setIsDragging] = useState(false)
 
     // Helper to process file (from input or drop)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+    const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/tiff']
+
     const handleFile_Local = (file: File) => {
+        if (file.size > MAX_FILE_SIZE) {
+            showToast('Image too large (max 50MB)', 'error')
+            return
+        }
+        if (!ALLOWED_TYPES.includes(file.type) && !file.name.match(/\.(png|jpe?g|webp|bmp|tiff?)$/i)) {
+            showToast('Unsupported image format', 'error')
+            return
+        }
         setFileToUpload(file)
 
         // Local Preview
