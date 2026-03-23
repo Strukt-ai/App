@@ -329,6 +329,17 @@ export const useFloorplanStore = create<FloorplanState>()(
             state.walls = state.walls.filter((w: Wall) => w.id !== id)
             state.furniture = state.furniture.filter((f: FurnItem) => f.id !== id)
             if (state.selectedId === id) state.selectedId = null
+            // Save history for undo
+            const snapshot = {
+                walls: JSON.parse(JSON.stringify(state.walls)),
+                furniture: JSON.parse(JSON.stringify(state.furniture)),
+                rooms: JSON.parse(JSON.stringify(state.rooms))
+            }
+            const history = (state as any).history || []
+            const idx = (state as any).historyIndex ?? history.length - 1
+            const newHistory = [...history.slice(0, idx + 1), snapshot].slice(-20)
+            ;(state as any).history = newHistory
+            ;(state as any).historyIndex = newHistory.length - 1
         }),
 
         startInteraction: (type, targetId, point, subType) => set((state) => {
@@ -609,6 +620,7 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
 
         endInteraction: () => set((state) => {
+            const hadMeaningfulAction = state.interaction.type !== 'none'
             // Clean up degenerate (zero-length) walls from accidental clicks
             if (state.interaction.type === 'drawing' && state.interaction.targetId) {
                 const wall = state.walls.find(w => w.id === state.interaction.targetId)
@@ -623,6 +635,19 @@ export const useFloorplanStore = create<FloorplanState>()(
                 }
             }
             state.interaction = { type: 'none', targetId: null, lastPoint: null }
+            // Save history after every meaningful interaction for undo/redo
+            if (hadMeaningfulAction) {
+                const snapshot = {
+                    walls: JSON.parse(JSON.stringify(state.walls)),
+                    furniture: JSON.parse(JSON.stringify(state.furniture)),
+                    rooms: JSON.parse(JSON.stringify(state.rooms))
+                }
+                const history = (state as any).history || []
+                const idx = (state as any).historyIndex ?? history.length - 1
+                const newHistory = [...history.slice(0, idx + 1), snapshot].slice(-20)
+                ;(state as any).history = newHistory
+                ;(state as any).historyIndex = newHistory.length - 1
+            }
         }),
 
         setCornerSnapMode: (active) => set((state) => {
@@ -1687,6 +1712,42 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
 
             state.walls = walls
+
+            // Auto-snap doors/windows to nearest wall after import
+            const SNAP_THRESHOLD = 0.5 // meters
+            for (const furn of furniture) {
+                if (furn.type !== 'door' && furn.type !== 'window') continue
+                let bestDist = SNAP_THRESHOLD
+                let bestPoint: { x: number; z: number } | null = null
+                let bestAngle = 0
+                let bestThickness = 0.15
+                for (const wall of walls) {
+                    const wx = wall.end.x - wall.start.x
+                    const wy = wall.end.y - wall.start.y
+                    const lenSq = wx * wx + wy * wy
+                    if (lenSq < 0.001) continue
+                    let t = ((furn.position.x - wall.start.x) * wx + (furn.position.z - wall.start.y) * wy) / lenSq
+                    t = Math.max(0, Math.min(1, t))
+                    const cx = wall.start.x + t * wx
+                    const cz = wall.start.y + t * wy
+                    const dx = furn.position.x - cx
+                    const dz = furn.position.z - cz
+                    const dist = Math.sqrt(dx * dx + dz * dz)
+                    if (dist < bestDist) {
+                        bestDist = dist
+                        bestPoint = { x: cx, z: cz }
+                        bestAngle = Math.atan2(wy, wx)
+                        bestThickness = wall.thickness || 0.15
+                    }
+                }
+                if (bestPoint) {
+                    furn.position.x = bestPoint.x
+                    furn.position.z = bestPoint.z
+                    furn.rotation.y = bestAngle
+                    furn.dimensions.depth = bestThickness
+                }
+            }
+
             state.furniture = furniture
             state.labels = labels
             // Prevent "random" floor/room disappearance:
@@ -1694,12 +1755,24 @@ export const useFloorplanStore = create<FloorplanState>()(
                 state.rooms = rooms
             }
 
+            // Save history for undo after import
+            const snapshot = {
+                walls: JSON.parse(JSON.stringify(state.walls)),
+                furniture: JSON.parse(JSON.stringify(state.furniture)),
+                rooms: JSON.parse(JSON.stringify(state.rooms))
+            }
+            const hist = (state as any).history || []
+            const hidx = (state as any).historyIndex ?? hist.length - 1
+            const newHist = [...hist.slice(0, hidx + 1), snapshot].slice(-20)
+            ;(state as any).history = newHist
+            ;(state as any).historyIndex = newHist.length - 1
+
             // Start Tutorial Flow if not calibrated.
             // IMPORTANT: Don't force tutorial steps when loading an existing project SVG.
             // New-run tutorial progression is handled by Topbar polling and explicit actions.
             if (!state.isCalibrated && state.tutorialStep === 'none' && walls.length === 0 && rooms.length === 0) {
                 state.tutorialStep = 'calibration'
-                state.activeTool = 'none' // forcing user to select ruler themselves? Or maybe set to 'none' so overlay guides them
+                state.activeTool = 'none'
             }
         }),
 

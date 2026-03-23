@@ -2,7 +2,7 @@
 
 import {
     Send, Box,
-    Sun, Moon, Lightbulb, Sunset, Camera, Download,
+    Sun, Moon, Lightbulb, Sunset, Camera,
     Upload, Sparkles, FolderOpen, Tag, Trash2
 } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
@@ -25,10 +25,9 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         mode, lightingPreset, setLightingPreset, triggerRender, isRendering, currentRunId,
         user, setUser, setToken, token,
         projectsModalOpen, setProjectsModalOpen,
-        runStatus
+        triggerDetectRooms, tutorialStep
     } = useFloorplanStore()
 
-    const isGenerating = runStatus === 'processing'
 
     // Login Hook
     // Login Hook (Replaced with Component in render)
@@ -43,39 +42,6 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
     const [importModalOpen, setImportModalOpen] = useState(false)
     const [furnAIModalOpen, setFurnAIModalOpen] = useState(false)
 
-    const downloadWithAuth = async (url: string, filename: string) => {
-        if (!token) {
-            alert('You are not signed in. Please sign in and try again.')
-            return
-        }
-        const res = await fetch(url, {
-            cache: 'no-store',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Cache-Control': 'no-cache',
-            },
-        })
-        if (!res.ok) {
-            const txt = await res.text().catch(() => '')
-            console.error('[Download] failed', res.status, txt)
-            try {
-                const errParse = JSON.parse(txt)
-                alert(`Download failed: ${errParse.detail || txt}`)
-            } catch {
-                alert(`Download failed: ${res.statusText}`)
-            }
-            return
-        }
-        const blob = await res.blob()
-        const objectUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = objectUrl
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(objectUrl)
-    }
     // New State
     const [texturizeOpen, setTexturizeOpen] = useState(false)
     // projectsModalOpen is now global
@@ -219,6 +185,26 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                                     <span className="text-[7px] bg-purple-500/20 text-purple-300 px-1 rounded border border-purple-500/20">PRO</span>
                                 </div>
                                 <span className="text-[8px] text-white/40 block">SAM 3D Segmentation</span>
+                            </div>
+                        </button>
+
+                        {/* Find Rooms */}
+                        <button
+                            disabled={!currentRunId || tutorialStep === 'calibration'}
+                            onClick={() => triggerDetectRooms()}
+                            className={cn(
+                                "w-full flex items-center gap-2.5 p-2.5 rounded-lg border border-border text-left transition-all",
+                                (!currentRunId || tutorialStep === 'calibration')
+                                    ? "bg-secondary/10 text-muted-foreground/60 opacity-50 cursor-not-allowed"
+                                    : "bg-secondary/20 hover:bg-secondary/50 hover:border-green-500/40 text-muted-foreground"
+                            )}
+                        >
+                            <div className="w-7 h-7 rounded bg-green-500/10 flex items-center justify-center border border-green-500/20 shrink-0">
+                                <Box className="w-3.5 h-3.5 text-green-400" />
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-semibold text-white/90">Find Rooms</span>
+                                <span className="text-[8px] text-white/40 block">Auto-detect room boundaries</span>
                             </div>
                         </button>
                     </div>
@@ -402,55 +388,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                     </div>
                 )}
 
-                {/* Export Assets - Visible whenever there is a run ID */}
-                {currentRunId && (
-                    <div className="p-4 border-b border-border/50 bg-secondary/5">
-                        <span className="text-[10px] text-muted-foreground font-semibold uppercase mb-2 block">Project Assets</span>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={() => downloadWithAuth(`/api/runs/${currentRunId}/svg/raw?t=${Date.now()}`, `inference_raw_${currentRunId}.svg`)}
-                                className="col-span-2 flex items-center justify-center gap-2 py-2 px-3 rounded-md bg-secondary/50 border border-border hover:bg-blue-950/30 hover:border-blue-500/50 hover:text-blue-400 transition-all text-[10px]"
-                            >
-                                <Download className="w-3 h-3" />
-                                Download Raw Inference SVG
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    // 1. Trigger the heavy blender worker job
-                                    await useFloorplanStore.getState().triggerBlenderGeneration()
 
-                                    // 2. Poll the store's runStatus, waiting for 'completed'
-                                    let attempts = 0;
-                                    const maxAttempts = 120; // 60 seconds (at 500ms) or up to a few minutes
-
-                                    const pollInterval = setInterval(async () => {
-                                        attempts++;
-                                        const status = useFloorplanStore.getState().runStatus;
-
-                                        if (status === 'completed') {
-                                            clearInterval(pollInterval);
-                                            // The backend created the blend file, we can download it.
-                                            await downloadWithAuth(`/api/runs/${currentRunId}/download/blend?t=${Date.now()}`, 'floorplan.blend');
-                                        } else if (status === 'failed' || attempts > maxAttempts) {
-                                            clearInterval(pollInterval);
-                                            alert("3D Generation failed or timed out.");
-                                        }
-                                    }, 1500); // Check every 1.5 seconds
-                                }}
-                                disabled={isGenerating || useFloorplanStore.getState().isGenerating3D}
-                                className={cn(
-                                    "col-span-2 flex items-center justify-center gap-2 py-2 px-3 rounded-md border text-[10px] transition-all",
-                                    (isGenerating || useFloorplanStore.getState().isGenerating3D)
-                                        ? "bg-secondary/20 border-border/30 text-muted-foreground opacity-50 cursor-not-allowed"
-                                        : "bg-secondary/50 border-border hover:bg-orange-950/30 hover:border-orange-500/50 hover:text-orange-400"
-                                )}
-                            >
-                                <Download className="w-3 h-3" />
-                                {(isGenerating || useFloorplanStore.getState().isGenerating3D) ? 'Generating...' : 'Generate & Download .blend'}
-                            </button>
-                        </div>
-                    </div>
-                )}
 
                 <div className="flex-1 flex flex-col overflow-y-auto min-h-0">
                     <div className="p-4 flex-1 flex flex-col justify-end">

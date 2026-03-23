@@ -403,6 +403,34 @@ export function Topbar() {
                             <Download className="w-3.5 h-3.5" />
                             {isGenerating3D ? 'Wait...' : 'IFC'}
                         </button>
+                        <button
+                            onClick={async () => {
+                                if (!token) return showToast("Please login to download", "error")
+                                try {
+                                    const res = await fetch(`/api/runs/${currentRunId}/svg/raw?t=${Date.now()}`, {
+                                        cache: 'no-store',
+                                        headers: { 'Authorization': `Bearer ${token}`, 'Cache-Control': 'no-cache' }
+                                    })
+                                    if (!res.ok) throw new Error(await res.text())
+                                    const blob = await res.blob()
+                                    const url = window.URL.createObjectURL(blob)
+                                    const a = document.createElement('a')
+                                    a.href = url
+                                    a.download = `inference_raw_${currentRunId}.svg`
+                                    document.body.appendChild(a)
+                                    a.click()
+                                    a.remove()
+                                    window.URL.revokeObjectURL(url)
+                                } catch (e: any) {
+                                    showToast("Failed to download SVG.", "error")
+                                }
+                            }}
+                            className="px-2.5 py-1.5 rounded-md text-xs font-medium bg-secondary/50 hover:bg-secondary flex items-center gap-1.5 transition-colors"
+                            title="Download Raw Inference SVG"
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                            SVG
+                        </button>
                     </div>
                 )}
 

@@ -79,6 +79,11 @@ export function useKeyboardShortcuts() {
                 case 's':
                     store.setActiveTool('resize')
                     break
+                case 'j':
+                    if (store.selectedId && store.walls.some(w => w.id === store.selectedId)) {
+                        store.setJoinMode(true)
+                    }
+                    break
                 case 'escape':
                     store.setActiveTool('select')
                     store.selectObject(null)
