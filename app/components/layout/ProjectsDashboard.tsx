@@ -87,6 +87,7 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
         try {
             if (!token) return
 
+            // 1. Restore calibration from run metadata
             try {
                 const metaRes = await fetch(`/api/runs/${runId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -103,6 +104,25 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                 }
             } catch { /* ignore */ }
 
+            // 2. Restore background image from server
+            try {
+                const imgPath = project.image_path || ''
+                const filename = imgPath.split(/[\\/]/).pop() || 'input_image.png'
+                const imgRes = await fetch(`/api/runs/${runId}/assets/${filename}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                if (imgRes.ok) {
+                    const blob = await imgRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    const img = new window.Image()
+                    img.onload = () => {
+                        setUploadedImage(url, img.width, img.height)
+                    }
+                    img.src = url
+                }
+            } catch { /* ignore — project may not have an image */ }
+
+            // 3. Restore floorplan SVG (walls, doors, windows, furniture)
             const svgRes = await fetch(`/api/runs/${runId}/svg`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })

@@ -229,14 +229,14 @@ export const useFloorplanStore = create<FloorplanState>()(
         joinTargetId: null,
         joinPreviewWalls: null,
 
-        token: (typeof window !== 'undefined' ? sessionStorage.getItem('google_token') : null) || null,
+        token: (typeof window !== 'undefined' ? localStorage.getItem('google_token') : null) || null,
         user: null,
 
         setToken: (token) => set((state) => {
             state.token = token
             if (typeof window !== 'undefined') {
-                if (token) sessionStorage.setItem('google_token', token)
-                else sessionStorage.removeItem('google_token')
+                if (token) localStorage.setItem('google_token', token)
+                else localStorage.removeItem('google_token')
             }
         }),
         setUser: (user) => set((state) => { state.user = user }),
