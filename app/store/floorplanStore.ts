@@ -155,6 +155,7 @@ export interface FloorplanState {
     addImportedFurniture: (payload: { id: string; label?: string; relPath: string }) => void
     importFurnAiModel: (payload: { id: string, type: string, position: Vector2, modelUrl: string, furnAiId: string, label: string }) => void
     updateFurniturePosition: (id: string, position: { x?: number; y?: number; z?: number }) => void
+    resetFloorplan: () => void
     importFromSVG: (svgText: string) => void
     exportToSVG: () => string
     handleDrop: (type: string, x: number, y: number) => void
@@ -1176,6 +1177,23 @@ export const useFloorplanStore = create<FloorplanState>()(
             if (room) {
                 Object.assign(room, updates)
             }
+        }),
+
+        resetFloorplan: () => set((state) => {
+            state.walls = []
+            state.furniture = []
+            state.rooms = []
+            state.labels = []
+            state.uploadedImage = null
+            state.imageDimensions = { width: 0, height: 0 }
+            state.calibrationFactor = 1
+            state.isCalibrated = false
+            state.selectedObjectId = null
+            state.currentRunId = null
+            state.runStatus = null
+            state.tutorialStep = 'upload'
+            ;(state as any).history = []
+            ;(state as any).historyIndex = -1
         }),
 
         importFromSVG: (svgText) => set((state) => {

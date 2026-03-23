@@ -22,7 +22,7 @@ function formatTimestamp(iso: string): string {
 }
 
 export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
-    const { token, user, setToken, setUser, currentRunId, setRunId, setRunStatus, setMode, setCalibrationFactor, setTutorialStep, setUploadedImage, setPendingFile } = useFloorplanStore()
+    const { token, user, setToken, setUser, currentRunId, setRunId, setRunStatus, setMode, setCalibrationFactor, setTutorialStep, setUploadedImage, setPendingFile, resetFloorplan } = useFloorplanStore()
     const [projects, setProjects] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -79,6 +79,9 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
     const handleLoad = async (project: any) => {
         const runId = project.job_id
         if (!runId) return
+
+        // Clear previous project state so nothing leaks between projects
+        resetFloorplan()
 
         setRunId(runId)
         setRunStatus(project.status === 'COMPLETED' ? 'completed' : 'processing')
