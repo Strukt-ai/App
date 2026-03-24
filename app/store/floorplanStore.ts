@@ -31,6 +31,7 @@ export type FurnItem = {
     rotation: { x: number; y: number; z: number }
     dimensions: { width: number; height: number; depth: number }
     modelUrl?: string
+    mtlUrl?: string
     furnAiId?: string // Link strictly to manifest AI items
     label?: string
     color?: string // Added
@@ -138,6 +139,9 @@ export interface FloorplanState {
     updateLabel: (id: string, label: string) => void
     updateWall: (id: string, updates: Partial<Wall>) => void
     updateRoom: (id: string, updates: Partial<Room>) => void
+
+    // Bulk replace (used by Room Designer bridge)
+    replaceScene: (payload: { walls: Wall[]; rooms: Room[]; furniture: FurnItem[]; labels?: TextLabel[] }) => void
 
     addFurniture: (type: string, position: Vector2) => void
     addImportedFurniture: (payload: { id: string; label?: string; relPath: string }) => void
@@ -1101,6 +1105,13 @@ export const useFloorplanStore = create<FloorplanState>()(
             if (room) {
                 Object.assign(room, updates)
             }
+        }),
+
+        replaceScene: (payload) => set((state) => {
+            state.walls = payload.walls
+            state.rooms = payload.rooms
+            state.furniture = payload.furniture
+            if (payload.labels) state.labels = payload.labels
         }),
 
         importFromSVG: (svgText) => set((state) => {

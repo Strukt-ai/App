@@ -4,22 +4,33 @@
  */
 
 export const BACKEND_CONFIG = {
-  // Always use HTTP proxy; backend now lives externally
-  DIRECT_CALL: false,
+  // Use direct function calls instead of HTTP proxy
+  // Set to true in production for integrated deployment
+  DIRECT_CALL: process.env.BACKEND_DIRECT_CALL === 'true',
 
-  // HTTP backend URL (for proxy) - must be provided explicitly
-  HTTP_URL: process.env.NEXT_PUBLIC_BACKEND_URL || '',
+  // Fallback to HTTP if direct call fails
+  FALLBACK_TO_HTTP: process.env.BACKEND_FALLBACK !== 'false',
+
+  // HTTP backend URL (for proxy/fallback)
+  HTTP_URL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000',
+
+  // Path to Python backend folder
+  BACKEND_PATH: process.env.BACKEND_PATH || './backend',
+
+  // Enable Python subprocess execution
+  ENABLE_PYTHON_SUBPROCESS: process.env.ENABLE_PYTHON_SUBPROCESS === 'true',
+
+  // Python executable path
+  PYTHON_EXECUTABLE: process.env.PYTHON_EXECUTABLE || 'python3',
 }
 
 export function isDirectCallEnabled(): boolean {
-  // Direct calls are disabled when backend is external
-  return false
+  return BACKEND_CONFIG.DIRECT_CALL && typeof window === 'undefined'
 }
 
 export function getBackendUrl(): string {
-  const url = BACKEND_CONFIG.HTTP_URL
-  if (!url) {
-    throw new Error('BACKEND_URL is not configured. Set NEXT_PUBLIC_BACKEND_URL in your environment.')
+  if (isDirectCallEnabled()) {
+    return 'direct://'
   }
-  return url
+  return BACKEND_CONFIG.HTTP_URL
 }

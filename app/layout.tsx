@@ -6,13 +6,9 @@ import './App.css'
 export const metadata: Metadata = {
   title: 'Strukt.AI - AI-Powered Floor Planning',
   description: 'Create stunning 3D floor plans with AI assistance',
-  icons: {
-    icon: '/logo.png',
-    apple: '/logo.png',
-  },
 }
 
-const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""
+const CLIENT_ID = "56909186950-20kpuogci6mlge54871pks80e06941cr.apps.googleusercontent.com"
 
 export default function RootLayout({
   children,

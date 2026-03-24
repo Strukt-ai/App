@@ -1,15 +1,19 @@
 'use client'
 
-import { Upload, Loader2, MousePointer2, Box } from 'lucide-react'
+import { Upload, Loader2, MousePointer2, Box, RotateCw, Trash2, Tag } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { JobQueuePanel } from '@/components/layout/JobQueuePanel'
 
 export function RightSidebar() {
     const activeTool = useFloorplanStore(s => s.activeTool)
     const mode = useFloorplanStore(s => s.mode)
     const token = useFloorplanStore(s => s.token)
+    const selectedId = useFloorplanStore(s => s.selectedId)
+    const furniture = useFloorplanStore(s => s.furniture)
+    const updateFurniture = useFloorplanStore(s => s.updateFurniture)
+    const deleteObject = useFloorplanStore(s => s.deleteObject)
 
 
     // --- AI / SAM3D State ---
@@ -19,6 +23,13 @@ export function RightSidebar() {
     const [statusMsg, setStatusMsg] = useState('')
     const [masks, setMasks] = useState<any[]>([])
 
+    const selectedFurn = useMemo(
+        () => furniture.find(f => f.id === selectedId),
+        [furniture, selectedId]
+    )
+
+    const [sizeDraft, setSizeDraft] = useState({ width: '', height: '', depth: '' })
+    const [labelDraft, setLabelDraft] = useState('')
 
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -27,7 +38,73 @@ export function RightSidebar() {
     // Show sidebar if:
     // 1. "Furniture" tool (now AI Reconstruction) is active
     // 2. Mode is "3d" (3D Options/Results)
-    const isVisible = activeTool === 'furniture' || mode === '3d'
+    // 3. An item is selected (for size/label edits)
+    const isVisible = activeTool === 'furniture' || mode === '3d' || !!selectedFurn
+
+    const mToCm = (v: number) => v * 100
+
+    useEffect(() => {
+        if (!selectedFurn) {
+            setSizeDraft({ width: '', height: '', depth: '' })
+            setLabelDraft('')
+            return
+        }
+        setSizeDraft({
+            width: selectedFurn.dimensions.width.toFixed(2),
+            height: selectedFurn.dimensions.height.toFixed(2),
+            depth: selectedFurn.dimensions.depth.toFixed(2),
+        })
+        setLabelDraft(selectedFurn.label || selectedFurn.type || '')
+    }, [
+        selectedFurn?.id,
+        selectedFurn?.dimensions.width,
+        selectedFurn?.dimensions.height,
+        selectedFurn?.dimensions.depth,
+        selectedFurn?.label,
+        selectedFurn?.type,
+    ])
+
+    const commitSize = () => {
+        if (!selectedFurn) return
+        const width = parseFloat(sizeDraft.width)
+        const height = parseFloat(sizeDraft.height)
+        const depth = parseFloat(sizeDraft.depth)
+        if (!isFinite(width) || !isFinite(height) || !isFinite(depth) || width <= 0 || height <= 0 || depth <= 0) {
+            return
+        }
+        updateFurniture(selectedFurn.id, {
+            dimensions: { width, height, depth }
+        })
+
+        const bp = (window as any).__BP3D_INSTANCE__
+        const item = bp?.model?.scene?.getItems?.()?.find((it: any) => it?.metadata?.storeId === selectedFurn.id)
+        if (item?.resize) {
+            item.resize(mToCm(height), mToCm(width), mToCm(depth))
+        }
+    }
+
+    const commitLabel = () => {
+        if (!selectedFurn) return
+        updateFurniture(selectedFurn.id, { label: labelDraft })
+        const bp = (window as any).__BP3D_INSTANCE__
+        const item = bp?.model?.scene?.getItems?.()?.find((it: any) => it?.metadata?.storeId === selectedFurn.id)
+        if (item?.metadata) {
+            item.metadata.itemName = labelDraft
+        }
+    }
+
+    const rotateBy = (deg: number) => {
+        if (!selectedFurn) return
+        const delta = (deg * Math.PI) / 180
+        const next = (selectedFurn.rotation?.y || 0) + delta
+        updateFurniture(selectedFurn.id, { rotation: { y: next } })
+        const bp = (window as any).__BP3D_INSTANCE__
+        const item = bp?.model?.scene?.getItems?.()?.find((it: any) => it?.metadata?.storeId === selectedFurn.id)
+        if (item) {
+            item.rotation.y = next
+            item.scene.needsUpdate = true
+        }
+    }
 
     // --- AI Handlers ---
 
@@ -237,6 +314,87 @@ export function RightSidebar() {
 
     return (
         <div className="w-[320px] border-l bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-hidden animate-in slide-in-from-right duration-300">
+
+            {/* Selected Item Controls */}
+            {selectedFurn && (
+                <div className="p-4 border-b bg-secondary/5">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Selected Item</h3>
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground uppercase font-bold">Label</label>
+                            <div className="flex items-center gap-2">
+                                <Tag className="w-4 h-4 text-muted-foreground/70" />
+                                <input
+                                    type="text"
+                                    value={labelDraft}
+                                    onChange={(e) => setLabelDraft(e.target.value)}
+                                    onBlur={commitLabel}
+                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                                    placeholder="Item label..."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[10px] text-muted-foreground uppercase font-bold">Size (m)</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={sizeDraft.width}
+                                    onChange={(e) => setSizeDraft(s => ({ ...s, width: e.target.value }))}
+                                    onBlur={commitSize}
+                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="W"
+                                />
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={sizeDraft.height}
+                                    onChange={(e) => setSizeDraft(s => ({ ...s, height: e.target.value }))}
+                                    onBlur={commitSize}
+                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="H"
+                                />
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={sizeDraft.depth}
+                                    onChange={(e) => setSizeDraft(s => ({ ...s, depth: e.target.value }))}
+                                    onBlur={commitSize}
+                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="D"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => rotateBy(-15)}
+                                className="flex-1 flex items-center justify-center gap-2 rounded-md border border-border bg-secondary/30 py-2 text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                            >
+                                <RotateCw className="w-3 h-3 rotate-180" />
+                                Rotate -15°
+                            </button>
+                            <button
+                                onClick={() => rotateBy(15)}
+                                className="flex-1 flex items-center justify-center gap-2 rounded-md border border-border bg-secondary/30 py-2 text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                            >
+                                <RotateCw className="w-3 h-3" />
+                                Rotate +15°
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => deleteObject(selectedFurn.id)}
+                            className="w-full flex items-center justify-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 py-2 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors"
+                        >
+                            <Trash2 className="w-3 h-3" />
+                            Delete Item
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* --- AI Reconstruction Panel (Visible when activeTool === 'furniture') --- */}
             {activeTool === 'furniture' && (

@@ -1,0 +1,14 @@
+App/public/rooms/textures/blank.png
+App/public/rooms/textures/hardwood.png
+App/public/rooms/textures/light_brick.jpg
+App/public/rooms/textures/light_fine_wood.jpg
+App/public/rooms/textures/marbletiles.jpg
+App/public/rooms/textures/tile-01.jpg
+App/public/rooms/textures/tile-02.jpg
+App/public/rooms/textures/walllightmap.png
+App/public/rooms/textures/wallmap.png
+App/public/rooms/textures/wallmap_yellow.png
+App/public/rooms/thumbnails/thumbnail_light_brick.jpg
+App/public/rooms/thumbnails/thumbnail_light_fine_wood.jpg
+App/public/rooms/thumbnails/thumbnail_marbletiles.jpg
+App/public/rooms/thumbnails/thumbnail_wallmap_yellow.png

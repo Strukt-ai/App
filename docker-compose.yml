@@ -9,15 +9,17 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      BACKEND_DIRECT_CALL: "false"
+      BACKEND_DIRECT_CALL: "true"
+      ENABLE_PYTHON_SUBPROCESS: "true"
+      PYTHON_EXECUTABLE: /usr/bin/python3
       NEXT_PUBLIC_API_URL: http://localhost:3000/api
-      NEXT_PUBLIC_BACKEND_URL: "https://api.myapp.com"   # set to your backend URL
+      NEXT_PUBLIC_BACKEND_URL: direct://
     volumes:
-      - ./app:/app/app    # frontend code only
+      - ./backend:/app/backend
+      - ./app:/app/app
     depends_on:
       - postgres
       - redis
-    # backend service is external; not managed by compose
     networks:
       - strukt
 

@@ -1,4 +1,4 @@
-# Multi-stage build: Node.js application only (backend is external)
+# Multi-stage build: Node.js + Python Backend
 
 # Stage 1: Build Next.js app
 FROM node:20-alpine AS nodejs-builder
@@ -15,8 +15,17 @@ COPY . .
 # Build Next.js
 RUN npm run build
 
-# Stage 2: Runtime image with Node.js only
+# Stage 2: Runtime image with Node.js + Python
 FROM node:20-alpine
+
+# Install Python and required system dependencies
+RUN apk add --no-cache \
+    python3 \
+    python3-dev \
+    py3-pip \
+    build-base \
+    opencv-dev \
+    && ln -sf python3 /usr/bin/python
 
 WORKDIR /app
 
@@ -29,6 +38,12 @@ COPY --from=nodejs-builder /app/tsconfig.json ./
 COPY --from=nodejs-builder /app/next.config.ts ./
 COPY --from=nodejs-builder /app/tailwind.config.js ./
 
+# Copy backend folder
+COPY backend ./backend
+
+# Install Python dependencies
+RUN cd backend && pip install --no-cache-dir -r requirements.txt && cd ..
+
 # Copy prisma schema for potential migrations
 COPY prisma ./prisma
 
@@ -39,8 +54,10 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-# Start application with HTTP backend configuration
-ENV BACKEND_DIRECT_CALL=false
+# Start application with direct backend calls enabled
+ENV BACKEND_DIRECT_CALL=true
+ENV ENABLE_PYTHON_SUBPROCESS=true
+ENV PYTHON_EXECUTABLE=/usr/bin/python3
 ENV NODE_ENV=production
 
 CMD ["npm", "start"]

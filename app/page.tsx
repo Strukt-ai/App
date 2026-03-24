@@ -1,12 +1,9 @@
-"use client"
+// root page now acts as a lightweight "templates" landing screen.  the
+// heavy editor component is moved to /editor so that the user is not
+// dropped straight into the project on first load.
 
-import { useState } from 'react'
-import dynamic from 'next/dynamic'
+import { TemplateGrid } from './components/TemplateGrid'
 
-// Dynamically load the heavy editor; no server-side rendering
-const App = dynamic(() => import('./components/App'), { ssr: false })
-
-export default function HomePage() {
-  return <App />
+export default function Home() {
+  return <TemplateGrid />
 }
-

@@ -11,10 +11,11 @@ echo ""
 
 # Check environment
 if [ -z "$1" ]; then
-    echo "Usage: ./start.sh [dev|docker|aws]"
+    echo "Usage: ./start.sh [dev|prod|docker|aws]"
     echo ""
     echo "Options:"
-    echo "  dev      - Start front end pointing at external HTTP backend"
+    echo "  dev      - Start with HTTP proxy (local Python backend on :8000)"
+    echo "  prod     - Start with direct backend calls (monolithic)"
     echo "  docker   - Start with Docker Compose (includes PostgreSQL + Redis)"
     echo "  aws      - Deploy to AWS App Runner"
     echo ""
@@ -25,17 +26,35 @@ MODE=$1
 
 case $MODE in
     dev)
-        echo "🚀 Starting in DEVELOPMENT mode (external backend)..."
+        echo "🚀 Starting in DEVELOPMENT mode (HTTP proxy)..."
         echo ""
         echo "Requirements:"
-        echo "  - Python backend running at the URL specified by NEXT_PUBLIC_BACKEND_URL"
+        echo "  - Python backend running on http://127.0.0.1:8000"
+        echo "  - Next.js will proxy API calls to Python backend"
         echo ""
-        echo "Set environment variables if needed (defaults to http://localhost:8000):"
+        echo "Start Python backend first:"
+        echo "  cd backend"
+        echo "  python fastapi_main.py"
+        echo ""
+        echo "Then start Next.js:"
         export BACKEND_DIRECT_CALL=false
-        export NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://127.0.0.1:8000}
+        export NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
         npm run dev
         ;;
 
+    prod)
+        echo "🚀 Starting in PRODUCTION mode (direct calls)..."
+        echo ""
+        echo "Setup requirements:"
+        echo "  - Install Python dependencies: pip install -r backend/requirements.txt"
+        echo "  - Backend functions will be called directly (no HTTP)"
+        echo ""
+        export NODE_ENV=production
+        export BACKEND_DIRECT_CALL=true
+        export ENABLE_PYTHON_SUBPROCESS=true
+        npm run build
+        npm start
+        ;;
 
     docker)
         echo "🐳 Starting with Docker Compose..."

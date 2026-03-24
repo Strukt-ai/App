@@ -201,10 +201,42 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
     return (
         <>
-            <div className="w-64 border-r bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-y-auto custom-scrollbar">
+            <div className="w-164 border-r bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-y-auto custom-scrollbar">
                 <div className="p-4 border-b">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tools</h3>
                     <div className="flex flex-col gap-2">
+                        {/* Plan Controls */}
+                        <div className="rounded-lg border border-border bg-secondary/10 p-3">
+                            <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Plan</h4>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button
+                                    id="new"
+                                    type="button"
+                                    className="flex flex-col items-center justify-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-2 text-[9px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                                >
+                                    <Plus className="h-3 w-3" />
+                                    New
+                                </button>
+                                <button
+                                    id="saveFile"
+                                    type="button"
+                                    className="flex flex-col items-center justify-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-2 text-[9px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                                >
+                                    <Download className="h-3 w-3" />
+                                    Save
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => document.getElementById('loadFile')?.click()}
+                                    className="flex flex-col items-center justify-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-2 text-[9px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                                >
+                                    <FolderOpen className="h-3 w-3" />
+                                    Load
+                                </button>
+                                <input id="loadFile" type="file" className="hidden" accept=".blueprint3d,.json,.txt" />
+                            </div>
+                        </div>
+
                         {/* Add Element Button */}
                         <div className="relative">
                             <button
@@ -334,6 +366,23 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                                     <span className="text-[9px] text-white/40 block">SAM 3D Segmentation</span>
                                 </div>
                             </button>
+                        </div>
+
+                        {/* Add Items Catalog (Blueprint3D) */}
+                        <div className={cn(
+                            "overflow-hidden transition-all duration-300",
+                            furnMenuOpen ? "max-h-[520px] mt-2 opacity-100" : "max-h-0 opacity-0"
+                        )}>
+                            <div className="rounded-lg border border-border bg-secondary/10 p-2">
+                                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                                    Add Items
+                                </div>
+                                <div className="bp3d-items-panel max-h-[440px] overflow-y-auto custom-scrollbar rounded-md">
+                                    <div id="add-items">
+                                        <div id="items-wrapper" className="row" />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Edit Button with Dropdown (Keep existing) */}

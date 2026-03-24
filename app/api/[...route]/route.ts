@@ -3,7 +3,7 @@ import { callBackend } from '@/lib/backend-adapter'
 
 async function handler(request: NextRequest) {
   try {
-    const path = request.nextUrl.pathname
+    const path = request.nextUrl.pathname.replace(/^\/api/, '')
     const queryString = request.nextUrl.search
 
     const method = request.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD'
@@ -18,18 +18,16 @@ async function handler(request: NextRequest) {
 
     // Parse body
     let body: unknown = undefined
-    let rawBody: Buffer | undefined = undefined
     if (method !== 'GET' && method !== 'HEAD') {
-      const contentType = headers['content-type'] || ''
-      if (contentType.includes('application/json')) {
+      const contentType = headers['content-type']
+      if (contentType && contentType.includes('application/json')) {
         try {
           body = JSON.parse(await request.text())
         } catch {
           body = await request.text()
         }
       } else if (request.body) {
-        // Binary / multipart / SVG — read raw bytes for passthrough
-        rawBody = Buffer.from(await request.arrayBuffer())
+        body = await request.blob()
       }
     }
 
@@ -43,18 +41,14 @@ async function handler(request: NextRequest) {
     const response = await callBackend({
       path,
       method,
-      body: rawBody ?? body,
+      body,
       query,
       headers
     })
 
     // Create headers for response
     const newHeaders = new Headers(response.headers)
-    const allowedOrigins = (process.env.NEXT_PUBLIC_ALLOWED_ORIGINS || 'http://localhost:3000').split(',')
-    const reqOrigin = request.headers.get('origin') || ''
-    if (allowedOrigins.includes(reqOrigin)) {
-      newHeaders.set('Access-Control-Allow-Origin', reqOrigin)
-    }
+    newHeaders.set('Access-Control-Allow-Origin', '*')
     newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
     newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
