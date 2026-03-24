@@ -62,7 +62,7 @@ case $MODE in
         echo ""
         echo "✅ Services started!"
         echo "📍 App: http://localhost:3000"
-        echo "📊 PostgreSQL: localhost:5432 (user: strukt, pass: strukt-dev-password)"
+        echo "📊 PostgreSQL: localhost:5432 (user: strukt, pass: see POSTGRES_PASSWORD env var)"
         echo "🔴 Redis: localhost:6379"
         echo ""
         echo "View logs: docker-compose logs -f"

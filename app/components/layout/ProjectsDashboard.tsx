@@ -148,6 +148,10 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
 
         setCreating(true)
         try {
+            // Clear old project state before creating new one
+            resetFloorplan()
+            setRunId(null)
+
             // Show image preview locally
             const reader = new FileReader()
             reader.onload = (ev) => {
