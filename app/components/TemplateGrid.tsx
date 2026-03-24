@@ -172,6 +172,8 @@ export function TemplateGrid() {
 
   const handleLoadProject = (project: any) => {
     const store = useFloorplanStore.getState()
+    // Reset previous project state before loading new one
+    store.resetFloorplan()
     store.setRunId(project.job_id)
     store.setRunStatus(project.status === 'COMPLETED' ? 'completed' : project.status === 'FAILED' ? 'failed' : 'processing')
     store.setMode('2d')
@@ -182,7 +184,7 @@ export function TemplateGrid() {
       try {
         const headers = { 'Authorization': `Bearer ${token}` }
 
-        // 1. Restore calibration from run meta
+        // 1. Restore calibration from run meta FIRST (needed before SVG import)
         const metaRes = await fetch(`/api/runs/${project.job_id}`, { headers })
         if (metaRes.ok) {
           const meta = await metaRes.json()
@@ -193,25 +195,30 @@ export function TemplateGrid() {
             useFloorplanStore.getState().setCalibrationFactor(parsed)
             useFloorplanStore.getState().setTutorialStep('none')
           }
+          // else: keep default 0.01 (1px = 1cm) — correct for backend-generated SVGs
         }
 
-        // 2. Restore background image from server
+        // 2. Restore background image from server (await so dimensions are set before SVG import)
         try {
           const imgRes = await fetch(`/api/runs/${project.job_id}/download/input_image.png`, { headers })
           if (imgRes.ok) {
             const blob = await imgRes.blob()
             const url = URL.createObjectURL(blob)
-            const img = new window.Image()
-            img.onload = () => {
-              useFloorplanStore.getState().setUploadedImage(url, img.naturalWidth, img.naturalHeight)
-            }
-            img.src = url
+            await new Promise<void>((resolve) => {
+              const img = new window.Image()
+              img.onload = () => {
+                useFloorplanStore.getState().setUploadedImage(url, img.naturalWidth, img.naturalHeight)
+                resolve()
+              }
+              img.onerror = () => resolve()
+              img.src = url
+            })
           }
         } catch (e) {
           console.warn('[TemplateGrid] Could not restore background image', e)
         }
 
-        // 3. Load SVG (walls, rooms, furniture placements)
+        // 3. Load SVG (walls, rooms, furniture placements) — after calibration + image are set
         const svgRes = await fetch(`/api/runs/${project.job_id}/svg`, { headers })
         if (svgRes.ok) {
           const svgText = await svgRes.text()

@@ -357,7 +357,19 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const snap = 0.1
                 const safeX = isNaN(point.x) ? 0 : Math.min(Math.max(point.x, -50), 50)
                 const safeY = isNaN(point.y) ? 0 : Math.min(Math.max(point.y, -50), 50)
-                const sp = { x: Math.round(safeX / snap) * snap, y: Math.round(safeY / snap) * snap }
+                let sp = { x: Math.round(safeX / snap) * snap, y: Math.round(safeY / snap) * snap }
+
+                // Snap start point to existing wall endpoints
+                const ENDPOINT_SNAP = 0.25
+                for (const other of state.walls) {
+                    for (const ep of [other.start, other.end]) {
+                        if (Math.abs(sp.x - ep.x) < ENDPOINT_SNAP && Math.abs(sp.y - ep.y) < ENDPOINT_SNAP) {
+                            sp = { x: ep.x, y: ep.y }
+                            break
+                        }
+                    }
+                }
+
                 state.walls.push({
                     id,
                     start: sp,
@@ -403,22 +415,40 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const wall = state.walls.find(w => w.id === targetId)
                 if (wall) {
                     wall.end = sp
-                    // Auto-straighten to 90 degrees (orthogonal snapping) by default.
-                    // If Shift is held, force absolute exact ortho.
-                    // Otherwise, soft snap if within a tolerance (e.g., 0.5m deviation).
-                    const dx = Math.abs(wall.end.x - wall.start.x)
-                    const dy = Math.abs(wall.end.y - wall.start.y)
-                    const SNAP_TOLERANCE = 0.5 // meters
 
-                    if (options?.shiftKey) {
-                        if (dx > dy) wall.end.y = wall.start.y
-                        else wall.end.x = wall.start.x
-                    } else {
-                        // Soft snap
-                        if (dy < SNAP_TOLERANCE && dx > dy) {
-                            wall.end.y = wall.start.y // Snap horizontal
-                        } else if (dx < SNAP_TOLERANCE && dy > dx) {
-                            wall.end.x = wall.start.x // Snap vertical
+                    // Snap to existing wall endpoints (magnetic connect)
+                    const ENDPOINT_SNAP = 0.25 // meters — snap to nearby wall corners
+                    let snappedToEndpoint = false
+                    for (const other of state.walls) {
+                        if (other.id === wall.id) continue
+                        for (const ep of [other.start, other.end]) {
+                            const edx = Math.abs(wall.end.x - ep.x)
+                            const edy = Math.abs(wall.end.y - ep.y)
+                            if (edx < ENDPOINT_SNAP && edy < ENDPOINT_SNAP) {
+                                wall.end = { x: ep.x, y: ep.y }
+                                snappedToEndpoint = true
+                                break
+                            }
+                        }
+                        if (snappedToEndpoint) break
+                    }
+
+                    // Auto-straighten to 90 degrees (orthogonal snapping) — skip if snapped to endpoint
+                    if (!snappedToEndpoint) {
+                        const dx = Math.abs(wall.end.x - wall.start.x)
+                        const dy = Math.abs(wall.end.y - wall.start.y)
+                        const SNAP_TOLERANCE = 0.5 // meters
+
+                        if (options?.shiftKey) {
+                            if (dx > dy) wall.end.y = wall.start.y
+                            else wall.end.x = wall.start.x
+                        } else {
+                            // Soft snap
+                            if (dy < SNAP_TOLERANCE && dx > dy) {
+                                wall.end.y = wall.start.y // Snap horizontal
+                            } else if (dx < SNAP_TOLERANCE && dy > dx) {
+                                wall.end.x = wall.start.x // Snap vertical
+                            }
                         }
                     }
                 }
@@ -1187,7 +1217,7 @@ export const useFloorplanStore = create<FloorplanState>()(
             state.labels = []
             state.uploadedImage = null
             state.imageDimensions = { width: 0, height: 0 }
-            state.calibrationFactor = 1
+            state.calibrationFactor = 0.01 // Default 1px = 1cm
             state.isCalibrated = false
             state.selectedId = null
             state.currentRunId = null

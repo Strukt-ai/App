@@ -107,7 +107,7 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                 }
             } catch { /* ignore */ }
 
-            // 2. Restore background image from server
+            // 2. Restore background image from server (await so dimensions are set before SVG import)
             try {
                 const imgPath = project.image_path || ''
                 const filename = imgPath.split(/[\\/]/).pop() || 'input_image.png'
@@ -117,11 +117,15 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                 if (imgRes.ok) {
                     const blob = await imgRes.blob()
                     const url = URL.createObjectURL(blob)
-                    const img = new window.Image()
-                    img.onload = () => {
-                        setUploadedImage(url, img.width, img.height)
-                    }
-                    img.src = url
+                    await new Promise<void>((resolve) => {
+                        const img = new window.Image()
+                        img.onload = () => {
+                            setUploadedImage(url, img.width, img.height)
+                            resolve()
+                        }
+                        img.onerror = () => resolve()
+                        img.src = url
+                    })
                 }
             } catch { /* ignore — project may not have an image */ }
 

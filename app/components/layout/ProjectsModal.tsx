@@ -102,6 +102,8 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
         const runId = project.job_id
         if (!runId) return
 
+        // Reset previous project state before loading
+        useFloorplanStore.getState().resetFloorplan()
         setRunId(runId)
         setRunStatus(project.status === 'COMPLETED' ? 'completed' : 'processing')
         setMode('2d')
@@ -109,11 +111,11 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
 
         try {
             if (!token) return
+            const headers = { 'Authorization': `Bearer ${token}` }
 
+            // 1. Restore calibration from run meta
             try {
-                const metaRes = await fetch(`/api/runs/${runId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
+                const metaRes = await fetch(`/api/runs/${runId}`, { headers })
                 if (metaRes.ok) {
                     const meta = await metaRes.json().catch(() => ({} as any))
                     const rm = meta?.run_meta || {}
@@ -128,9 +130,26 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                 // ignore
             }
 
-            const svgRes = await fetch(`/api/runs/${runId}/svg`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
+            // 2. Restore background image (await so dimensions are set before SVG import)
+            try {
+                const imgRes = await fetch(`/api/runs/${runId}/download/input_image.png`, { headers })
+                if (imgRes.ok) {
+                    const blob = await imgRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    await new Promise<void>((resolve) => {
+                        const img = new window.Image()
+                        img.onload = () => {
+                            useFloorplanStore.getState().setUploadedImage(url, img.naturalWidth, img.naturalHeight)
+                            resolve()
+                        }
+                        img.onerror = () => resolve()
+                        img.src = url
+                    })
+                }
+            } catch { /* ignore */ }
+
+            // 3. Load SVG after calibration + image are set
+            const svgRes = await fetch(`/api/runs/${runId}/svg`, { headers })
             if (svgRes.ok) {
                 const svgText = await svgRes.text()
                 useFloorplanStore.getState().importFromSVG(svgText)
