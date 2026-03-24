@@ -10,7 +10,9 @@ const ALLOWED_PREFIXES = [
   '/api/admin',
   '/api/debug',
   '/api/proxy-glb',
-  '/api/payments',
+  '/api/checkout',
+  '/api/billing',
+  '/api/webhooks',
   '/api/user',
 ]
 
