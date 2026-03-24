@@ -289,8 +289,8 @@ export function Topbar() {
 
                                 // If not generating, trigger it AND wait.
                                 if (runStatus !== 'processing') {
-                                    showToast("Generating High Quality 3D Model...", "info")
-                                    await useFloorplanStore.getState().triggerBlenderGeneration()
+                                    showToast("Generating Blender file...", "info")
+                                    await useFloorplanStore.getState().triggerBlenderGeneration(['blend'])
                                     let attempts = 0;
                                     const pollInterval = setInterval(async () => {
                                         attempts++;
@@ -342,8 +342,8 @@ export function Topbar() {
                                 }
 
                                 if (runStatus !== 'processing') {
-                                    showToast("Generating 3D Model for SketchUp...", "info")
-                                    await useFloorplanStore.getState().triggerBlenderGeneration()
+                                    showToast("Generating DAE for SketchUp...", "info")
+                                    await useFloorplanStore.getState().triggerBlenderGeneration(['dae'])
                                     let attempts = 0;
                                     const pollInterval = setInterval(async () => {
                                         attempts++;
@@ -395,8 +395,8 @@ export function Topbar() {
                                 }
 
                                 if (runStatus !== 'processing') {
-                                    showToast("Generating 3D Model for Revit...", "info")
-                                    await useFloorplanStore.getState().triggerBlenderGeneration()
+                                    showToast("Generating IFC for Revit...", "info")
+                                    await useFloorplanStore.getState().triggerBlenderGeneration(['ifc'])
                                     let attempts = 0;
                                     const pollInterval = setInterval(async () => {
                                         attempts++;

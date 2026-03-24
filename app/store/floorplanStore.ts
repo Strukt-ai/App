@@ -142,7 +142,7 @@ export interface FloorplanState {
 
     calibrate: (wallId: string, realLength: number) => void
     syncSVGAndEnter3D: () => Promise<void>
-    triggerBlenderGeneration: () => Promise<void>
+    triggerBlenderGeneration: (formats?: string[]) => Promise<void>
     triggerRender: () => Promise<void>
     toggleBackground: () => void
 
@@ -1019,7 +1019,7 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
         },
 
-        triggerBlenderGeneration: async () => {
+        triggerBlenderGeneration: async (formats?: string[]) => {
             const state = useFloorplanStore.getState()
             if (!state.currentRunId || !state.isCalibrated) return
 
@@ -1032,12 +1032,13 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const headers: Record<string, string> = { 'Content-Type': 'application/json' }
                 if (state.token) headers['Authorization'] = `Bearer ${state.token}`
 
-                // Explicitly request a Blender Generation job
+                // Only generate requested formats (default: GLB only for web preview)
                 const res = await fetch(`/api/runs/${state.currentRunId}/generate-3d`, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
-                        scale: state.exportScale || state.calibrationFactor
+                        scale: state.exportScale || state.calibrationFactor,
+                        formats: formats || ['glb']
                     })
                 })
 
