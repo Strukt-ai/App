@@ -52,6 +52,9 @@ function SvgOverlayPlane() {
     const currentRunId = useFloorplanStore(s => s.currentRunId)
     const token = useFloorplanStore(s => s.token)
     const calibrationFactor = useFloorplanStore(s => s.calibrationFactor)
+    const imageDimensions = useFloorplanStore(s => s.imageDimensions)
+    const imageWorldWidth = useFloorplanStore(s => s.imageWorldWidth)
+    const imageWorldHeight = useFloorplanStore(s => s.imageWorldHeight)
 
     const [blobUrl, setBlobUrl] = useState<string | null>(null)
     const [vb, setVb] = useState<{ w: number; h: number } | null>(null)
@@ -121,9 +124,10 @@ function SvgOverlayPlane() {
     if (mode !== '3d') return null
     if (!blobUrl || !vb) return null
 
+    // Match BackgroundPlane sizing so SVG overlay aligns exactly with the image
     const factor = calibrationFactor > 0 ? calibrationFactor : 0.02
-    const width = vb.w * factor
-    const height = vb.h * factor
+    const width = imageWorldWidth != null ? imageWorldWidth : (imageDimensions?.width || vb.w) * factor
+    const height = imageWorldHeight != null ? imageWorldHeight : (imageDimensions?.height || vb.h) * factor
 
     return (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} renderOrder={-1}>
