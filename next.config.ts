@@ -4,12 +4,12 @@ const isDev = process.env.NODE_ENV === 'development';
 
 const ContentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://static.cloudflareinsights.com https://checkout.razorpay.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com",
-  "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com",
-  "frame-src 'self' https://accounts.google.com",
+  "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://raw.githack.com https://cloudflareinsights.com https://checkout.razorpay.com",
+  "frame-src 'self' https://accounts.google.com https://api.razorpay.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
