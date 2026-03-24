@@ -152,8 +152,8 @@ function FitHandler() {
 
             scene.traverse((obj) => {
                 if (obj.type === 'Mesh') {
-                    // Include all relevant geometry for bounds
-                    if (obj.name === 'Wall' || obj.name === 'Floor' || obj.parent?.name === 'Item' || obj.name.includes('door') || obj.name.includes('window')) {
+                    // Include all relevant geometry for bounds (including background image so camera doesn't over-zoom)
+                    if (obj.name === 'Wall' || obj.name === 'Floor' || obj.name === 'BackgroundPlane' || obj.parent?.name === 'Item' || obj.name.includes('door') || obj.name.includes('window')) {
                         targets.push(obj)
                     }
                 }
@@ -455,6 +455,7 @@ function BackgroundPlane() {
 
     return (
         <mesh
+            name="BackgroundPlane"
             rotation={[-Math.PI / 2, 0, 0]}
             position={[0, -0.01, 0]} // On top of Ground
             receiveShadow
