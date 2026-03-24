@@ -3,49 +3,56 @@
 import { useState } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
-import { Scene } from '@/components/editor/Scene'
-import { RenderGallery } from '@/components/editor/RenderGallery'
 import { RightSidebar } from '@/components/layout/RightSidebar'
 import { FloatingUpgradeCard } from '@/components/layout/FloatingUpgradeCard'
 import { PremiumModal } from '@/components/layout/PremiumModal'
-import { FurnAIProcessingModal } from '@/components/layout/FurnAIProcessingModal' // New Import
-import { FurnAIQueueModal } from '@/components/layout/FurnAIQueueModal' // New Import
-import { GlobalToast } from '@/components/layout/GlobalToast' // New Import
-import { WelcomeScreen } from '@/components/layout/WelcomeScreen' // New Import
-import { useFloorplanStore } from '@/store/floorplanStore' // Import store
+import { FurnAIProcessingModal } from '@/components/layout/FurnAIProcessingModal'
+import { FurnAIQueueModal } from '@/components/layout/FurnAIQueueModal'
+import { GlobalToast } from '@/components/layout/GlobalToast'
+import { WelcomeScreen } from '@/components/layout/WelcomeScreen'
+import { useFloorplanStore } from '@/store/floorplanStore'
+import dynamic from 'next/dynamic'
+
+// Blueprint3D Room Designer - imported dynamically to avoid SSR issues
+const RoomDesignerEmbedded = dynamic(
+  () => import('@/components/editor/RoomDesignerEmbedded').then((mod) => mod.RoomDesignerEmbedded),
+  { ssr: false, loading: () => <div className="flex items-center justify-center w-full h-full bg-slate-900">Loading 3D Editor...</div> }
+)
 
 interface AppProps {
-  /**
-   * optional template id chosen from the landing page.  not used yet but
-   * passed through so that future logic can bootstrap the workspace.
-   */
   template?: string
 }
 
 function App({ template }: AppProps) {
-  const { showProcessingModal, setShowProcessingModal, showQueueModal, setShowQueueModal } = useFloorplanStore() // Store hook
+  const { showProcessingModal, setShowProcessingModal, showQueueModal, setShowQueueModal } = useFloorplanStore()
   const [showPremiumModal, setShowPremiumModal] = useState(false)
   const [showUpgradeCard, setShowUpgradeCard] = useState(true)
-  const [showWelcome, setShowWelcome] = useState(true) // Welcome State
+  const [showWelcome, setShowWelcome] = useState(true)
 
-  // if a template was supplied, you could open it automatically or
-  // prepopulate some state here.  placeholder hook:
-  // useEffect(() => { if (template) { /* loadTemplate(template) */ } }, [template])
+  // If welcome is shown, display welcome screen only
+  if (showWelcome) {
+    return (
+      <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
+        <WelcomeScreen onStart={() => setShowWelcome(false)} />
+      </div>
+    )
+  }
 
+  // Main editor view with Blueprint3D room designer
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
-      {showWelcome && <WelcomeScreen onStart={() => setShowWelcome(false)} />}
-
       <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
       <GlobalToast />
 
       <Topbar />
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar onLogout={() => setShowWelcome(true)} />
-        <Scene />
+        
+        {/* Blueprint3D Room Designer replaces old Scene component */}
+        <RoomDesignerEmbedded />
+        
         <RightSidebar />
 
-        {/* Floating Card positioned within the main content area (over scene) */}
         {showUpgradeCard && (
           <FloatingUpgradeCard
             onUpgrade={() => setShowPremiumModal(true)}
@@ -53,18 +60,10 @@ function App({ template }: AppProps) {
           />
         )}
       </div>
-      <RenderGallery />
 
-      {/* Processing Popup */}
-      <FurnAIProcessingModal
-        isOpen={showProcessingModal}
-      />
-
-      {/* Queue/Offline Popup */}
-      <FurnAIQueueModal
-        isOpen={showQueueModal}
-        onClose={() => setShowQueueModal(false)}
-      />
+      {/* Modals */}
+      <FurnAIProcessingModal isOpen={showProcessingModal} />
+      <FurnAIQueueModal isOpen={showQueueModal} onClose={() => setShowQueueModal(false)} />
     </div>
   )
 }
