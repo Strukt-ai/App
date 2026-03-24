@@ -41,7 +41,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
             })
             if (res.ok) {
                 const data = await res.json()
-                setProjects(data)
+                setProjects(data.filter((p: any) => !p.job_id?.startsWith('click_') && !p.job_id?.startsWith('furn_')))
             }
         } catch (e) {
             console.error("Failed to fetch projects", e)

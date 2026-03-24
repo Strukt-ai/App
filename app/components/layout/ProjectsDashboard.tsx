@@ -44,7 +44,8 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
             })
             if (res.ok) {
                 const data = await res.json()
-                setProjects(data)
+                // Filter out intermediate click/furn jobs — only show top-level projects
+                setProjects(data.filter((p: any) => !p.job_id?.startsWith('click_') && !p.job_id?.startsWith('furn_')))
             }
         } catch (e) {
             console.error("Failed to fetch projects", e)

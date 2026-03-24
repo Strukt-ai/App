@@ -32,8 +32,9 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
             try {
                 // 1. Try to fetch SVG (Best quality, shows edits)
                 // If a run is still processing, the SVG might appear shortly after; retry a few times.
-                const shouldRetrySvg = status !== 'FAILED'
-                const maxAttempts = shouldRetrySvg ? 4 : 1
+                const isClickJob = runId.startsWith('click_')
+                const shouldRetrySvg = status !== 'FAILED' && !isClickJob
+                const maxAttempts = shouldRetrySvg ? 3 : 1
                 for (let attempt = 0; attempt < maxAttempts; attempt++) {
                     const svgRes = await fetch(`/api/runs/${runId}/svg?t=${Date.now()}_${attempt}`, {
                         cache: 'no-store',
