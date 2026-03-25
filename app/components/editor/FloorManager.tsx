@@ -138,17 +138,21 @@ const RoomItem = memo(function RoomItem({
                 )}
             </mesh>
 
-            {/* Invisible Hit Plane for Dragging */}
+            {/* Click target for selection + dragging — sits above InteractionPlane (y=0.1) so clicks reach it */}
             <mesh
                 rotation={[-Math.PI / 2, 0, 0]}
-                position={[0, 0.003, 0]}
+                position={[0, 0.12, 0]}
                 geometry={geometry}
-                visible={false}
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onSelect(room.id)
+                }}
                 onPointerDown={(e) => {
                     e.stopPropagation()
                     onInteraction(room.id, e)
                 }}
             >
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
 
             {/* Room label - Hide in 3D Mode to avoid visual clutter */}

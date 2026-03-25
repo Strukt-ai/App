@@ -229,15 +229,17 @@ function InteractionLayer() {
         // propagation leaks through stopPropagation between sibling meshes.
         if (interactionType !== 'none') return
 
-        e.stopPropagation()
-
         if (activeTool === 'wall' || activeTool === 'ruler') {
+            e.stopPropagation()
             selectObject(null)
             startInteraction('drawing', null, { x: e.point.x, y: e.point.z })
         } else if (activeTool === 'floor') {
+            e.stopPropagation()
             selectObject(null)
             startInteraction('drawing_floor', null, { x: e.point.x, y: e.point.z })
         } else {
+            // For select/move tools, deselect but DON'T stopPropagation —
+            // let the click pass through to floor/wall meshes below
             selectObject(null)
         }
     }
