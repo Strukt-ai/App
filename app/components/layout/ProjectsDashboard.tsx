@@ -358,9 +358,10 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                                             "absolute top-2 right-2 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider backdrop-blur-md z-10",
                                             project.status === 'COMPLETED' ? "bg-green-500/20 text-green-400" :
                                                 project.status === 'FAILED' ? "bg-red-500/20 text-red-400" :
-                                                    "bg-blue-500/20 text-blue-400"
+                                                    project.status === 'QUEUED_OFFLINE' ? "bg-amber-500/20 text-amber-400" :
+                                                        "bg-blue-500/20 text-blue-400"
                                         )}>
-                                            {project.status}
+                                            {project.status === 'QUEUED_OFFLINE' ? 'QUEUED' : project.status}
                                         </div>
                                     </div>
 

@@ -506,7 +506,14 @@ export function Topbar() {
 
                                     if (res.status === 429) {
                                         const errData = await res.json().catch(() => ({ detail: '' }))
-                                        showToast(errData.detail || 'Token limit reached. Upgrade to Pro for more.', 'error')
+                                        const detail = errData.detail || ''
+                                        const isProjectLimit = detail.toLowerCase().includes('project limit')
+                                        if (isProjectLimit) {
+                                            showToast('Project limit reached. Delete an existing project to create a new one.', 'error')
+                                            useFloorplanStore.getState().setProjectsModalOpen(true)
+                                        } else {
+                                            showToast(detail || 'Token limit reached. Upgrade to Pro for 3x more tokens.', 'error')
+                                        }
                                         setRunStatus('idle')
                                         useFloorplanStore.getState().setShowProcessingModal(false)
                                         useFloorplanStore.getState().setShowQueueModal(false)
@@ -525,7 +532,7 @@ export function Topbar() {
                                         if (data.status === 'QUEUED_OFFLINE') {
                                             useFloorplanStore.getState().setShowProcessingModal(false)
                                             useFloorplanStore.getState().setShowQueueModal(true)
-                                            showToast("Job saved to Offline Queue (No Workers Online)", 'info')
+                                            showToast("Our servers are currently busy. Your project is saved — we'll process it automatically and email you when it's ready!", 'info')
                                         }
                                     } else {
                                         throw new Error(data.detail)
