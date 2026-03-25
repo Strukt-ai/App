@@ -339,8 +339,10 @@ const App = {
     },
 
     addGeneratedModel(jobId) {
+        // Sanitize jobId to prevent XSS via innerHTML
+        const safeJobId = String(jobId).replace(/[^a-zA-Z0-9_\-]/g, '');
         // Create GLB URL
-        const glbUrl = `/api/runs/${jobId}/download/glb`;
+        const glbUrl = `/api/runs/${safeJobId}/download/glb`;
 
         // Check if already exists
         if (this.state.generatedModels.find(m => m.id === jobId)) return;
@@ -355,10 +357,10 @@ const App = {
                  <model-viewer src="${glbUrl}" auto-rotate camera-controls style="width:100%; height:100%;" background-color="#000"></model-viewer>
             </div>
             <div class="model-info">
-                <h3>Furniture Job: ${jobId.substring(0, 6)}...</h3>
+                <h3>Furniture Job: ${safeJobId.substring(0, 6)}...</h3>
                 <div class="model-actions">
                     <a href="${glbUrl}" download class="btn-sm">⬇ GLB</a>
-                    <a href="/api/runs/${jobId}/download/blend" download class="btn-sm">⬇ Blend</a>
+                    <a href="/api/runs/${safeJobId}/download/blend" download class="btn-sm">⬇ Blend</a>
                 </div>
             </div>
         `;

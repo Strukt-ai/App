@@ -34,7 +34,7 @@ export function DebugPanel() {
     const { token } = useFloorplanStore()
     const [open, setOpen] = useState(false)
     const [password, setPassword] = useState(() => {
-        if (typeof window !== 'undefined') return localStorage.getItem('ec2_debug_pw') || ''
+        if (typeof window !== 'undefined') return sessionStorage.getItem('ec2_debug_pw') || ''
         return ''
     })
     const [unlocked, setUnlocked] = useState(false)
@@ -60,10 +60,13 @@ export function DebugPanel() {
             }
             const json = await res.json()
             // Lambda wraps response body as a string when called via API Gateway
-            const parsed = typeof json.body === 'string' ? JSON.parse(json.body) : json
+            let parsed = json
+            try {
+                parsed = typeof json.body === 'string' ? JSON.parse(json.body) : json
+            } catch { /* malformed body — use raw json */ }
             setData(parsed)
             setUnlocked(true)
-            localStorage.setItem('ec2_debug_pw', pw)
+            sessionStorage.setItem('ec2_debug_pw', pw)
         } catch (e: any) {
             setError(e.message || 'Failed')
         } finally {
