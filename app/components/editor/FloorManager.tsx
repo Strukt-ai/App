@@ -110,17 +110,23 @@ const RoomItem = memo(function RoomItem({
                     <meshPhysicalMaterial
                         map={textureUrl ? texture : null}
                         normalMap={hasPbr && room.pbrNormalUrl ? normalTex : null}
+                        normalScale={hasPbr && room.pbrNormalUrl ? [1.2, 1.2] as any : undefined}
                         roughnessMap={hasPbr && room.pbrRoughnessUrl ? roughnessTex : null}
                         aoMap={hasPbr && room.pbrAoUrl ? aoTex : null}
+                        aoMapIntensity={1.2}
                         metalnessMap={hasPbr && room.pbrMetalnessUrl ? metalnessTex : null}
+                        // Tile-like material: glossy clearcoat simulates glazed ceramic/porcelain
                         color={selected ? '#fbbf24' : (textureUrl ? '#ffffff' : (room.color || '#ddd8d0'))}
-                        roughness={hasPbr && room.pbrRoughnessUrl ? 1.0 : 0.7}
+                        roughness={hasPbr && room.pbrRoughnessUrl ? 1.0 : (textureUrl ? 0.55 : 0.7)}
                         metalness={hasPbr && room.pbrMetalnessUrl ? 1.0 : 0.0}
-                        clearcoat={0.15}
-                        clearcoatRoughness={0.4}
-                        envMapIntensity={0.3}
+                        clearcoat={textureUrl ? 0.35 : 0.15}
+                        clearcoatRoughness={textureUrl ? 0.2 : 0.4}
+                        envMapIntensity={textureUrl ? 0.5 : 0.3}
+                        // Use the albedo texture as a bump map too for subtle depth (grout lines, surface variation)
+                        bumpMap={textureUrl && !hasPbr ? texture : null}
+                        bumpScale={textureUrl && !hasPbr ? 0.015 : undefined}
                         transparent
-                        opacity={selected ? 0.7 : 0.65}
+                        opacity={selected ? 0.85 : 0.92}
                         side={DoubleSide}
                         depthWrite={false}
                     />

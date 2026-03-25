@@ -219,13 +219,14 @@ const WallItem = memo(function WallItem({
         }
         const mat = new MeshPhysicalMaterial({
             color: isSelected ? 0x3b82f6 : (wall.color || 0xf5f0eb),
-            roughness: isSelected ? 0.5 : 0.82,
+            roughness: isSelected ? 0.5 : 0.78,
             metalness: isSelected ? 0.1 : 0.0,
             emissive: isSelected ? 0x1a365d : 0x000000,
             emissiveIntensity: isSelected ? 0.2 : 0,
-            clearcoat: isSelected ? 0 : 0.04,
-            clearcoatRoughness: 0.7,
-            envMapIntensity: 0.4,
+            // Subtle clearcoat for paint/plaster sheen
+            clearcoat: isSelected ? 0 : 0.08,
+            clearcoatRoughness: 0.6,
+            envMapIntensity: 0.45,
             side: DoubleSide,
             depthTest: true,
             depthWrite: true,
@@ -236,15 +237,22 @@ const WallItem = memo(function WallItem({
         if (textureUrl) {
             mat.map = texture
             mat.color.set(isSelected ? 0x3b82f6 : 0xffffff)
-            mat.roughness = 0.85
+            mat.roughness = 0.75
             mat.metalness = 0.0
-            mat.clearcoat = 0.05
+            mat.clearcoat = 0.1
+            mat.clearcoatRoughness = 0.5
+            mat.envMapIntensity = 0.5
+            // Use albedo as subtle bump for surface variation (grout, stucco, etc.)
+            if (!hasPbr) {
+                mat.bumpMap = texture
+                mat.bumpScale = 0.012
+            }
         }
         // Apply PBR maps for realistic rendering in-browser
         if (hasPbr && !isSelected) {
             if (wall.pbrNormalUrl) {
                 mat.normalMap = normalTex
-                mat.normalScale.set(1, 1)
+                mat.normalScale.set(1.2, 1.2)
             }
             if (wall.pbrRoughnessUrl) {
                 mat.roughnessMap = roughnessTex
@@ -252,7 +260,7 @@ const WallItem = memo(function WallItem({
             }
             if (wall.pbrAoUrl) {
                 mat.aoMap = aoTex
-                mat.aoMapIntensity = 1.0
+                mat.aoMapIntensity = 1.2
             }
             if (wall.pbrMetalnessUrl) {
                 mat.metalnessMap = metalnessTex
