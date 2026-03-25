@@ -504,6 +504,15 @@ export function Topbar() {
                                         return
                                     }
 
+                                    if (res.status === 429) {
+                                        const errData = await res.json().catch(() => ({ detail: '' }))
+                                        showToast(errData.detail || 'Token limit reached. Upgrade to Pro for more.', 'error')
+                                        setRunStatus('idle')
+                                        useFloorplanStore.getState().setShowProcessingModal(false)
+                                        useFloorplanStore.getState().setShowQueueModal(false)
+                                        return
+                                    }
+
                                     const text = await res.text()
                                     if (!res.ok) throw new Error(text)
 
