@@ -3,7 +3,7 @@
 import { useRef, useEffect, Suspense, useState } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping, MOUSE } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows, Sky } from '@react-three/drei'
 import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast, N8AO } from '@react-three/postprocessing'
 import { ToneMappingMode, BlendFunction } from 'postprocessing'
 
@@ -278,10 +278,10 @@ function SceneContent() {
 
     // Lighting presets — tuned for clean architectural rendering
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6 },
-        night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2 },
-        studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6 },
-        sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35 }
+        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6, fogColor: '#d4dce8', fogNear: 40, fogFar: 120, skyTurbidity: 8, skyRayleigh: 1.5, sunPos: [10, 20, 8] as [number, number, number] },
+        night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2, fogColor: '#1a1e2e', fogNear: 25, fogFar: 80, skyTurbidity: 20, skyRayleigh: 0.1, sunPos: [-5, -1, -5] as [number, number, number] },
+        studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6, fogColor: '#e8e8ee', fogNear: 40, fogFar: 120, skyTurbidity: 10, skyRayleigh: 1.0, sunPos: [5, 15, 10] as [number, number, number] },
+        sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35, fogColor: '#e8c8a0', fogNear: 30, fogFar: 100, skyTurbidity: 4, skyRayleigh: 2.5, sunPos: [15, 3, 8] as [number, number, number] }
     }
     const lighting = lightingConfigs[lightingPreset]
 
@@ -299,8 +299,21 @@ function SceneContent() {
 
     return (
         <>
-            {/* Clean architectural background — dark studio */}
-            <color attach="background" args={['#1a1a1a']} />
+            {/* Background: sky in 3D, dark in 2D */}
+            {mode === '3d' ? (
+                <>
+                    <Sky
+                        sunPosition={lighting.sunPos}
+                        turbidity={lighting.skyTurbidity}
+                        rayleigh={lighting.skyRayleigh}
+                        mieCoefficient={0.005}
+                        mieDirectionalG={0.8}
+                    />
+                    <fog attach="fog" args={[lighting.fogColor, lighting.fogNear, lighting.fogFar]} />
+                </>
+            ) : (
+                <color attach="background" args={['#1a1a1a']} />
+            )}
 
             {/* Soft shadows for realistic penumbra */}
             {mode === '3d' && <SoftShadows size={25} samples={16} focus={0.5} />}

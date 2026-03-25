@@ -50,6 +50,12 @@ const endHandleGeometry = new CylinderGeometry(0.24, 0.24, 0.16, 24)
 const SKIRTING_H = 0.12    // 12cm tall
 const SKIRTING_OUT = 0.003 // 3mm proud of wall face
 
+// Cove lighting (LED strip at ceiling-wall junction)
+const coveGeometry = new BoxGeometry(1, 1, 1)
+const COVE_H = 0.02  // 2cm strip
+const COVE_D = 0.02  // 2cm depth
+const COVE_OUT = 0.001 // slightly proud of wall
+
 const wireframeMaterial = new MeshStandardMaterial({
     color: 0xffffff,
     wireframe: true
@@ -70,6 +76,15 @@ const skirtingMaterial = new MeshPhysicalMaterial({
     clearcoat: 0.08,
     clearcoatRoughness: 0.5,
     side: DoubleSide,
+})
+// Cove light material: warm LED strip glow
+const coveLightMaterial = new MeshStandardMaterial({
+    color: 0xfff5e6,
+    emissive: 0xffe8c8,
+    emissiveIntensity: 0.6,
+    roughness: 0.9,
+    metalness: 0.0,
+    toneMapped: false,
 })
 
 // Helper to check if a point projects onto a line segment
@@ -311,6 +326,18 @@ const WallItem = memo(function WallItem({
                     frustumCulled={false}
                 />
             )}
+            {/* Cove lighting — LED strip at ceiling-wall junction, 3D only */}
+            {!is2D && !isPreview && (
+                <mesh
+                    name="CoveLight"
+                    position={[centerX, wall.height - COVE_H / 2, centerY]}
+                    rotation={[0, -angle, 0]}
+                    scale={[Math.max(length, 0.01) + COVE_OUT * 2, COVE_H, COVE_D]}
+                    geometry={coveGeometry}
+                    material={coveLightMaterial}
+                    frustumCulled={false}
+                />
+            )}
             {/* Handles */}
             {is2D && isSelected && !isPreview && onPointerDown && (
                 <>
@@ -375,6 +402,17 @@ const WallItem = memo(function WallItem({
                     material={skirtingMaterial}
                     castShadow
                     receiveShadow
+                    frustumCulled={false}
+                />
+
+                {/* Cove lighting — LED strip at ceiling-wall junction */}
+                <mesh
+                    name="CoveLight"
+                    position={[centerX, wall.height - COVE_H / 2, centerY]}
+                    rotation={[0, -angle, 0]}
+                    scale={[Math.max(length, 0.01) + COVE_OUT * 2, COVE_H, COVE_D]}
+                    geometry={coveGeometry}
+                    material={coveLightMaterial}
                     frustumCulled={false}
                 />
 
