@@ -9,7 +9,7 @@ import { DebugPanel } from './DebugPanel'
 export function Topbar() {
     const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile } = useFloorplanStore()
     const [fileToUpload, setFileToUpload] = useState<File | null>(pendingFile)
-    const [workerCount, setWorkerCount] = useState(1) // Optimistic: Assume 1 worker online until proven otherwise
+    const [workerCount, setWorkerCount] = useState(0) // Pessimistic: assume offline until confirmed
     const [isDragging, setIsDragging] = useState(false)
 
     // Helper to process file (from input or drop)
@@ -487,14 +487,7 @@ export function Topbar() {
                                         body: formData
                                     })
 
-                                    // Trigger Popup based on Worker Status
-                                    if (workerCount > 0) {
-                                        useFloorplanStore.getState().setShowProcessingModal(true)
-                                    } else {
-                                        useFloorplanStore.getState().setShowQueueModal(true)
-                                    }
-
-                                    // Check Status
+                                    // Check Status first (before showing modals)
                                     if (res.status === 403) {
                                         showToast(`Limit Reached (5/5). Load an existing project or Delete one to create new.`, 'error')
                                         // Auto-open projects modal to let them delete
@@ -528,11 +521,15 @@ export function Topbar() {
                                         setRunId(data.run_id)
                                         useFloorplanStore.getState().setRunId(data.run_id)
 
-                                        // If Server says it's Offline Queue, switch modals
+                                        // Show correct modal based on backend response (source of truth)
                                         if (data.status === 'QUEUED_OFFLINE') {
                                             useFloorplanStore.getState().setShowProcessingModal(false)
                                             useFloorplanStore.getState().setShowQueueModal(true)
                                             showToast("Our servers are currently busy. Your project is saved — we'll process it automatically and email you when it's ready!", 'info')
+                                        } else {
+                                            // Worker is online, show processing modal
+                                            useFloorplanStore.getState().setShowQueueModal(false)
+                                            useFloorplanStore.getState().setShowProcessingModal(true)
                                         }
                                     } else {
                                         throw new Error(data.detail)
