@@ -25,7 +25,8 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         mode, lightingPreset, setLightingPreset, triggerRender, isRendering, currentRunId,
         user, setUser, setToken, token,
         projectsModalOpen, setProjectsModalOpen,
-        triggerDetectRooms, tutorialStep
+        triggerDetectRooms, tutorialStep,
+        mobileSidebarOpen, setMobileSidebarOpen
     } = useFloorplanStore()
 
 
@@ -146,7 +147,30 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
     return (
         <>
-            <div className="w-56 border-r bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-y-auto custom-scrollbar">
+            {/* Mobile Overlay */}
+            {mobileSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-30 md:hidden top-14" 
+                    onClick={() => setMobileSidebarOpen(false)}
+                />
+            )}
+            
+            <div className={cn(
+                "w-56 border-r bg-card flex flex-col select-none overflow-y-auto custom-scrollbar z-40 transition-transform duration-300",
+                "fixed top-14 bottom-0 left-0",
+                mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+                "md:relative md:translate-x-0 md:top-0 md:h-[calc(100vh-3.5rem)]"
+            )}>
+                {/* Close Button for Mobile */}
+                <div className="md:hidden flex justify-end p-2 border-b">
+                    <button 
+                        onClick={() => setMobileSidebarOpen(false)}
+                        className="text-muted-foreground hover:text-white p-1 rounded-md hover:bg-secondary"
+                    >
+                        <LogOut className="w-4 h-4" /> {/* Using LogOut since X is not imported, or another icon */}
+                    </button>
+                </div>
+
                 {/* AI & Furniture Section */}
                 <div className="p-3 border-b">
                     <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Furniture & AI</h3>

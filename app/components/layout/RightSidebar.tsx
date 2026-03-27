@@ -10,6 +10,8 @@ export function RightSidebar() {
     const activeTool = useFloorplanStore(s => s.activeTool)
     const mode = useFloorplanStore(s => s.mode)
     const token = useFloorplanStore(s => s.token)
+    const mobileRightSidebarOpen = useFloorplanStore(s => s.mobileRightSidebarOpen)
+    const setMobileRightSidebarOpen = useFloorplanStore(s => s.setMobileRightSidebarOpen)
 
 
     // --- AI / SAM3D State ---
@@ -253,7 +255,41 @@ export function RightSidebar() {
     if (!isVisible) return null
 
     return (
-        <div className="w-[320px] border-l bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-hidden animate-in slide-in-from-right duration-300">
+        <>
+            {/* Mobile Toggle Button */}
+            {!mobileRightSidebarOpen && (
+                <button
+                    onClick={() => setMobileRightSidebarOpen(true)}
+                    className="md:hidden fixed right-4 bottom-24 z-40 bg-primary/90 text-white p-3 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform"
+                >
+                    <Box className="w-5 h-5" />
+                </button>
+            )}
+
+            {/* Mobile Overlay */}
+            {mobileRightSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden top-14" 
+                    onClick={() => setMobileRightSidebarOpen(false)}
+                />
+            )}
+
+            <div className={cn(
+                "w-[320px] max-w-[85vw] border-l bg-card flex flex-col select-none overflow-hidden z-50 transition-transform duration-300",
+                "fixed top-14 bottom-0 right-0",
+                mobileRightSidebarOpen ? "translate-x-0" : "translate-x-full md:translate-x-0",
+                "md:relative md:top-0 md:h-[calc(100vh-3.5rem)]"
+            )}>
+                {/* Close Button for Mobile */}
+                <div className="md:hidden flex justify-between items-center p-3 border-b bg-card">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase">Tools & Queue</span>
+                    <button 
+                        onClick={() => setMobileRightSidebarOpen(false)}
+                        className="text-muted-foreground hover:text-white p-1 rounded-md hover:bg-secondary text-[11px] uppercase"
+                    >
+                        Close
+                    </button>
+                </div>
 
             {/* --- AI Reconstruction Panel (Visible when activeTool === 'furniture') --- */}
             {activeTool === 'furniture' && (
@@ -371,6 +407,7 @@ export function RightSidebar() {
             {/* Job Queue — always show when sidebar is open */}
             {activeTool !== 'furniture' && <JobQueuePanel />}
 
-        </div>
+            </div>
+        </>
     )
 }

@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LayoutGrid, Box, Download, Play, Eye, EyeOff } from 'lucide-react'
+import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Menu } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { DebugPanel } from './DebugPanel'
 
 export function Topbar() {
-    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile } = useFloorplanStore()
+    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile, setMobileSidebarOpen } = useFloorplanStore()
     const [fileToUpload, setFileToUpload] = useState<File | null>(pendingFile)
     const [workerCount, setWorkerCount] = useState(0) // Pessimistic: assume offline until confirmed
     const [isDragging, setIsDragging] = useState(false)
@@ -129,16 +129,22 @@ export function Topbar() {
     }, [currentRunId, runStatus, setRunStatus, lastQueuedTask, setLastQueuedTask, tutorialStep, setTutorialStep])
 
     return (
-        <div className="relative h-14 border-b bg-card flex items-center justify-between px-4 select-none">
-            <div className="flex items-center gap-2">
-                <div className="w-8 h-8 flex items-center justify-center">
+        <div className="relative h-14 border-b bg-card flex items-center justify-between px-2 sm:px-4 select-none">
+            <div className="flex items-center gap-2 shrink-0">
+                <button 
+                    className="md:hidden p-1.5 text-muted-foreground hover:bg-secondary rounded-md"
+                    onClick={() => setMobileSidebarOpen(true)}
+                >
+                    <Menu className="w-5 h-5" />
+                </button>
+                <div className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center">
                     <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex flex-col">
-                    <span className="font-bold text-sm tracking-tight leading-none">Strukt AI</span>
-                    <div className="flex items-center gap-2 mt-0.5">
-                        <div className={cn("w-2 h-2 rounded-full", workerCount > 0 ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-                        <span className="text-[10px] text-muted-foreground font-mono">
+                    <span className="font-bold text-xs sm:text-sm tracking-tight leading-none">Strukt AI</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className={cn("w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full", workerCount > 0 ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+                        <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono hidden sm:inline">
                             {workerCount > 0 ? `${workerCount} WORKER ONLINE` : "NO WORKER"}
                         </span>
                     </div>
@@ -149,8 +155,8 @@ export function Topbar() {
             <div className="hidden lg:block h-8 w-[1px] bg-border mx-2" />
 
             {/* View Controls - Centered */}
-            <div className="flex-1 flex justify-center px-2 overflow-x-auto hide-scrollbar">
-                <div className="flex bg-muted/50 p-1 rounded-lg gap-1">
+            <div className="flex-[0_1_auto] flex justify-start sm:justify-center px-2 overflow-x-auto hide-scrollbar mx-1">
+                <div className="flex bg-muted/50 p-1 rounded-lg gap-1 shrink-0">
                 <button
                     onClick={toggleBackground}
                     className={cn(
@@ -203,10 +209,10 @@ export function Topbar() {
                 </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar shrink-0 pl-1">
 
                 {currentRunId && (
-                    <div className="flex items-center gap-1 mr-2 border-r border-border pr-3">
+                    <div className="flex items-center gap-1 mr-1 sm:mr-2 border-r border-border pr-2 sm:pr-3 shrink-0">
                         <button
                             disabled={isGenerating3D}
                             onClick={async () => {
@@ -589,8 +595,8 @@ export function Topbar() {
                         />
                         <Download className={cn("w-4 h-4 rotate-180", runStatus === 'processing' && "animate-spin")} />
                         {runStatus === 'processing'
-                            ? 'Processing...'
-                            : (uploadedImage ? 'Change Image' : 'Select Floorplan')}
+                            ? '...'
+                            : (uploadedImage ? 'Change Image' : 'Load')}
                     </label>
                 </div>
             </div>

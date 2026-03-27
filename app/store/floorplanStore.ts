@@ -92,6 +92,8 @@ export interface FloorplanState {
     showProcessingModal: boolean // New state for popup
     showQueueModal: boolean
     projectsModalOpen: boolean // Global state for Projects Modal
+    mobileSidebarOpen: boolean
+    mobileRightSidebarOpen: boolean
     tutorialStep: 'none' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
     lastQueuedTask: 'none' | 'detect_rooms' | 'gen_3d'
     renders: string[]
@@ -127,6 +129,8 @@ export interface FloorplanState {
     setShowProcessingModal: (show: boolean) => void
     setShowQueueModal: (show: boolean) => void
     setProjectsModalOpen: (show: boolean) => void
+    setMobileSidebarOpen: (show: boolean) => void
+    setMobileRightSidebarOpen: (show: boolean) => void
     setTutorialStep: (step: 'none' | 'calibration' | 'correction' | 'rooms' | 'floor_review') => void
     completeTutorial: () => void
     setLastQueuedTask: (task: 'none' | 'detect_rooms' | 'gen_3d') => void
@@ -211,6 +215,8 @@ export const useFloorplanStore = create<FloorplanState>()(
         showProcessingModal: false, // Default
         showQueueModal: false, // Default
         projectsModalOpen: false, // Global state for Projects Modal
+        mobileSidebarOpen: false,
+        mobileRightSidebarOpen: false,
         renders: [],
         interaction: {
             type: 'none',
@@ -258,6 +264,8 @@ export const useFloorplanStore = create<FloorplanState>()(
         setShowProcessingModal: (show) => set((state) => { state.showProcessingModal = show }),
         setShowQueueModal: (show) => set((state) => { state.showQueueModal = show }),
         setProjectsModalOpen: (show) => set((state) => { state.projectsModalOpen = show }),
+        setMobileSidebarOpen: (show) => set((state) => { state.mobileSidebarOpen = show }),
+        setMobileRightSidebarOpen: (show) => set((state) => { state.mobileRightSidebarOpen = show }),
 
         // Tutorial State
         tutorialStep: 'none',
