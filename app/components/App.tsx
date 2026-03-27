@@ -51,12 +51,21 @@ function App() {
           <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
           <GlobalToast />
           <Topbar />
-          <div className="flex flex-1 overflow-hidden relative">
+          <div className="flex flex-1 overflow-hidden relative w-full">
+            {/* Sidebar renders with its own mobile drawer via store */}
             <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
-            <Scene />
-            <FloatingToolbar />
-            <ContextToolbar />
+            
+            {/* Main Scene Area */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <Scene />
+              <FloatingToolbar />
+              <ContextToolbar />
+            </div>
+            
+            {/* RightSidebar renders with its own mobile drawer via store */}
             <RightSidebar />
+            
+            {/* Floating Upgrade Card */}
             {showUpgradeCard && (
               <FloatingUpgradeCard
                 onUpgrade={() => setShowPremiumModal(true)}
