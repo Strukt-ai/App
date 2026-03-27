@@ -155,11 +155,12 @@ export function Topbar() {
             <div className="hidden lg:block h-8 w-[1px] bg-border mx-2" />
 
             {/* View Controls - Centered */}
-            <div 
-                className="flex-[0_1_auto] min-w-0 overflow-x-auto hide-scrollbar overscroll-x-contain touch-pan-x mx-1 px-1"
-                style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
-            >
-                <div className="flex bg-muted/50 p-1 rounded-lg gap-1 w-max mx-auto shrink-0 touch-pan-x">
+            <div className="flex-[0_1_auto] min-w-0 max-w-full mx-1">
+                <div 
+                    className="overflow-x-auto overscroll-x-contain hide-scrollbar touch-pan-x w-full"
+                    style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
+                >
+                    <div className="flex w-max min-w-full justify-center sm:mx-auto bg-muted/50 p-1 rounded-lg gap-1">
                 <button
                     onClick={toggleBackground}
                     className={cn(
@@ -209,16 +210,18 @@ export function Topbar() {
                     <Box className="w-4 h-4" />
                     <span>3D View</span>
                 </button>
+                    </div>
                 </div>
             </div>
 
-            <div 
-                className="flex items-center gap-2 min-w-0 overflow-x-auto hide-scrollbar overscroll-x-contain touch-pan-x pl-1 [&>*]:shrink-0"
-                style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
-            >
-
+            <div className="flex-[0_1_auto] min-w-0 max-w-full pl-1">
+                <div 
+                    className="overflow-x-auto overscroll-x-contain hide-scrollbar touch-pan-x w-full"
+                    style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
+                >
+                    <div className="flex w-max items-center justify-end gap-2 pr-1">
                 {currentRunId && (
-                    <div className="flex items-center gap-1 mr-1 sm:mr-2 border-r border-border pr-2 sm:pr-3 shrink-0 [&>*]:shrink-0">
+                    <div className="flex items-center gap-1 mr-1 sm:mr-2 border-r border-border pr-2 sm:pr-3">
                         <button
                             disabled={isGenerating3D}
                             onClick={async () => {
@@ -604,6 +607,8 @@ export function Topbar() {
                             ? '...'
                             : (uploadedImage ? 'Change Image' : 'Load')}
                     </label>
+                </div>
+                    </div>
                 </div>
             </div>
             <DebugPanel />
