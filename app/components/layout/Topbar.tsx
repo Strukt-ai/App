@@ -155,7 +155,7 @@ export function Topbar() {
             <div className="hidden lg:block h-8 w-[1px] bg-border mx-2" />
 
             {/* View Controls - Centered */}
-            <div className="flex-[0_1_auto] overflow-x-auto hide-scrollbar mx-1 px-1">
+            <div className="flex-[0_1_auto] min-w-0 overflow-x-auto hide-scrollbar mx-1 px-1">
                 <div className="flex bg-muted/50 p-1 rounded-lg gap-1 w-max mx-auto shrink-0">
                 <button
                     onClick={toggleBackground}
@@ -209,7 +209,7 @@ export function Topbar() {
                 </div>
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar shrink-0 pl-1 [&>*]:shrink-0">
+            <div className="flex items-center gap-2 min-w-0 overflow-x-auto hide-scrollbar pl-1 [&>*]:shrink-0">
 
                 {currentRunId && (
                     <div className="flex items-center gap-1 mr-1 sm:mr-2 border-r border-border pr-2 sm:pr-3 shrink-0 [&>*]:shrink-0">

@@ -94,7 +94,7 @@ export function ContextToolbar() {
 
     return (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-full max-w-[95vw] flex justify-center">
-            <div className="pointer-events-auto flex w-max max-w-full items-center gap-1 pl-3 pr-1.5 py-1.5 rounded-xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 overflow-x-auto hide-scrollbar [&>*]:shrink-0">
+            <div className="pointer-events-auto flex max-w-full items-center gap-1 pl-3 pr-1.5 py-1.5 rounded-xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 overflow-x-auto hide-scrollbar [&>*]:shrink-0">
                 {/* Selection indicator */}
                 <span className="text-[10px] text-white/50 font-medium mr-2 whitespace-nowrap">
                     {selectedType}

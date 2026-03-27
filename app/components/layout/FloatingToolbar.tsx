@@ -127,7 +127,7 @@ export function FloatingToolbar() {
 
     return (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-full max-w-[95vw] flex justify-center">
-            <div className="pointer-events-auto flex w-max max-w-full items-center gap-0.5 px-2 py-1.5 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 overflow-x-auto hide-scrollbar [&>*]:shrink-0">
+            <div className="pointer-events-auto flex max-w-full items-center gap-0.5 px-2 py-1.5 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 overflow-x-auto hide-scrollbar [&>*]:shrink-0">
                 {tools.map((tool) => (
                     <div key={tool.id} className="flex items-center">
                         <button
