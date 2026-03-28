@@ -175,6 +175,7 @@ export interface FloorplanState {
     saveHistory: () => void
     consumeDrop: () => void
     addRender: (url: string) => void
+    logAnalyticsEvent: (action: string) => void
     showToast: (message: string, type?: 'error' | 'info' | 'success') => void
     cornerSnapMode: boolean
     setCornerSnapMode: (active: boolean) => void
@@ -195,7 +196,7 @@ export interface FloorplanState {
 // --- Store ---
 
 export const useFloorplanStore = create<FloorplanState>()(
-    immer((set): FloorplanState => ({
+    immer((set, get): FloorplanState => ({
         mode: '2d', // Start in 2D to allow immediate editing
         activeTool: 'wall', // Default to drawing walls
         lightingPreset: 'day', // Default lighting
@@ -231,6 +232,18 @@ export const useFloorplanStore = create<FloorplanState>()(
         exportScale: 1,
         pendingFile: null,
         setPendingFile: (file) => set({ pendingFile: file } as any),
+        logAnalyticsEvent: (action: string) => {
+            const state = useFloorplanStore.getState()
+            if (!state.token && !state.user) return // Don't log anonymous pre-login clicks
+            fetch('/api/admin/log-event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(state.token ? { 'Authorization': `Bearer ${state.token}` } : {})
+                },
+                body: JSON.stringify({ action, job_id: state.currentRunId })
+            }).catch(e => console.error('Analytics error:', e))
+        },
         toast: null,
         cornerSnapMode: false,
         snapCorners: [],
@@ -268,6 +281,14 @@ export const useFloorplanStore = create<FloorplanState>()(
         setCalibrationFactor: (factor) => set((state) => {
             state.calibrationFactor = factor
             state.isCalibrated = true
+            
+            // Advance tutorial after calibration
+            if (state.tutorialStep === 'calibration') {
+                state.tutorialStep = 'correction'
+                state.tutorialMinimized = false
+                state.activeTool = 'select'
+            }
+            get().logAnalyticsEvent('ruler_calibrate')
         }),
         setRunId: (runId) => set((state) => { state.currentRunId = runId }),
         setRunStatus: (status) => set((state) => { state.runStatus = status }),
@@ -349,6 +370,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 }
                 throw new Error(errText)
             }
+            get().logAnalyticsEvent('detect_rooms')
         },
 
 
@@ -1072,8 +1094,9 @@ export const useFloorplanStore = create<FloorplanState>()(
         },
 
         triggerBlenderGeneration: async (formats?: string[]) => {
-            const state = useFloorplanStore.getState()
+            const state = get()
             if (!state.currentRunId || !state.isCalibrated) return
+            state.logAnalyticsEvent('furn3d_gen')
 
             set((s) => { s.isGenerating3D = true })
 

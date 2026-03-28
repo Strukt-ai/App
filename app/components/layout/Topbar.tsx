@@ -219,6 +219,7 @@ export function Topbar() {
                                 if (!token) return showToast("Please login to download", "error")
 
                                 const doDownload = async () => {
+                                    useFloorplanStore.getState().logAnalyticsEvent('download_3d')
                                     try {
                                         const res = await fetch(`/api/runs/${currentRunId}/download/glb`, {
                                             headers: { 'Authorization': `Bearer ${token}` }

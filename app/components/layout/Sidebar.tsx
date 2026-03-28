@@ -582,6 +582,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         if (svgRes.ok) {
                             const svgText = await svgRes.text()
                             useFloorplanStore.getState().importFromSVG(svgText)
+                            useFloorplanStore.getState().logAnalyticsEvent('texturize')
                         }
 
                         // Apply texture to 3D preview state (importFromSVG recreates walls/rooms and will drop custom fields).
