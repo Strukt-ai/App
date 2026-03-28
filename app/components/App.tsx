@@ -42,11 +42,7 @@ function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
       {/* Welcome Screen */}
       {showWelcome && (
-        <WelcomeScreen onStart={() => {
-          setShowWelcome(false)
-          // Hide dashboard for new logins so they drop straight into the tutorial Editor
-          setShowDashboard(false)
-        }} />
+        <WelcomeScreen onStart={() => setShowWelcome(false)} />
       )}
 
       {/* Editor - always rendered after welcome */}
