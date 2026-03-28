@@ -626,7 +626,7 @@ export function Scene() {
                 }
             }}
         >
-            <DebugOverlay />
+            {/* <DebugOverlay /> */}
             <Canvas
                 shadows
                 gl={{

@@ -601,7 +601,7 @@ export function Topbar() {
                 </div>
                 </div>
             </div>
-            <DebugPanel />
+            {/* <DebugPanel /> */}
         </div >
     )
 }
