@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box, X } from 'lucide-react'
+import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box, X, ArrowRight } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { ProjectThumbnail } from './ProjectThumbnail'
@@ -269,63 +269,80 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                             </div>
                         </button>
                     ) : (
-                        <div className="mb-8 p-6 rounded-xl border border-white/10 bg-white/[0.02]">
-                            <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                                <Box className="w-4 h-4 text-purple-400" />
-                                New Project
-                            </h3>
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <input
-                                    type="text"
-                                    value={projectName}
-                                    onChange={(e) => setProjectName(e.target.value)}
-                                    placeholder="Project name (optional)"
-                                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-purple-500/50 transition-colors"
-                                    autoFocus
-                                />
-                                <div className="flex gap-2">
-                                    <input
-                                        ref={fileRef}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            const f = e.target.files?.[0]
-                                            if (f) setSelectedFile(f)
-                                        }}
-                                    />
-                                    <button
-                                        onClick={() => fileRef.current?.click()}
-                                        className={cn(
-                                            "flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors",
-                                            selectedFile
-                                                ? "border-green-500/30 bg-green-500/10 text-green-400"
-                                                : "border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10"
-                                        )}
-                                    >
-                                        <Upload className="w-4 h-4" />
-                                        {selectedFile ? selectedFile.name.slice(0, 20) : 'Upload Image'}
-                                    </button>
-                                    <button
-                                        onClick={handleCreateNew}
-                                        disabled={!selectedFile || !projectName.trim() || creating}
-                                        className={cn(
-                                            "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all",
-                                            selectedFile && projectName.trim()
-                                                ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                                                : "bg-white/5 text-white/30 cursor-not-allowed"
-                                        )}
-                                    >
-                                        {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                        Create
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowNewForm(false); setSelectedFile(null); setProjectName('') }}
-                                        className="px-3 py-2.5 rounded-lg text-sm text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
+                        <div className="mb-8 p-8 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 relative overflow-hidden shadow-2xl">
+                            {/* Decorative background glow */}
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none" />
+
+                            <div className="relative z-10 flex flex-col md:flex-row gap-8">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400">
+                                            Step 1
+                                        </span>
+                                        <h3 className="text-xl font-bold text-white">Upload Your Floorplan</h3>
+                                    </div>
+                                    <p className="text-sm text-white/70 mb-6 leading-relaxed">
+                                        To start generating your 3D model, please upload a <strong className="text-white">clear, top-down 2D floorplan image</strong> (JPG, PNG). 
+                                        High-contrast images with distinctly drawn walls will yield the best AI results.
+                                    </p>
+
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <input
+                                            type="text"
+                                            value={projectName}
+                                            onChange={(e) => setProjectName(e.target.value)}
+                                            placeholder="Project name (optional)"
+                                            className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                                            autoFocus
+                                        />
+                                        <div className="flex gap-3">
+                                            <input
+                                                ref={fileRef}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                    const f = e.target.files?.[0]
+                                                    if (f) setSelectedFile(f)
+                                                }}
+                                            />
+                                            <button
+                                                onClick={() => fileRef.current?.click()}
+                                                className={cn(
+                                                    "flex items-center gap-2 px-5 py-3 rounded-xl border text-sm font-semibold transition-all shadow-lg",
+                                                    selectedFile
+                                                        ? "border-green-500/50 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                                                        : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50"
+                                                )}
+                                            >
+                                                <Upload className="w-4 h-4" />
+                                                {selectedFile ? selectedFile.name.slice(0, 20) : 'Choose Image File'}
+                                            </button>
+                                            <button
+                                                onClick={handleCreateNew}
+                                                disabled={!selectedFile || creating}
+                                                className={cn(
+                                                    "flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-bold transition-all",
+                                                    selectedFile
+                                                        ? "bg-white text-black hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                                                        : "bg-white/5 text-white/30 cursor-not-allowed"
+                                                )}
+                                            >
+                                                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                                                {creating ? 'Starting...' : 'Start Project'}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
+                                
+                                {/* Cancel Button */}
+                                <button
+                                    onClick={() => { setShowNewForm(false); setSelectedFile(null); setProjectName('') }}
+                                    className="absolute top-4 right-4 p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                    title="Cancel"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
                             </div>
                         </div>
                     )}
