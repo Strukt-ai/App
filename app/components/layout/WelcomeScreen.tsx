@@ -45,7 +45,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
 
     return (
         <div className={cn(
-            "fixed inset-0 z-[100] bg-[#0A0A0A] flex items-center justify-center overflow-hidden transition-opacity duration-500",
+            "fixed inset-0 z-[100] bg-[#0A0A0A] overflow-y-auto transition-opacity duration-500",
             isExiting ? "opacity-0 pointer-events-none" : "opacity-100"
         )}>
             {/* Ambient Background Effects */}
@@ -55,7 +55,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
                 <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_100%)]" />
             </div>
 
-            <div className="relative z-10 max-w-4xl w-full px-6 flex flex-col items-center text-center">
+            <div className="relative z-10 max-w-4xl w-full px-6 flex flex-col items-center text-center min-h-full justify-center py-8 mx-auto">
 
                 {/* Logo / Badge */}
                 <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
