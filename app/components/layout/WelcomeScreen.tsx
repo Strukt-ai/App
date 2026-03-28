@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, Box, Layers, MousePointer2, Wand2 } from 'lucide-react'
+import { ArrowRight, Box, Layers, MousePointer2, Wand2, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GoogleLogin, type CredentialResponse } from '@react-oauth/google' // Import GoogleLogin
 import { jwtDecode } from 'jwt-decode' // Import decoder
@@ -31,14 +31,15 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         }
         if (credentialResponse.credential) {
             const decoded: any = jwtDecode(credentialResponse.credential)
+            const { setToken, setUser, setTutorialStep } = useFloorplanStore.getState()
             setToken(credentialResponse.credential)
             setUser({
                 email: decoded.email,
                 name: decoded.name,
                 picture: decoded.picture
             })
-            // Open Projects Modal immediately
-            setProjectsModalOpen(true)
+            // Start the interactive tutorial immediately in the editor
+            setTutorialStep('upload')
             handleStart()
         }
     }
@@ -129,10 +130,15 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
                     </div>
                 </div>
 
-                <div className="mt-16 text-white/20 text-xs animate-in fade-in duration-1000 delay-700">
+                <div className="mt-16 text-white/20 text-xs animate-in fade-in duration-1000 delay-700 hidden sm:block">
                     Press <kbd className="font-mono bg-white/10 px-1.5 py-0.5 rounded text-white/40">Space</kbd> or Click to Start
                 </div>
 
+                {/* Mobile Scroll Indicator */}
+                <div className="mt-12 sm:hidden flex flex-col items-center gap-2 text-white/40 animate-bounce">
+                    <span className="text-[10px] uppercase tracking-widest">Scroll to sign in</span>
+                    <ArrowDown className="w-4 h-4" />
+                </div>
             </div>
 
             <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} />

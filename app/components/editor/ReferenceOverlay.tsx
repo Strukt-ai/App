@@ -2,27 +2,26 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useFloorplanStore } from '@/store/floorplanStore'
-import { X, Move, RotateCcw } from 'lucide-react'
+import { X, Move, RotateCcw, Minimize2, Maximize2, Image } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function ReferenceOverlay() {
     const uploadedImage = useFloorplanStore(s => s.uploadedImage)
     const showBackground = useFloorplanStore(s => s.showBackground)
     const toggleBackground = useFloorplanStore(s => s.toggleBackground)
-    const mode = useFloorplanStore(s => s.mode) // Check mode
+    const mode = useFloorplanStore(s => s.mode)
+    const referenceMinimized = useFloorplanStore(s => s.referenceMinimized)
+    const setReferenceMinimized = useFloorplanStore(s => s.setReferenceMinimized)
 
     const [scale, setScale] = useState(1)
     const [position, setPosition] = useState({ x: 0, y: 0 })
     const [isDraggingImage, setIsDraggingImage] = useState(false)
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
-    // Window Position (simple draggable implementation)
-    // We'll use a fixed initial position (bottom-right) and transform it
-    const [windowPos, setWindowPos] = useState({ x: 0, y: 0 }) // Offset from default bottom-right
+    const [windowPos, setWindowPos] = useState({ x: 0, y: 0 })
     const [isDraggingWindow, setIsDraggingWindow] = useState(false)
     const windowRef = useRef<HTMLDivElement>(null)
 
-    // Global Mouse Move/Up for Drags (MOVED UP to fix Hooks error)
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (isDraggingImage) {
@@ -57,14 +56,24 @@ export function ReferenceOverlay() {
 
     if (!uploadedImage || !showBackground || mode === '3d') return null
 
-    // --- Image Pan/Zoom Handlers ---
+    // Minimized pill
+    if (referenceMinimized) {
+        return (
+            <button
+                onClick={() => setReferenceMinimized(false)}
+                className="absolute bottom-5 right-5 z-50 flex items-center gap-2 px-3 py-2 bg-black/80 border border-white/10 rounded-full shadow-xl backdrop-blur-md hover:border-white/30 transition-all group"
+            >
+                <Image className="w-3.5 h-3.5 text-white/60 group-hover:text-white/90" />
+                <span className="text-xs font-medium text-white/60 group-hover:text-white/90">Reference</span>
+                <Maximize2 className="w-3 h-3 text-white/40" />
+            </button>
+        )
+    }
 
     const handleWheel = (e: React.WheelEvent) => {
-        // Prevent page scroll
         e.stopPropagation()
-        // Determine zoom direction
         const delta = e.deltaY > 0 ? 0.9 : 1.1
-        setScale(s => Math.min(Math.max(s * delta, 1), 8)) // Clamp 1x to 8x
+        setScale(s => Math.min(Math.max(s * delta, 1), 8))
     }
 
     const handleImageMouseDown = (e: React.MouseEvent) => {
@@ -75,7 +84,6 @@ export function ReferenceOverlay() {
         }
     }
 
-    // --- Window Drag Handlers ---
     const handleHeaderMouseDown = (e: React.MouseEvent) => {
         e.preventDefault()
         setIsDraggingWindow(true)
@@ -90,14 +98,14 @@ export function ReferenceOverlay() {
             style={{
                 bottom: '20px',
                 right: '20px',
-                width: '400px', // Default
+                width: '400px',
                 height: 'auto',
                 minWidth: '200px',
                 minHeight: '200px',
-                resize: 'both', // Allows resizing
+                resize: 'both',
                 transform: `translate(${windowPos.x}px, ${windowPos.y}px)`,
             }}
-            onWheel={(e) => e.stopPropagation()} // Stop zoom reaching canvas
+            onWheel={(e) => e.stopPropagation()}
         >
             {/* Header / Drag Handle */}
             <div
@@ -109,7 +117,7 @@ export function ReferenceOverlay() {
                     <span>Reference View</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                     <button
                         onClick={() => { setScale(1); setPosition({ x: 0, y: 0 }) }}
                         className="flex items-center gap-1 px-2 py-0.5 hover:bg-white/10 rounded text-[10px] text-white/50 hover:text-white transition-colors"
@@ -119,12 +127,18 @@ export function ReferenceOverlay() {
                         <span>Reset</span>
                     </button>
                     <button
+                        onClick={() => setReferenceMinimized(true)}
+                        className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-white/10 rounded text-[10px] text-white/50 hover:text-yellow-400 transition-colors"
+                        title="Minimize"
+                    >
+                        <Minimize2 className="w-3 h-3" />
+                    </button>
+                    <button
                         onClick={toggleBackground}
-                        className="flex items-center gap-1 px-2 py-0.5 hover:bg-white/10 rounded text-[10px] text-white/50 hover:text-red-400 transition-colors"
+                        className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-white/10 rounded text-[10px] text-white/50 hover:text-red-400 transition-colors"
                         title="Hide Reference"
                     >
                         <X className="w-3 h-3" />
-                        <span>Close</span>
                     </button>
                 </div>
             </div>

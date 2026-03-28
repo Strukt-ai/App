@@ -94,7 +94,9 @@ export interface FloorplanState {
     projectsModalOpen: boolean // Global state for Projects Modal
     mobileSidebarOpen: boolean
     mobileRightSidebarOpen: boolean
-    tutorialStep: 'none' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
+    tutorialStep: 'none' | 'upload' | 'process' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
+    tutorialMinimized: boolean
+    referenceMinimized: boolean
     lastQueuedTask: 'none' | 'detect_rooms' | 'gen_3d'
     renders: string[]
     fitViewTrigger: number
@@ -131,7 +133,9 @@ export interface FloorplanState {
     setProjectsModalOpen: (show: boolean) => void
     setMobileSidebarOpen: (show: boolean) => void
     setMobileRightSidebarOpen: (show: boolean) => void
-    setTutorialStep: (step: 'none' | 'calibration' | 'correction' | 'rooms' | 'floor_review') => void
+    setTutorialStep: (step: FloorplanState['tutorialStep']) => void
+    setTutorialMinimized: (minimized: boolean) => void
+    setReferenceMinimized: (minimized: boolean) => void
     completeTutorial: () => void
     setLastQueuedTask: (task: 'none' | 'detect_rooms' | 'gen_3d') => void
     triggerDetectRooms: () => Promise<void>
@@ -254,6 +258,12 @@ export const useFloorplanStore = create<FloorplanState>()(
         setUploadedImage: (url, width, height) => set((state) => {
             state.uploadedImage = url
             if (width && height) state.imageDimensions = { width, height }
+            
+            // Advance tutorial when image is successfully uploaded
+            if (url && state.tutorialStep === 'upload') {
+                state.tutorialStep = 'process'
+                state.tutorialMinimized = false
+            }
         }),
         setCalibrationFactor: (factor) => set((state) => {
             state.calibrationFactor = factor
@@ -269,8 +279,12 @@ export const useFloorplanStore = create<FloorplanState>()(
 
         // Tutorial State
         tutorialStep: 'none',
+        tutorialMinimized: false,
+        referenceMinimized: false,
         lastQueuedTask: 'none',
-        setTutorialStep: (step) => set((state) => { state.tutorialStep = step }),
+        setTutorialStep: (step) => set((state) => { state.tutorialStep = step; state.tutorialMinimized = false }),
+        setTutorialMinimized: (minimized) => set((state) => { state.tutorialMinimized = minimized }),
+        setReferenceMinimized: (minimized) => set((state) => { state.referenceMinimized = minimized }),
         completeTutorial: () => set((state) => { state.tutorialStep = 'none' }),
         setLastQueuedTask: (task) => set((state) => { state.lastQueuedTask = task }),
 
@@ -1844,11 +1858,14 @@ export const useFloorplanStore = create<FloorplanState>()(
             ;(state as any).historyIndex = newHist.length - 1
 
             // Start Tutorial Flow if not calibrated.
-            // IMPORTANT: Don't force tutorial steps when loading an existing project SVG.
-            // New-run tutorial progression is handled by Topbar polling and explicit actions.
-            if (!state.isCalibrated && state.tutorialStep === 'none' && walls.length === 0 && rooms.length === 0) {
-                state.tutorialStep = 'calibration'
-                state.activeTool = 'none'
+            // Advance from 'process' to 'calibration' on successful SVG generation/import
+            if (!state.isCalibrated && (state.tutorialStep === 'none' || state.tutorialStep === 'process')) {
+                // If 'process', we just got AI results. If 'none' + empty, it's a new blank canvas.
+                if (state.tutorialStep === 'process' || (walls.length === 0 && rooms.length === 0)) {
+                    state.tutorialStep = 'calibration'
+                    state.tutorialMinimized = false
+                    state.activeTool = 'none'
+                }
             }
         }),
 
