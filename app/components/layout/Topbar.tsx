@@ -155,12 +155,8 @@ export function Topbar() {
             <div className="hidden lg:block h-8 w-[1px] bg-border mx-2" />
 
             {/* View Controls - Centered */}
-            <div className="flex-[0_1_auto] min-w-0 max-w-full mx-1">
-                <div 
-                    className="overflow-x-auto overscroll-x-contain hide-scrollbar touch-pan-x w-full"
-                    style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
-                >
-                    <div className="flex w-max min-w-full justify-center sm:mx-auto bg-muted/50 p-1 rounded-lg gap-1">
+            <div className="min-w-0 overflow-x-auto hide-scrollbar touch-pan-x mx-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex bg-muted/50 p-1 rounded-lg gap-1 w-max">
                 <button
                     onClick={toggleBackground}
                     className={cn(
@@ -210,16 +206,11 @@ export function Topbar() {
                     <Box className="w-4 h-4" />
                     <span>3D View</span>
                 </button>
-                    </div>
                 </div>
             </div>
 
-            <div className="flex-[0_1_auto] min-w-0 max-w-full pl-1">
-                <div 
-                    className="overflow-x-auto overscroll-x-contain hide-scrollbar touch-pan-x w-full"
-                    style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
-                >
-                    <div className="flex w-max items-center justify-end gap-2 pr-1">
+            <div className="min-w-0 overflow-x-auto hide-scrollbar touch-pan-x pl-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex w-max items-center gap-2">
                 {currentRunId && (
                     <div className="flex items-center gap-1 mr-1 sm:mr-2 border-r border-border pr-2 sm:pr-3">
                         <button
@@ -608,7 +599,6 @@ export function Topbar() {
                             : (uploadedImage ? 'Change Image' : 'Load')}
                     </label>
                 </div>
-                    </div>
                 </div>
             </div>
             <DebugPanel />

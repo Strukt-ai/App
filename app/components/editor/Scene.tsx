@@ -618,9 +618,10 @@ export function Scene() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             onMouseDownCapture={(e) => {
-                // NUCLEAR FIX: Prevent browser text selection / drag behavior
-                // Allow interactions with Input elements (like FloatingMenu)
-                if (e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+                // Prevent text selection / drag on the canvas itself,
+                // but allow all native interactions on HTML overlays (toolbar buttons, inputs, labels).
+                const target = e.target as HTMLElement
+                if (target.tagName === 'CANVAS') {
                     e.preventDefault()
                 }
             }}
