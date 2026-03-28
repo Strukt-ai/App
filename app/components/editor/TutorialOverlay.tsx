@@ -35,22 +35,39 @@ export function TutorialOverlay() {
     }
 
     // Card header with minimize + skip
-    const CardHeader = ({ color, stepNum }: { color: string; stepNum: number }) => (
-        <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-mono uppercase tracking-wider text-${color}-400/70`}>
-                    Step {stepNum} of {totalSteps}
-                </span>
-                {/* Progress dots */}
-                <div className="flex gap-1">
-                    {STEP_ORDER.map((_, i) => (
-                        <div
-                            key={i}
-                            className={`w-1.5 h-1.5 rounded-full transition-colors ${i <= currentIdx ? `bg-${color}-500` : 'bg-white/10'}`}
-                        />
-                    ))}
+    const CardHeader = ({ color, stepNum }: { color: 'emerald' | 'cyan' | 'yellow' | 'blue' | 'purple' | 'green'; stepNum: number }) => {
+        const textColors = {
+            emerald: 'text-emerald-400/70',
+            cyan: 'text-cyan-400/70',
+            yellow: 'text-yellow-400/70',
+            blue: 'text-blue-400/70',
+            purple: 'text-purple-400/70',
+            green: 'text-green-400/70'
+        }
+        const bgColors = {
+            emerald: 'bg-emerald-500',
+            cyan: 'bg-cyan-500',
+            yellow: 'bg-yellow-500',
+            blue: 'bg-blue-500',
+            purple: 'bg-purple-500',
+            green: 'bg-green-500'
+        }
+        return (
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-mono uppercase tracking-wider ${textColors[color]}`}>
+                        Step {stepNum} of {totalSteps}
+                    </span>
+                    {/* Progress dots */}
+                    <div className="flex gap-1">
+                        {STEP_ORDER.map((_, i) => (
+                            <div
+                                key={i}
+                                className={`w-1.5 h-1.5 rounded-full transition-colors ${i <= currentIdx ? bgColors[color] : 'bg-white/10'}`}
+                            />
+                        ))}
+                    </div>
                 </div>
-            </div>
             <div className="flex items-center gap-1">
                 <button
                     onClick={() => setTutorialMinimized(true)}
@@ -68,7 +85,8 @@ export function TutorialOverlay() {
                 </button>
             </div>
         </div>
-    )
+        )
+    }
 
     return (
         <div className="absolute top-4 right-4 z-50 pointer-events-none flex flex-col items-end space-y-4 max-w-[90vw] sm:max-w-sm">

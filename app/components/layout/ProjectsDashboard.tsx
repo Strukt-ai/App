@@ -91,6 +91,9 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
         try {
             if (!token) return
 
+            // Skip the tutorial permanently if they load an existing project
+            useFloorplanStore.getState().completeTutorial()
+
             // 1. Restore calibration from run metadata
             try {
                 const metaRes = await fetch(`/api/runs/${runId}`, {
