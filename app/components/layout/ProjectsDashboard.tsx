@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box, X } from 'lucide-react'
+import { FolderOpen, Trash2, Clock, Loader2, Plus, LogOut, Upload, Box, X, WifiOff, CheckCircle2 } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { ProjectThumbnail } from './ProjectThumbnail'
@@ -31,6 +31,24 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
     const [showNewForm, setShowNewForm] = useState(false)
     const fileRef = useRef<HTMLInputElement>(null)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [workerOnline, setWorkerOnline] = useState(false)
+    const [offlineQueued, setOfflineQueued] = useState(false)
+
+    // Poll worker status every 10s
+    useEffect(() => {
+        const check = async () => {
+            try {
+                const res = await fetch('/api/system/status')
+                if (res.ok) {
+                    const data = await res.json()
+                    setWorkerOnline((data.workers_online || 0) > 0)
+                }
+            } catch { setWorkerOnline(false) }
+        }
+        check()
+        const interval = setInterval(check, 10000)
+        return () => clearInterval(interval)
+    }, [])
 
     useEffect(() => {
         if (token) fetchProjects()
@@ -151,13 +169,38 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
             return
         }
 
+        // Worker offline — submit the job to queue but stay on dashboard
+        if (!workerOnline) {
+            setCreating(true)
+            try {
+                const formData = new FormData()
+                formData.append('image', selectedFile)
+                if (projectName.trim()) formData.append('name', projectName.trim())
+                const res = await fetch('/api/runs', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                })
+                if (res.ok) {
+                    setOfflineQueued(true)
+                    setShowNewForm(false)
+                    setSelectedFile(null)
+                    setProjectName('')
+                    fetchProjects()
+                }
+            } catch (e) {
+                console.error("Queue failed", e)
+            } finally {
+                setCreating(false)
+            }
+            return
+        }
+
         setCreating(true)
         try {
-            // Clear old project state before creating new one
             resetFloorplan()
             setRunId(null)
 
-            // Show image preview locally
             const reader = new FileReader()
             reader.onload = (ev) => {
                 if (ev.target?.result) {
@@ -172,10 +215,7 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
             }
             reader.readAsDataURL(selectedFile)
 
-            // Store file in global state so Topbar can use it for processing
             setPendingFile(selectedFile)
-
-            // Store project name for Topbar to pick up
             if (projectName.trim()) {
                 sessionStorage.setItem('pendingProjectName', projectName.trim())
             }
@@ -239,6 +279,32 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
             {/* Main content */}
             <div className="relative z-10 flex-1 overflow-y-auto px-6 py-8">
                 <div className="max-w-6xl mx-auto">
+
+                    {/* Offline banner */}
+                    {!workerOnline && (
+                        <div className="mb-6 flex items-start gap-3 px-4 py-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
+                            <WifiOff className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-sm font-semibold text-amber-300">Our servers are currently offline</p>
+                                <p className="text-xs text-amber-400/70 mt-0.5">You can still upload your floorplan — we'll save it and process it automatically once our servers are back. You'll get an email when it's ready.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Offline queued success banner */}
+                    {offlineQueued && (
+                        <div className="mb-6 flex items-start gap-3 px-4 py-3.5 rounded-xl border border-green-500/30 bg-green-500/10">
+                            <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-sm font-semibold text-green-300">Project saved — you're all set!</p>
+                                <p className="text-xs text-green-400/70 mt-0.5">We'll process your floorplan as soon as our servers come back online and send you an email when it's ready.</p>
+                            </div>
+                            <button onClick={() => setOfflineQueued(false)} className="ml-auto text-green-400/50 hover:text-green-400">
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Header */}
                     <div className="flex items-center justify-between mb-8">
                         <div>
@@ -309,12 +375,14 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                                         className={cn(
                                             "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all",
                                             selectedFile && projectName.trim()
-                                                ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                                                ? workerOnline
+                                                    ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                                                    : "bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20"
                                                 : "bg-white/5 text-white/30 cursor-not-allowed"
                                         )}
                                     >
                                         {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                        Create
+                                        {workerOnline ? 'Create' : 'Save & Queue'}
                                     </button>
                                     <button
                                         onClick={() => { setShowNewForm(false); setSelectedFile(null); setProjectName('') }}
