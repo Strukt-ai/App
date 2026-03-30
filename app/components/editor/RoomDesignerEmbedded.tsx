@@ -591,6 +591,7 @@ export function RoomDesignerEmbedded() {
     const $ = (window as any).$
     const BP3D = (window as any).BP3D
     const fp = bpRef.current?.floorplanner
+    const controller = bpRef.current?.three?.getController?.()
 
     if ($) {
       if (mode === '2d') {
@@ -604,6 +605,31 @@ export function RoomDesignerEmbedded() {
       if (activeTool === 'wall') fp.setMode(BP3D.Floorplanner.floorplannerModes.DRAW)
       else if (activeTool === 'delete') fp.setMode(BP3D.Floorplanner.floorplannerModes.DELETE)
       else fp.setMode(BP3D.Floorplanner.floorplannerModes.MOVE)
+    }
+
+    // Handle 3D design mode tools
+    if (mode === '3d' && controller) {
+      // For 3D mode, we need to manage controller state based on activeTool
+      // Note: Blueprint3D controller handles basic interactions automatically,
+      // but we can influence behavior through tool state
+      if (activeTool === 'rotate' && controller.rotatePressed) {
+        // Enable rotation mode
+        controller.rotatePressed()
+      } else if (activeTool === 'move') {
+        // Default move/drag behavior is handled automatically by controller
+        // when items are selected
+      } else if (activeTool === 'resize') {
+        // Resize is typically handled by item-specific drag handles
+        // when items are selected
+      } else if (activeTool === 'label') {
+        // Label tool might need custom implementation
+        // Could show/hide label editing UI
+      } else if (activeTool === 'ruler') {
+        // Ruler tool might need custom implementation
+        // Could enable measurement mode
+      } else if (activeTool === 'select') {
+        // Default selection mode
+      }
     }
   }, [bpReady, mode, activeTool])
 
