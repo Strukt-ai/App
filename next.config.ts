@@ -46,10 +46,9 @@ const nextConfig: NextConfig = {
   // Rewrite /api/* and /sidecar/* to the backend in both dev and production.
   // Vercel's rewrite layer forwards requests natively (preserving multipart
   // bodies, streaming, etc.) so the JS catch-all proxy is never hit.
-  rewrites: async () => {
-    const backendUrl = isDev
-      ? 'http://127.0.0.1:8000'
-      : (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://struktai.work');
+
+     rewrites: async () => {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || (isDev ? 'http://127.0.0.1:8000' : 'https://struktai.work');
     return {
       beforeFiles: [
         {
