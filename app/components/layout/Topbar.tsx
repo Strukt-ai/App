@@ -7,7 +7,17 @@ import { cn } from '@/lib/utils'
 import { DebugPanel } from './DebugPanel'
 
 export function Topbar() {
-    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile, setMobileSidebarOpen } = useFloorplanStore()
+    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile, setMobileSidebarOpen, setActiveTool } = useFloorplanStore()
+
+    const requireCalibration = () => {
+        if (!isCalibrated) {
+            showToast("Calibrate first! Select the Ruler tool (C), click a wall, enter its real length.", 'error')
+            setTutorialStep('calibration')
+            setActiveTool('ruler')
+            return true
+        }
+        return false
+    }
     const [fileToUpload, setFileToUpload] = useState<File | null>(pendingFile)
     const [workerCount, setWorkerCount] = useState(0) // Pessimistic: assume offline until confirmed
     const [isDragging, setIsDragging] = useState(false)
@@ -217,6 +227,7 @@ export function Topbar() {
                             disabled={isGenerating3D}
                             onClick={async () => {
                                 if (!token) return showToast("Please login to download", "error")
+                                if (requireCalibration()) return
 
                                 const doDownload = async () => {
                                     useFloorplanStore.getState().logAnalyticsEvent('download_3d')
@@ -273,6 +284,7 @@ export function Topbar() {
                             disabled={isGenerating3D}
                             onClick={async () => {
                                 if (!token) return showToast("Please login to download", "error")
+                                if (requireCalibration()) return
 
                                 const doDownload = async () => {
                                     try {
@@ -327,6 +339,7 @@ export function Topbar() {
                             disabled={isGenerating3D}
                             onClick={async () => {
                                 if (!token) return showToast("Please login to download", "error")
+                                if (requireCalibration()) return
 
                                 const doDownload = async () => {
                                     try {
@@ -380,6 +393,7 @@ export function Topbar() {
                             disabled={isGenerating3D}
                             onClick={async () => {
                                 if (!token) return showToast("Please login to download", "error")
+                                if (requireCalibration()) return
 
                                 const doDownload = async () => {
                                     try {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useFloorplanStore } from '@/store/floorplanStore'
-import { ArrowLeft, ArrowRight, Ruler, Hammer, Layers, Upload, Play, Box, ChevronDown, ChevronUp, X, Minimize2 } from 'lucide-react'
+import { ArrowDown, ArrowRight, Ruler, Hammer, Layers, Upload, Play, Box, ChevronDown, X, Minimize2 } from 'lucide-react'
 
 const STEP_ORDER = ['upload', 'process', 'calibration', 'correction', 'rooms', 'floor_review'] as const
 
@@ -16,7 +16,6 @@ export function TutorialOverlay() {
 
     const currentIdx = STEP_ORDER.indexOf(tutorialStep as any)
     const totalSteps = STEP_ORDER.length
-    const progress = currentIdx >= 0 ? ((currentIdx + 1) / totalSteps) * 100 : 0
 
     // Minimized pill
     if (tutorialMinimized) {
@@ -142,9 +141,9 @@ export function TutorialOverlay() {
                         <br /><br />
                         After calibration, editing tools will unlock.
                     </p>
-                    <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-                        <ArrowLeft className="w-3 h-3" />
-                        Look for <span className="text-white/80">Ruler Tool</span> in the left panel
+                    <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground">
+                        <span>Click the <span className="text-yellow-400 font-semibold">Ruler (C)</span> in the toolbar below</span>
+                        <ArrowDown className="w-4 h-4 text-yellow-400 animate-bounce mt-1" />
                     </div>
                 </div>
             )}
