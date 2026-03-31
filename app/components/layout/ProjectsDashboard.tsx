@@ -31,7 +31,7 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
     const [showNewForm, setShowNewForm] = useState(false)
     const fileRef = useRef<HTMLInputElement>(null)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
-    const [workerOnline, setWorkerOnline] = useState(false)
+    const [workerOnline, setWorkerOnline] = useState<boolean | null>(null)
     const [offlineQueued, setOfflineQueued] = useState(false)
 
     // Poll worker status every 10s
@@ -280,8 +280,8 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
             <div className="relative z-10 flex-1 overflow-y-auto px-6 py-8">
                 <div className="max-w-6xl mx-auto">
 
-                    {/* Offline banner */}
-                    {!workerOnline && (
+                    {/* Offline banner — only show once status is confirmed (null = still loading) */}
+                    {workerOnline === false && (
                         <div className="mb-6 flex items-start gap-3 px-4 py-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
                             <WifiOff className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                             <div>
@@ -375,14 +375,14 @@ export function ProjectsDashboard({ onOpenEditor, onClose, onLogout }: Props) {
                                         className={cn(
                                             "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all",
                                             selectedFile && projectName.trim()
-                                                ? workerOnline
-                                                    ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                                                    : "bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20"
+                                                ? workerOnline === false
+                                                    ? "bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20"
+                                                    : "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
                                                 : "bg-white/5 text-white/30 cursor-not-allowed"
                                         )}
                                     >
                                         {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                        {workerOnline ? 'Create' : 'Save & Queue'}
+                                        {workerOnline === false ? 'Save & Queue' : 'Create'}
                                     </button>
                                     <button
                                         onClick={() => { setShowNewForm(false); setSelectedFile(null); setProjectName('') }}
