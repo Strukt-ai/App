@@ -119,6 +119,8 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
     const selectedWall = walls.find(w => w.id === selectedId)
     const selectedRoom = rooms.find(r => r.id === selectedId)
 
+    console.log('Sidebar render - selectedId:', selectedId, 'selectedWall:', selectedWall, 'walls:', walls)
+
     const onImportModels = async (files: File[]) => {
         if (!currentRunId || !token) return
 

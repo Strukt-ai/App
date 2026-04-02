@@ -567,10 +567,14 @@ export function RoomDesignerEmbedded() {
           }
         }
       })
-      bp.three.itemUnselectedCallbacks.add(() => selectObject(null))
+      bp.three.itemUnselectedCallbacks.add(() => {
+        if (useFloorplanStore.getState().activeTool === 'ruler') return
+        selectObject(null)
+      })
       bp.three.nothingClicked?.add?.(() => {
         // Avoid clearing 2D selections from the floorplanner
-        if (useFloorplanStore.getState().mode === '2d') return
+        const state = useFloorplanStore.getState()
+        if (state.mode === '2d' || state.activeTool === 'ruler') return
         selectObject(null)
       })
 
@@ -638,6 +642,115 @@ export function RoomDesignerEmbedded() {
           console.log('falling back to first wall:', storeWalls[0].id)
           selectObject(storeWalls[0].id)
         }
+      })
+
+      // Handle wall hover for ruler tool - auto-select on hover
+      bp.three.wallHovered?.add?.((wall: any) => {
+        if (useFloorplanStore.getState().activeTool !== 'ruler') return
+        console.log('wallHovered triggered with wall:', wall)
+        const mapped = wallMapRef.current.get(wall.id)
+        if (mapped) {
+          console.log('selecting hovered wall:', mapped)
+          selectObject(mapped)
+          return
+        }
+
+        // Same logic as wallClicked for coordinate matching
+        let start: { x: number; y: number } | null = null
+        let end: { x: number; y: number } | null = null
+
+        if (wall?.getStartX && wall?.getEndX) {
+          start = { x: cmToM(wall.getStartX()), y: cmToM(wall.getStartY()) }
+          end = { x: cmToM(wall.getEndX()), y: cmToM(wall.getEndY()) }
+        } else if (wall?.getStart && wall?.getEnd) {
+          const s = wall.getStart()
+          const e = wall.getEnd()
+          if (s && e) {
+            start = { x: cmToM(s.x), y: cmToM(s.y) }
+            end = { x: cmToM(e.x), y: cmToM(e.y) }
+          }
+        } else if (wall?.wall?.getStartX && wall?.wall?.getEndX) {
+          start = { x: cmToM(wall.wall.getStartX()), y: cmToM(wall.wall.getStartY()) }
+          end = { x: cmToM(wall.wall.getEndX()), y: cmToM(wall.wall.getEndY()) }
+        }
+
+        if (!start || !end) return
+
+        const storeWalls = useFloorplanStore.getState().walls
+        let bestId: string | null = null
+        let best = Infinity
+        storeWalls.forEach(w => {
+          const d1 = dist(start, w.start) + dist(end, w.end)
+          const d2 = dist(start, w.end) + dist(end, w.start)
+          const d = Math.min(d1, d2)
+          if (d < best) {
+            best = d
+            bestId = w.id
+          }
+        })
+
+        if (bestId) {
+          selectObject(bestId)
+        } else if (storeWalls.length > 0) {
+          selectObject(storeWalls[0].id)
+        }
+      })
+
+      // Try different hover callback names
+      bp.three.wallMouseOver?.add?.((wall: any) => {
+        if (useFloorplanStore.getState().activeTool !== 'ruler') return
+        console.log('wallMouseOver triggered with wall:', wall)
+        // Same logic as above
+        const mapped = wallMapRef.current.get(wall.id)
+        if (mapped) {
+          selectObject(mapped)
+          return
+        }
+
+        let start: { x: number; y: number } | null = null
+        let end: { x: number; y: number } | null = null
+
+        if (wall?.getStartX && wall?.getEndX) {
+          start = { x: cmToM(wall.getStartX()), y: cmToM(wall.getStartY()) }
+          end = { x: cmToM(wall.getEndX()), y: cmToM(wall.getEndY()) }
+        } else if (wall?.getStart && wall?.getEnd) {
+          const s = wall.getStart()
+          const e = wall.getEnd()
+          if (s && e) {
+            start = { x: cmToM(s.x), y: cmToM(s.y) }
+            end = { x: cmToM(e.x), y: cmToM(e.y) }
+          }
+        } else if (wall?.wall?.getStartX && wall?.wall?.getEndX) {
+          start = { x: cmToM(wall.wall.getStartX()), y: cmToM(wall.wall.getStartY()) }
+          end = { x: cmToM(wall.wall.getEndX()), y: cmToM(wall.wall.getEndY()) }
+        }
+
+        if (!start || !end) return
+
+        const storeWalls = useFloorplanStore.getState().walls
+        let bestId: string | null = null
+        let best = Infinity
+        storeWalls.forEach(w => {
+          const d1 = dist(start, w.start) + dist(end, w.end)
+          const d2 = dist(start, w.end) + dist(end, w.start)
+          const d = Math.min(d1, d2)
+          if (d < best) {
+            best = d
+            bestId = w.id
+          }
+        })
+
+        if (bestId) {
+          selectObject(bestId)
+        } else if (storeWalls.length > 0) {
+          selectObject(storeWalls[0].id)
+        }
+      })
+
+      // Prevent wall unselection in ruler mode
+      bp.three.wallUnselected?.add?.(() => {
+        if (useFloorplanStore.getState().activeTool === 'ruler') return
+        selectObject(null)
       })
 
       bp.three.floorClicked.add((room: any) => {
