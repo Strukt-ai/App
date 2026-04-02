@@ -1,0 +1,12 @@
+{
+  "id": "living-room-and-kitchen-floor-plan",
+  "title": "Living room and Kitchen floor plan",
+  "description": "A beautiful living room and kitchen floor plan ready for your design.",
+  "category": "Residential",
+  "roomType": "Living",
+  "sidebarCategory": "All Products",
+  "readyToUse": true,
+  "thumbnail": "/templates/living-room-and-kitchen-floor-plan/preview.png",
+  "sqft": 500,
+  "path": "living-room-and-kitchen-floor-plan"
+}

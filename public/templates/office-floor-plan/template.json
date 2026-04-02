@@ -1,0 +1,12 @@
+{
+  "id": "office-floor-plan",
+  "title": "Office floor plan",
+  "description": "A beautiful office floor plan ready for your design.",
+  "category": "Commercial",
+  "roomType": "Office",
+  "sidebarCategory": "All Products",
+  "readyToUse": true,
+  "thumbnail": "/templates/office-floor-plan/preview.png",
+  "sqft": 500,
+  "path": "office-floor-plan"
+}

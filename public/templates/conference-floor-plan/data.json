@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "uploadedImage": "/templates/conference-floor-plan/preview.png",
+  "floorplan": {
+    "walls": [],
+    "furniture": [],
+    "rooms": [],
+    "doors": [],
+    "windows": [],
+    "labels": []
+  },
+  "camera": {
+    "position": [
+      0,
+      10,
+      0
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "zoom": 40
+  },
+  "settings": {
+    "scale": 1,
+    "gridSize": 1,
+    "snapToGrid": true,
+    "unitsystem": "metric"
+  },
+  "materials": {
+    "floor": {
+      "type": "color",
+      "color": "#ffffff"
+    },
+    "walls": {
+      "type": "color",
+      "color": "#ffffff"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "multi-room-floor-plan",
+  "title": "Multi-room floor plan",
+  "description": "A beautiful multi-room floor plan ready for your design.",
+  "category": "Specialty",
+  "roomType": "Multi-room",
+  "sidebarCategory": "All Products",
+  "readyToUse": true,
+  "thumbnail": "/templates/multi-room-floor-plan/preview.png",
+  "sqft": 500,
+  "path": "multi-room-floor-plan"
+}

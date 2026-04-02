@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import './globals.css'
 import './App.css'
+import { OtelClientInit } from '@/components/otel/OtelClientInit'
 
 export const metadata: Metadata = {
   title: 'Strukt.AI - AI-Powered Floor Planning',
@@ -23,6 +24,7 @@ export default function RootLayout({
       </head>
       <body>
         <GoogleOAuthProvider clientId={CLIENT_ID}>
+          <OtelClientInit />
           {children}
         </GoogleOAuthProvider>
       </body>

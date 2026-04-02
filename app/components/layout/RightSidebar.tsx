@@ -14,6 +14,9 @@ export function RightSidebar() {
     const furniture = useFloorplanStore(s => s.furniture)
     const updateFurniture = useFloorplanStore(s => s.updateFurniture)
     const deleteObject = useFloorplanStore(s => s.deleteObject)
+    const testGLB = useFloorplanStore(s => s.testGLB)
+    const toggleTestGLB = useFloorplanStore(s => s.toggleTestGLB)
+    const setMode = useFloorplanStore(s => s.setMode)
 
 
     // --- AI / SAM3D State ---
@@ -39,7 +42,9 @@ export function RightSidebar() {
     // 1. "Furniture" tool (now AI Reconstruction) is active
     // 2. Mode is "3d" (3D Options/Results)
     // 3. An item is selected (for size/label edits)
-    const isVisible = activeTool === 'furniture' || mode === '3d' || !!selectedFurn
+    const isVisible = true // activeTool === 'furniture' || mode === '3d' || !!selectedFurn
+
+    console.log('RightSidebar visibility:', { isVisible, activeTool, mode, selectedFurn, testGLB })
 
     const mToCm = (v: number) => v * 100
 
@@ -506,6 +511,42 @@ export function RightSidebar() {
                     {/* Job Queue — always visible at bottom, outside scroll */}
                     <JobQueuePanel />
 
+                </div>
+            )}
+
+            {/* --- 3D Options Panel (Visible when mode === '3d') --- */}
+            {true && ( // mode === '3d' && (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="p-4 border-b">
+                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">3D Options</h3>
+                        <p className="text-[10px] text-muted-foreground mt-1">Control 3D rendering and test features.</p>
+                    </div>
+
+                    <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => {
+                                    console.log('Test GLB button clicked, current state:', testGLB)
+                                    if (!testGLB) {
+                                        // Show test GLB even before calibration by entering 3D mode
+                                        setMode('3d')
+                                    }
+                                    toggleTestGLB()
+                                }}
+                                className={cn(
+                                    "w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-semibold transition-colors border",
+                                    testGLB ? "bg-accent text-accent-foreground border-accent" : "bg-secondary/30 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/50"
+                                )}
+                            >
+                                <Box className="w-3 h-3" />
+                                {testGLB ? "Hide Test GLB" : "Load Test GLB"}
+                            </button>
+                            <p className="text-[10px] text-muted-foreground">Load and render a test GLB file from the test folder.</p>
+                        </div>
+                    </div>
+
+                    {/* Job Queue — always visible at bottom, outside scroll */}
+                    <JobQueuePanel />
                 </div>
             )}
 

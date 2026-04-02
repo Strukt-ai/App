@@ -1,0 +1,55 @@
+version: '3.8'
+services:
+  zookeeper:
+    image: signoz/zookeeper:3.7.1
+    container_name: signoz-zookeeper-1
+    environment:
+      - ZOO_MY_ID=1
+      - ZOO_SERVERS=server.1=zookeeper:2888:3888
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_AUTOPURGE_INTERVAL=1
+      - ZOO_ENABLE_PROMETHEUS_METRICS=yes
+      - ZOO_PROMETHEUS_METRICS_PORT_NUMBER=9141
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.5.6
+    container_name: signoz-clickhouse
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+      - '9009:9009'
+    volumes:
+      - clickhouse:/var/lib/clickhouse
+
+  signoz:
+    image: signoz/signoz:v0.117.1
+    container_name: signoz
+    ports:
+      - '3301:8080'
+    depends_on:
+      - clickhouse
+      - zookeeper
+    environment:
+      - SIGNOZ_ALERTMANAGER_PROVIDER=signoz
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://clickhouse:9000
+      - SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db
+      - SIGNOZ_TOKENIZER_JWT_SECRET=secret
+    volumes:
+      - signoz:/var/lib/signoz
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.88.0
+    container_name: signoz-otel-collector
+    ports:
+      - '4317:4317'
+      - '4318:4318'
+    depends_on:
+      - clickhouse
+    volumes:
+      - /tmp/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    command: ["--config=/etc/otel-collector-config.yaml"]
+
+volumes:
+  clickhouse:
+  signoz:
+

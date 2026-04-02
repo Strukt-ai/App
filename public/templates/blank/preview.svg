@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <!-- Background -->
+  <rect width="500" height="500" fill="#f5f5f5"/>
+  
+  <!-- Grid pattern -->
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e0e0e0" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="500" height="500" fill="url(#grid)"/>
+  
+  <!-- Border -->
+  <rect x="0" y="0" width="500" height="500" fill="none" stroke="#cccccc" stroke-width="2"/>
+  
+  <!-- Center text -->
+  <text x="250" y="250" font-size="24" fill="#999999" text-anchor="middle" dominant-baseline="middle" font-family="system-ui">
+    Blank Canvas
+  </text>
+</svg>

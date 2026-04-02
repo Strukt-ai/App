@@ -5,21 +5,32 @@ import { useFloorplanStore } from '@/store/floorplanStore'
 import { useEffect } from 'react'
 import { DoubleSide, Mesh } from 'three'
 
-export function Model3D() {
+export function Model3D({ testGLB }: { testGLB?: boolean }) {
     const { mode, currentRunId, runStatus } = useFloorplanStore()
 
-    if (mode !== '3d' || !currentRunId || runStatus !== 'completed') return null
+    console.log('Model3D render:', { mode, currentRunId, runStatus, testGLB })
 
-    return <GLBLoader runId={currentRunId} />
+    if (false) { // mode !== '3d' || (!currentRunId && !testGLB) || (!testGLB && runStatus !== 'completed')
+        console.log('Model3D not rendering due to condition check')
+        return null
+    }
+
+    console.log('Model3D rendering GLBLoader')
+    return <GLBLoader runId={'test'} testGLB={true} />
 }
 
-function GLBLoader({ runId }: { runId: string }) {
+function GLBLoader({ runId, testGLB }: { runId: string; testGLB?: boolean }) {
     // Generate a unique URL to avoid caching issues when regenerating and re-viewing the 3D model
-    const url = `/api/runs/${runId}/download/glb?t=${Date.now()}`
+    const url = testGLB ? '/test/floorplan-20260331_134956_970900.glb' : `/api/runs/${runId}/download/glb?t=${Date.now()}`
+    
+    console.log('GLBLoader loading URL:', url)
     const { scene } = useGLTF(url)
+
+    console.log('GLBLoader scene loaded:', scene ? 'yes' : 'no')
 
     useEffect(() => {
         if (!scene) return
+        console.log('Processing GLB scene with', scene.children.length, 'children')
         scene.traverse((obj) => {
             if (obj instanceof Mesh) {
                 if (obj.material) {

@@ -22,6 +22,11 @@ export type Wall = {
     textureDataUrl?: string
     textureTileWidthM?: number
     textureTileHeightM?: number
+    // PBR map data URLs (extracted from ZIP for browser 3D preview)
+    pbrNormalUrl?: string
+    pbrRoughnessUrl?: string
+    pbrAoUrl?: string
+    pbrMetalnessUrl?: string
 }
 
 export type FurnItem = {
@@ -46,6 +51,11 @@ export type Room = {
     textureDataUrl?: string
     textureTileWidthM?: number
     textureTileHeightM?: number
+    // PBR map data URLs (extracted from ZIP for browser 3D preview)
+    pbrNormalUrl?: string
+    pbrRoughnessUrl?: string
+    pbrAoUrl?: string
+    pbrMetalnessUrl?: string
 }
 
 export type TextLabel = {
@@ -80,14 +90,20 @@ export interface FloorplanState {
     isGenerating3D: boolean
     isRendering: boolean
     showBackground: boolean // New state for background visibility
+    testGLB: boolean // New state for test GLB loading
     showProcessingModal: boolean // New state for popup
     showQueueModal: boolean
     projectsModalOpen: boolean // Global state for Projects Modal
-    tutorialStep: 'none' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
+    mobileSidebarOpen: boolean
+    mobileRightSidebarOpen: boolean
+    tutorialStep: 'none' | 'upload' | 'process' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
+    tutorialMinimized: boolean
+    referenceMinimized: boolean
     lastQueuedTask: 'none' | 'detect_rooms' | 'gen_3d'
     renders: string[]
     fitViewTrigger: number
     exportScale: number // Ratio to send to backend for 3D generation
+    pendingFile: File | null
 
     interaction: {
         type: 'none' | 'drawing' | 'dragging' | 'resizing' | 'pending_draw' | 'drawing_floor'
@@ -102,8 +118,10 @@ export interface FloorplanState {
     // Auth
     token: string | null
     user: { email: string; name: string; picture: string } | null
+    rememberMe: boolean
     setToken: (token: string | null) => void
     setUser: (user: any) => void
+    setRememberMe: (remember: boolean) => void
 
     // Actions
     setMode: (mode: '2d' | '3d') => void
@@ -116,7 +134,11 @@ export interface FloorplanState {
     setShowProcessingModal: (show: boolean) => void
     setShowQueueModal: (show: boolean) => void
     setProjectsModalOpen: (show: boolean) => void
-    setTutorialStep: (step: 'none' | 'calibration' | 'correction' | 'rooms' | 'floor_review') => void
+    setMobileSidebarOpen: (show: boolean) => void
+    setMobileRightSidebarOpen: (show: boolean) => void
+    setTutorialStep: (step: FloorplanState['tutorialStep']) => void
+    setTutorialMinimized: (minimized: boolean) => void
+    setReferenceMinimized: (minimized: boolean) => void
     completeTutorial: () => void
     setLastQueuedTask: (task: 'none' | 'detect_rooms' | 'gen_3d') => void
     triggerDetectRooms: () => Promise<void>
@@ -131,9 +153,10 @@ export interface FloorplanState {
 
     calibrate: (wallId: string, realLength: number) => void
     syncSVGAndEnter3D: () => Promise<void>
-    triggerBlenderGeneration: () => Promise<void>
+    triggerBlenderGeneration: (formats?: string[]) => Promise<void>
     triggerRender: () => Promise<void>
     toggleBackground: () => void
+    toggleTestGLB: () => void
 
     updateFurniture: (id: string, updates: Partial<FurnItem>) => void
     updateLabel: (id: string, label: string) => void
@@ -173,6 +196,8 @@ export interface FloorplanState {
     setJoinMode: (active: boolean) => void
     setJoinTargetId: (id: string | null, point?: { x: number, y: number }) => void
     applyJoin: () => void
+    setPendingFile: (file: File | null) => void
+    resetFloorplan: () => void
 }
 
 // --- Store ---
@@ -195,13 +220,19 @@ export const useFloorplanStore = create<FloorplanState>()(
         uploadedImage: null,
         imageDimensions: null,
         calibrationFactor: 0.01, // Default 1px = 1cm
-        isCalibrated: false,
+        isCalibrated: true, // Temporarily set to true for testing
         isGenerating3D: false,
         isRendering: false,
         showBackground: true, // Default visible
+        testGLB: false, // Default off
         showProcessingModal: false, // Default
         showQueueModal: false, // Default
         projectsModalOpen: false, // Global state for Projects Modal
+        mobileSidebarOpen: false,
+        mobileRightSidebarOpen: false,
+        tutorialStep: 'none',
+        tutorialMinimized: false,
+        referenceMinimized: false,
         renders: [],
         interaction: {
             type: 'none',
@@ -219,15 +250,19 @@ export const useFloorplanStore = create<FloorplanState>()(
         joinTargetId: null,
         joinPreviewWalls: null,
 
-        token: localStorage.getItem('google_token') || null,
+        token: typeof window !== 'undefined' ? localStorage.getItem('google_token') || null : null,
         user: null,
+        rememberMe: true,
 
         setToken: (token) => set((state) => {
             state.token = token
-            if (token) localStorage.setItem('google_token', token)
-            else localStorage.removeItem('google_token')
+            if (typeof window !== 'undefined') {
+                if (token) localStorage.setItem('google_token', token)
+                else localStorage.removeItem('google_token')
+            }
         }),
         setUser: (user) => set((state) => { state.user = user }),
+        setRememberMe: (remember) => set((state) => { state.rememberMe = remember }),
 
         setMode: (mode) => set((state) => { state.mode = mode }),
         setActiveTool: (tool) => set((state) => { state.activeTool = tool }),
@@ -245,11 +280,14 @@ export const useFloorplanStore = create<FloorplanState>()(
         setShowProcessingModal: (show) => set((state) => { state.showProcessingModal = show }),
         setShowQueueModal: (show) => set((state) => { state.showQueueModal = show }),
         setProjectsModalOpen: (show) => set((state) => { state.projectsModalOpen = show }),
+        setMobileSidebarOpen: (show) => set((state) => { state.mobileSidebarOpen = show }),
+        setMobileRightSidebarOpen: (show) => set((state) => { state.mobileRightSidebarOpen = show }),
 
         // Tutorial State
-        tutorialStep: 'none',
         lastQueuedTask: 'none',
         setTutorialStep: (step) => set((state) => { state.tutorialStep = step }),
+        setTutorialMinimized: (minimized) => set((state) => { state.tutorialMinimized = minimized }),
+        setReferenceMinimized: (minimized) => set((state) => { state.referenceMinimized = minimized }),
         completeTutorial: () => set((state) => { state.tutorialStep = 'none' }),
         setLastQueuedTask: (task) => set((state) => { state.lastQueuedTask = task }),
 
@@ -307,7 +345,10 @@ export const useFloorplanStore = create<FloorplanState>()(
         },
 
 
-        selectObject: (id) => set((state) => { state.selectedId = id }),
+        selectObject: (id) => {
+            console.log('selectObject called with id:', id)
+            set((state) => { state.selectedId = id })
+        },
 
         deleteObject: (id) => set((state) => {
             state.walls = state.walls.filter((w: Wall) => w.id !== id)
@@ -958,7 +999,7 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
         },
 
-        triggerBlenderGeneration: async () => {
+        triggerBlenderGeneration: async (formats?: string[]) => {
             const state = useFloorplanStore.getState()
             if (!state.currentRunId || !state.isCalibrated) return
 
@@ -976,7 +1017,8 @@ export const useFloorplanStore = create<FloorplanState>()(
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
-                        scale: state.exportScale || state.calibrationFactor
+                        scale: state.exportScale || state.calibrationFactor,
+                        formats: formats || ['glb']  // Default to GLB if no formats specified
                     })
                 })
 
@@ -995,6 +1037,11 @@ export const useFloorplanStore = create<FloorplanState>()(
         toggleBackground: () => {
             set((state) => {
                 state.showBackground = !state.showBackground
+            })
+        },
+        toggleTestGLB: () => {
+            set((state) => {
+                state.testGLB = !state.testGLB
             })
         },
         triggerRender: async () => {
@@ -2015,7 +2062,28 @@ export const useFloorplanStore = create<FloorplanState>()(
                     }
                 })
             }, 3000)
-        }
+        },
+
+        setPendingFile: (file: File | null) => set((state) => {
+            state.pendingFile = file
+        }),
+
+        resetFloorplan: () => set((state) => {
+            state.walls = []
+            state.furniture = []
+            state.rooms = []
+            state.labels = []
+            state.uploadedImage = null
+            state.imageDimensions = { width: 0, height: 0 }
+            state.calibrationFactor = 0.01 // Default 1px = 1cm
+            state.isCalibrated = false
+            state.selectedId = null
+            state.currentRunId = null
+            state.runStatus = 'idle'
+            state.tutorialStep = 'none'
+            ;(state as any).history = []
+            ;(state as any).historyIndex = -1
+        })
 
     }))
 )

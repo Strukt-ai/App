@@ -1,0 +1,12 @@
+{
+  "id": "conference-floor-plan",
+  "title": "Conference floor plan",
+  "description": "A beautiful conference floor plan ready for your design.",
+  "category": "Commercial",
+  "roomType": "Conference",
+  "sidebarCategory": "All Products",
+  "readyToUse": true,
+  "thumbnail": "/templates/conference-floor-plan/preview.png",
+  "sqft": 500,
+  "path": "conference-floor-plan"
+}

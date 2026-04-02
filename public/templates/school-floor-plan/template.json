@@ -1,0 +1,12 @@
+{
+  "id": "school-floor-plan",
+  "title": "School floor plan",
+  "description": "A beautiful school floor plan ready for your design.",
+  "category": "Specialty",
+  "roomType": "School",
+  "sidebarCategory": "All Products",
+  "readyToUse": true,
+  "thumbnail": "/templates/school-floor-plan/preview.png",
+  "sqft": 500,
+  "path": "school-floor-plan"
+}

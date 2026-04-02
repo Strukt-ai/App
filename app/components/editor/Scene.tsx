@@ -3,8 +3,8 @@
 import { useRef, useEffect, Suspense, useState } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping, MOUSE } from 'three'
 import { Canvas, useThree, useLoader } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows } from '@react-three/drei'
-import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast } from '@react-three/postprocessing'
+import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows, Sky } from '@react-three/drei'
+import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast, N8AO } from '@react-three/postprocessing'
 import { ToneMappingMode, BlendFunction } from 'postprocessing'
 
 import { useFloorplanStore } from '@/store/floorplanStore'
@@ -52,6 +52,9 @@ function SvgOverlayPlane() {
     const currentRunId = useFloorplanStore(s => s.currentRunId)
     const token = useFloorplanStore(s => s.token)
     const calibrationFactor = useFloorplanStore(s => s.calibrationFactor)
+    const imageDimensions = useFloorplanStore(s => s.imageDimensions)
+    const imageWorldWidth = useFloorplanStore(s => s.imageWorldWidth)
+    const imageWorldHeight = useFloorplanStore(s => s.imageWorldHeight)
 
     const [blobUrl, setBlobUrl] = useState<string | null>(null)
     const [vb, setVb] = useState<{ w: number; h: number } | null>(null)
@@ -121,9 +124,10 @@ function SvgOverlayPlane() {
     if (mode !== '3d') return null
     if (!blobUrl || !vb) return null
 
+    // Match BackgroundPlane sizing so SVG overlay aligns exactly with the image
     const factor = calibrationFactor > 0 ? calibrationFactor : 0.02
-    const width = vb.w * factor
-    const height = vb.h * factor
+    const width = imageWorldWidth != null ? imageWorldWidth : (imageDimensions?.width || vb.w) * factor
+    const height = imageWorldHeight != null ? imageWorldHeight : (imageDimensions?.height || vb.h) * factor
 
     return (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} renderOrder={-1}>
@@ -152,8 +156,8 @@ function FitHandler() {
 
             scene.traverse((obj) => {
                 if (obj.type === 'Mesh') {
-                    // Include all relevant geometry for bounds
-                    if (obj.name === 'Wall' || obj.name === 'Floor' || obj.parent?.name === 'Item' || obj.name.includes('door') || obj.name.includes('window')) {
+                    // Include all relevant geometry for bounds (including background image so camera doesn't over-zoom)
+                    if (obj.name === 'Wall' || obj.name === 'Floor' || obj.name === 'BackgroundPlane' || obj.parent?.name === 'Item' || obj.name.includes('door') || obj.name.includes('window')) {
                         targets.push(obj)
                     }
                 }
@@ -225,15 +229,17 @@ function InteractionLayer() {
         // propagation leaks through stopPropagation between sibling meshes.
         if (interactionType !== 'none') return
 
-        e.stopPropagation()
-
         if (activeTool === 'wall' || activeTool === 'ruler') {
+            e.stopPropagation()
             selectObject(null)
             startInteraction('drawing', null, { x: e.point.x, y: e.point.z })
         } else if (activeTool === 'floor') {
+            e.stopPropagation()
             selectObject(null)
             startInteraction('drawing_floor', null, { x: e.point.x, y: e.point.z })
         } else {
+            // For select/move tools, deselect but DON'T stopPropagation —
+            // let the click pass through to floor/wall meshes below
             selectObject(null)
         }
     }
@@ -272,10 +278,10 @@ function SceneContent() {
 
     // Lighting presets — tuned for clean architectural rendering
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6 },
-        night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2 },
-        studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6 },
-        sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35 }
+        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6, fogColor: '#d4dce8', fogNear: 40, fogFar: 120, skyTurbidity: 8, skyRayleigh: 1.5, sunPos: [10, 20, 8] as [number, number, number] },
+        night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2, fogColor: '#1a1e2e', fogNear: 25, fogFar: 80, skyTurbidity: 20, skyRayleigh: 0.1, sunPos: [-5, -1, -5] as [number, number, number] },
+        studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6, fogColor: '#e8e8ee', fogNear: 40, fogFar: 120, skyTurbidity: 10, skyRayleigh: 1.0, sunPos: [5, 15, 10] as [number, number, number] },
+        sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35, fogColor: '#e8c8a0', fogNear: 30, fogFar: 100, skyTurbidity: 4, skyRayleigh: 2.5, sunPos: [15, 3, 8] as [number, number, number] }
     }
     const lighting = lightingConfigs[lightingPreset]
 
@@ -293,8 +299,21 @@ function SceneContent() {
 
     return (
         <>
-            {/* Clean architectural background — dark studio */}
-            <color attach="background" args={['#1a1a1a']} />
+            {/* Background: sky in 3D, dark in 2D */}
+            {mode === '3d' ? (
+                <>
+                    <Sky
+                        sunPosition={lighting.sunPos}
+                        turbidity={lighting.skyTurbidity}
+                        rayleigh={lighting.skyRayleigh}
+                        mieCoefficient={0.005}
+                        mieDirectionalG={0.8}
+                    />
+                    <fog attach="fog" args={[lighting.fogColor, lighting.fogNear, lighting.fogFar]} />
+                </>
+            ) : (
+                <color attach="background" args={['#1a1a1a']} />
+            )}
 
             {/* Soft shadows for realistic penumbra */}
             {mode === '3d' && <SoftShadows size={25} samples={16} focus={0.5} />}
@@ -306,7 +325,7 @@ function SceneContent() {
             <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
 
             {/* HDRI Environment — apartment preset for best interior reflections */}
-            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.4} environmentIntensity={1.0} />
+            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.3} environmentIntensity={0.8} />
 
             {/* Key Light — soft directional from upper right */}
             <directionalLight
@@ -348,12 +367,12 @@ function SceneContent() {
             {/* Contact Shadows — soft grounding, subtle on light background */}
             <ContactShadows
                 position={[0, 0.01, 0]}
-                opacity={0.35}
+                opacity={0.5}
                 scale={50}
-                blur={3.0}
-                far={10}
+                blur={2.5}
+                far={12}
                 resolution={2048}
-                color="#8a8580"
+                color="#4a4540"
                 frames={1}
             />
 
@@ -402,20 +421,27 @@ function SceneContent() {
                 <ErrorBoundary name="FloatingMenu"><FloatingMenu /></ErrorBoundary>
             </group>
 
-            {/* Post-processing — clean architectural look */}
+            {/* Post-processing — cinematic architectural look */}
             {mode === '3d' && (
                 <EffectComposer multisampling={0}>
                     <SMAA />
-                    <Bloom
-                        luminanceThreshold={2.0}
-                        mipmapBlur
-                        intensity={0.02}
-                        radius={0.2}
+                    {/* N8AO — fast high-quality ambient occlusion for realistic depth in corners */}
+                    <N8AO
+                        aoRadius={0.8}
+                        intensity={2.5}
+                        distanceFalloff={0.5}
+                        quality="medium"
                     />
-                    <BrightnessContrast contrast={0.08} brightness={0.02} />
+                    <Bloom
+                        luminanceThreshold={1.5}
+                        mipmapBlur
+                        intensity={0.08}
+                        radius={0.3}
+                    />
+                    <BrightnessContrast contrast={0.1} brightness={0.03} />
                     <Vignette
-                        offset={0.35}
-                        darkness={0.25}
+                        offset={0.3}
+                        darkness={0.35}
                         blendFunction={BlendFunction.NORMAL}
                     />
                     <ToneMapping mode={ToneMappingMode.AGX} />
@@ -448,6 +474,7 @@ function BackgroundPlane() {
 
     return (
         <mesh
+            name="BackgroundPlane"
             rotation={[-Math.PI / 2, 0, 0]}
             position={[0, -0.01, 0]} // On top of Ground
             receiveShadow
@@ -591,14 +618,15 @@ export function Scene() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             onMouseDownCapture={(e) => {
-                // NUCLEAR FIX: Prevent browser text selection / drag behavior
-                // Allow interactions with Input elements (like FloatingMenu)
-                if (e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+                // Prevent text selection / drag on the canvas itself,
+                // but allow all native interactions on HTML overlays (toolbar buttons, inputs, labels).
+                const target = e.target as HTMLElement
+                if (target.tagName === 'CANVAS') {
                     e.preventDefault()
                 }
             }}
         >
-            <DebugOverlay />
+            {/* <DebugOverlay /> */}
             <Canvas
                 shadows
                 gl={{

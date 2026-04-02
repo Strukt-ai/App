@@ -49,7 +49,8 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
     const [realLen, setRealLen] = useState('')
     const [editMenuOpen, setEditMenuOpen] = useState(false)
     const [addMenuOpen, setAddMenuOpen] = useState(false)
-    const [furnMenuOpen, setFurnMenuOpen] = useState(false) // New State
+    const [furnMenuOpen, setFurnMenuOpen] = useState(true) // Keep assets library visible by default
+    const [assetsOpen, setAssetsOpen] = useState(true)
     const [importModalOpen, setImportModalOpen] = useState(false)
     const [furnAIModalOpen, setFurnAIModalOpen] = useState(false)
 
@@ -368,16 +369,33 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             </button>
                         </div>
 
-                        {/* Add Items Catalog (Blueprint3D) */}
+                        {/* Assets Library (Blueprint3D items.json) */}
+                        <div className="relative mt-2">
+                            <button
+                                onClick={() => setAssetsOpen(!assetsOpen)}
+                                className={cn(
+                                    "w-full flex items-center justify-between p-3 rounded-lg border transition-all group",
+                                    assetsOpen
+                                        ? "bg-primary/20 border-primary text-primary shadow-inner"
+                                        : "border-border bg-secondary/20 hover:bg-secondary/50 hover:border-primary/50 text-muted-foreground"
+                                )}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Box className="w-5 h-5" />
+                                    <span className="text-[11px] font-medium uppercase tracking-wider">Assets Library</span>
+                                </div>
+                                <ChevronDown className={cn("w-4 h-4 transition-transform", assetsOpen && "rotate-180")} />
+                            </button>
+                        </div>
                         <div className={cn(
                             "overflow-hidden transition-all duration-300",
-                            furnMenuOpen ? "max-h-[520px] mt-2 opacity-100" : "max-h-0 opacity-0"
+                            assetsOpen ? "max-h-[640px] mt-2 opacity-100" : "max-h-0 opacity-0"
                         )}>
                             <div className="rounded-lg border border-border bg-secondary/10 p-2">
                                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                                    Add Items
+                                    Add Items (800+)
                                 </div>
-                                <div className="bp3d-items-panel max-h-[440px] overflow-y-auto custom-scrollbar rounded-md">
+                                <div className="bp3d-items-panel max-h-[560px] overflow-y-auto custom-scrollbar rounded-md">
                                     <div id="add-items">
                                         <div id="items-wrapper" className="row" />
                                     </div>
@@ -514,10 +532,12 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                     </div>
                 </div>
 
-                {/* Calibration Section - Only visible if Ruler Mode is Active */}
+                {/* Calibration Section - Visible during calibration or when ruler tool is active */}
                 <div className={cn(
                     "p-4 border-b bg-primary/5 transition-all duration-300",
-                    activeTool === 'ruler' ? "opacity-100 max-h-[300px]" : "opacity-0 max-h-0 py-0 overflow-hidden border-none"
+                    (activeTool === 'ruler' || tutorialStep === 'calibration')
+                        ? "opacity-100 max-h-[300px]"
+                        : "opacity-0 max-h-0 py-0 overflow-hidden border-none"
                 )}>
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Calibration Mode</h3>
                     {selectedWall ? (
@@ -545,8 +565,22 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             <p className="text-[10px] text-muted-foreground italic">Update the real-world scale of your plan.</p>
                         </div>
                     ) : (
-                        <div className="text-[11px] text-muted-foreground bg-secondary/20 p-3 rounded border border-dashed border-border text-center">
-                            Select a wall on the canvas to measure it.
+                        <div className="text-[11px] text-muted-foreground bg-secondary/20 p-3 rounded border border-dashed border-border text-center space-y-2">
+                            <p>Select a wall on the canvas to measure it.</p>
+                            <button
+                                onClick={() => {
+                                    console.log('Auto-select button clicked, walls:', walls)
+                                    if (walls.length > 0) {
+                                        console.log('Selecting wall:', walls[0].id)
+                                        selectObject(walls[0].id)
+                                    } else {
+                                        console.log('No walls available to select')
+                                    }
+                                }}
+                                className="text-xs font-semibold text-primary underline hover:text-primary/80"
+                            >
+                                Auto-select first wall
+                            </button>
                         </div>
                     )}
                 </div>

@@ -1,12 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import Script from 'next/script'
+import dynamic from 'next/dynamic'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { FurnAIAssetsManager } from '@/components/editor/FurnAIAssetsManager'
 import { shallow } from 'zustand/shallow'
 
 type Bp3dInstance = any
+
+const GLBOverlay = dynamic(() => import('@/components/editor/GLBOverlay').then(m => ({ default: m.GLBOverlay })), {
+  ssr: false,
+  loading: () => null
+})
 
 const CM_PER_M = 100
 const cmToM = (v: number) => v / CM_PER_M
@@ -30,6 +36,32 @@ const wallKey = (start: { x: number; y: number }, end: { x: number; y: number })
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y)
 
+const distPointToSegment = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+  const vx = b.x - a.x
+  const vy = b.y - a.y
+  const wx = p.x - a.x
+  const wy = p.y - a.y
+  const c1 = vx * wx + vy * wy
+  if (c1 <= 0) return Math.hypot(p.x - a.x, p.y - a.y)
+  const c2 = vx * vx + vy * vy
+  if (c2 <= c1) return Math.hypot(p.x - b.x, p.y - b.y)
+  const t = c1 / c2
+  const proj = { x: a.x + t * vx, y: a.y + t * vy }
+  return Math.hypot(p.x - proj.x, p.y - proj.y)
+}
+
+const pointInPolygon = (pt: { x: number; y: number }, poly: { x: number; y: number }[]) => {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y
+    const xj = poly[j].x, yj = poly[j].y
+    const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+      (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi + Number.EPSILON) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
 const polygonArea = (pts: { x: number; y: number }[]) => {
   if (pts.length < 3) return 0
   let a = 0
@@ -44,6 +76,51 @@ const polygonCenter = (pts: { x: number; y: number }[]) => {
   if (pts.length === 0) return { x: 0, y: 0 }
   const sum = pts.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 })
   return { x: sum.x / pts.length, y: sum.y / pts.length }
+}
+
+const getWallEndpoints = (wall: any): { start: { x: number; y: number }; end: { x: number; y: number } } | null => {
+  if (!wall) return null
+  if (wall?.getStartX && wall?.getEndX) {
+    return {
+      start: { x: cmToM(wall.getStartX()), y: cmToM(wall.getStartY()) },
+      end: { x: cmToM(wall.getEndX()), y: cmToM(wall.getEndY()) }
+    }
+  }
+  if (wall?.getStart && wall?.getEnd) {
+    const s = wall.getStart()
+    const e = wall.getEnd()
+    if (s && e) {
+      return {
+        start: { x: cmToM(s.x), y: cmToM(s.y) },
+        end: { x: cmToM(e.x), y: cmToM(e.y) }
+      }
+    }
+  }
+  if (wall?.wall?.getStartX && wall?.wall?.getEndX) {
+    return {
+      start: { x: cmToM(wall.wall.getStartX()), y: cmToM(wall.wall.getStartY()) },
+      end: { x: cmToM(wall.wall.getEndX()), y: cmToM(wall.wall.getEndY()) }
+    }
+  }
+  return null
+}
+
+const mapWallToStoreId = (wall: any, storeWalls: { id: string; start: { x: number; y: number }; end: { x: number; y: number } }[]) => {
+  const endpoints = getWallEndpoints(wall)
+  if (!endpoints) return null
+  const { start, end } = endpoints
+  let bestId: string | null = null
+  let best = Infinity
+  storeWalls.forEach(w => {
+    const d1 = dist(start, w.start) + dist(end, w.end)
+    const d2 = dist(start, w.end) + dist(end, w.start)
+    const d = Math.min(d1, d2)
+    if (d < best) {
+      best = d
+      bestId = w.id
+    }
+  })
+  return bestId
 }
 
 const inferOpeningType = (name?: string, modelUrl?: string) => {
@@ -62,6 +139,7 @@ const normalizeModelUrl = (url?: string) => {
 
 export function RoomDesignerEmbedded() {
   const mode = useFloorplanStore(s => s.mode)
+  const testGLB = useFloorplanStore(s => s.testGLB)
   const activeTool = useFloorplanStore(s => s.activeTool)
   const selectedId = useFloorplanStore(s => s.selectedId)
   const walls = useFloorplanStore(s => s.walls)
@@ -145,7 +223,8 @@ export function RoomDesignerEmbedded() {
 
       const textureUrl = w.frontTexture?.url
       const id = matchedId || genId()
-      if (matchedId) wallMapRef.current.set(w.id, matchedId)
+      // Always map BP wall id → store id so selections can resolve reliably
+      if (w?.id) wallMapRef.current.set(w.id, id)
 
       nextWalls.push({
         id,
@@ -190,7 +269,8 @@ export function RoomDesignerEmbedded() {
 
       const tex = r.getTexture ? r.getTexture() : null
       const id = matchedId || genId()
-      if (matchedId && r.getUuid) roomMapRef.current.set(r.getUuid(), matchedId)
+      // Always map BP room uuid → store id so selections can resolve reliably
+      if (r.getUuid) roomMapRef.current.set(r.getUuid(), id)
 
       nextRooms.push({
         id,
@@ -304,8 +384,39 @@ export function RoomDesignerEmbedded() {
 
     bp.model.loadSerialized(JSON.stringify({ floorplan, items: [] }))
 
-    // Apply wall textures (best-effort)
+    // Build BP wall/room → store id maps so selection works in 2D floorplanner
+    wallMapRef.current = new Map()
+    roomMapRef.current = new Map()
+
     const bpWalls = bp.model.floorplan.getWalls()
+    bpWalls.forEach((bw: any) => {
+      const id = mapWallToStoreId(bw, store.walls)
+      if (id && bw?.id) {
+        wallMapRef.current.set(bw.id, id)
+      }
+    })
+
+    const bpRoomsForMap = bp.model.floorplan.getRooms()
+    bpRoomsForMap.forEach((br: any) => {
+      const pts = (br?.corners || []).map((c: any) => ({ x: cmToM(c.x), y: cmToM(c.y) }))
+      if (pts.length < 3) return
+      const center = polygonCenter(pts)
+      let bestId: string | null = null
+      let bestDist = Infinity
+      store.rooms.forEach(rm => {
+        const c = rm.center || polygonCenter(rm.points)
+        const d = dist(center, c)
+        if (d < bestDist) {
+          bestDist = d
+          bestId = rm.id
+        }
+      })
+      if (bestId && br?.getUuid) {
+        roomMapRef.current.set(br.getUuid(), bestId)
+      }
+    })
+
+    // Apply wall textures (best-effort)
     bpWalls.forEach((bw: any) => {
       const start = { x: cmToM(bw.getStartX()), y: cmToM(bw.getStartY()) }
       const end = { x: cmToM(bw.getEndX()), y: cmToM(bw.getEndY()) }
@@ -457,14 +568,22 @@ export function RoomDesignerEmbedded() {
         }
       })
       bp.three.itemUnselectedCallbacks.add(() => selectObject(null))
-      bp.three.nothingClicked?.add?.(() => selectObject(null))
+      bp.three.nothingClicked?.add?.(() => {
+        // Avoid clearing 2D selections from the floorplanner
+        if (useFloorplanStore.getState().mode === '2d') return
+        selectObject(null)
+      })
 
       bp.three.wallClicked.add((wall: any) => {
+        console.log('wallClicked triggered with wall:', wall)
         const mapped = wallMapRef.current.get(wall.id)
+        console.log('mapped wall id:', mapped)
         if (mapped) {
+          console.log('selecting mapped wall:', mapped)
           selectObject(mapped)
           return
         }
+
         let start: { x: number; y: number } | null = null
         let end: { x: number; y: number } | null = null
 
@@ -483,20 +602,42 @@ export function RoomDesignerEmbedded() {
           end = { x: cmToM(wall.wall.getEndX()), y: cmToM(wall.wall.getEndY()) }
         }
 
+        console.log('extracted start/end:', start, end)
+
         if (!start || !end) return
+
+        // Ensure store has latest walls from BP3D before matching.
+        if (useFloorplanStore.getState().walls.length === 0) {
+          console.log('syncing from BP3D')
+          syncFromBp3d()
+        }
+
         const storeWalls = useFloorplanStore.getState().walls
+        console.log('store walls:', storeWalls)
         let bestId: string | null = null
         let best = Infinity
         storeWalls.forEach(w => {
           const d1 = dist(start, w.start) + dist(end, w.end)
           const d2 = dist(start, w.end) + dist(end, w.start)
           const d = Math.min(d1, d2)
+          console.log(`wall ${w.id} distance: ${d}`)
           if (d < best) {
             best = d
             bestId = w.id
           }
         })
-        if (bestId) selectObject(bestId)
+
+        console.log('best matched wall id:', bestId)
+        if (bestId) {
+          selectObject(bestId)
+          return
+        }
+
+        // If mapping failed and no store wall is matched, fall back to first wall if any.
+        if (storeWalls.length > 0) {
+          console.log('falling back to first wall:', storeWalls[0].id)
+          selectObject(storeWalls[0].id)
+        }
       })
 
       bp.three.floorClicked.add((room: any) => {
@@ -585,6 +726,124 @@ export function RoomDesignerEmbedded() {
     controller.setSelectedObject(item)
   }, [bpReady, selectedId])
 
+  // 2D floorplanner click → store selection (walls/rooms) for calibration + edit tools
+  useEffect(() => {
+    if (!bpReady) return
+    const bp = bpRef.current
+    const fp = bp?.floorplanner
+    const $ = (window as any).$
+    if (!fp || !$) return
+    const $canvas = fp.canvasElement || $('#floorplanner-canvas')
+    if (!$canvas || !$canvas.length) return
+
+    const ensureStoreSync = () => {
+      const s = useFloorplanStore.getState()
+      if (s.walls.length === 0 && bpRef.current?.model?.floorplan?.getWalls?.()?.length) {
+        syncFromBp3d()
+      }
+    }
+
+    const handleClick = (e: MouseEvent) => {
+      ensureStoreSync()
+      const store = useFloorplanStore.getState()
+      if (store.mode !== '2d') return
+      const tool = store.activeTool
+      if (tool === 'wall' || tool === 'floor' || tool === 'delete') return
+
+      const offset = $canvas.offset()
+      if (!offset) return
+      const mouseXcm = (e.clientX - offset.left) * fp.cmPerPixel + fp.originX * fp.cmPerPixel
+      const mouseYcm = (e.clientY - offset.top) * fp.cmPerPixel + fp.originY * fp.cmPerPixel
+
+      // Prefer active wall if available (floorplanner hover state)
+      const fpWall = fp.activeWall || fp.floorplan?.overlappedWall?.(mouseXcm, mouseYcm)
+      if (fpWall) {
+        const mapped = wallMapRef.current.get(fpWall.id)
+        const id = mapped || mapWallToStoreId(fpWall, store.walls)
+        if (id) {
+          selectObject(id)
+          return
+        }
+      }
+
+      // Fallback: nearest wall by distance to segment
+      const point = { x: cmToM(mouseXcm), y: cmToM(mouseYcm) }
+      let nearestWallId: string | null = null
+      let nearestWallDist = Infinity
+      store.walls.forEach(w => {
+        const d = distPointToSegment(point, w.start, w.end)
+        if (d < nearestWallDist) {
+          nearestWallDist = d
+          nearestWallId = w.id
+        }
+      })
+      if (nearestWallId && nearestWallDist < 0.2) {
+        selectObject(nearestWallId)
+        return
+      }
+
+      // Rooms (point-in-polygon)
+      const room = store.rooms.find(r => pointInPolygon(point, r.points))
+      if (room) {
+        selectObject(room.id)
+        return
+      }
+
+      selectObject(null)
+    }
+
+    const handleHover = (e: MouseEvent) => {
+      ensureStoreSync()
+      const store = useFloorplanStore.getState()
+      if (store.mode !== '2d') return
+      if (store.activeTool !== 'ruler') return
+
+      let pickedWallId: string | null = null
+
+      // Use floorplanner hover wall when available
+      const wall = fp.activeWall
+      if (wall) {
+        const mapped = wallMapRef.current.get(wall.id)
+        pickedWallId = mapped || mapWallToStoreId(wall, store.walls)
+      }
+
+      // Fallback: nearest wall to cursor (for some imported template cases)
+      if (!pickedWallId) {
+        const offset = $canvas.offset()
+        if (offset) {
+          const mouseXcm = (e.clientX - offset.left) * fp.cmPerPixel + fp.originX * fp.cmPerPixel
+          const mouseYcm = (e.clientY - offset.top) * fp.cmPerPixel + fp.originY * fp.cmPerPixel
+          const point = { x: cmToM(mouseXcm), y: cmToM(mouseYcm) }
+
+          let nearestWallId: string | null = null
+          let nearestWallDist = Infinity
+          store.walls.forEach(w => {
+            const d = distPointToSegment(point, w.start, w.end)
+            if (d < nearestWallDist) {
+              nearestWallDist = d
+              nearestWallId = w.id
+            }
+          })
+
+          if (nearestWallId && nearestWallDist < 0.3) {
+            pickedWallId = nearestWallId
+          }
+        }
+      }
+
+      if (pickedWallId && store.selectedId !== pickedWallId) {
+        selectObject(pickedWallId)
+      }
+    }
+
+    $canvas.on('mouseup.storeSelect', handleClick)
+    $canvas.on('mousemove.storeSelect', handleHover)
+    return () => {
+      $canvas.off('mouseup.storeSelect', handleClick)
+      $canvas.off('mousemove.storeSelect', handleHover)
+    }
+  }, [bpReady, selectObject])
+
   // Map mode/tool to BP3D UI
   useEffect(() => {
     if (!bpReady) return
@@ -655,6 +914,11 @@ export function RoomDesignerEmbedded() {
         onLoad={() => setScriptsReady(true)}
       />
 
+      {testGLB && mode === '3d' && (
+        <Suspense fallback={null}>
+          <GLBOverlay />
+        </Suspense>
+      )}
       <div className="bp3d-root h-full">
         <div className="container-fluid h-full">
           <div className="row main-row h-full">

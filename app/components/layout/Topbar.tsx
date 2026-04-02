@@ -43,7 +43,7 @@ export function Topbar() {
                     setWorkerCount(data.workers_online || 0)
                 }
             } catch (e) {
-                console.error("Worker check failed", e)
+                // Backend not running, set worker count to 0
                 setWorkerCount(0)
             }
         }
@@ -183,7 +183,6 @@ export function Topbar() {
             </div>
 
             <div className="flex items-center gap-2">
-
                 <div className="relative flex items-center gap-2">
                     {/* Process Button - Only visible if file selected */}
                     {uploadedImage && (
@@ -304,6 +303,7 @@ export function Topbar() {
                             : (uploadedImage ? 'Change Image' : 'Select Floorplan')}
                     </label>
                 </div>
+
             </div>
         </div >
     )

@@ -1,0 +1,12 @@
+{
+  "id": "apartment-floor-plan",
+  "title": "Apartment floor plan",
+  "description": "A beautiful apartment floor plan ready for your design.",
+  "category": "Residential",
+  "roomType": "Apartment",
+  "sidebarCategory": "All Products",
+  "readyToUse": true,
+  "thumbnail": "/templates/apartment-floor-plan/preview.png",
+  "sqft": 500,
+  "path": "apartment-floor-plan"
+}

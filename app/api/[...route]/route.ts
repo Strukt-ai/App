@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callBackend } from '@/lib/backend-adapter'
+import { register } from '@/instrumentation'
+
+try {
+  register()
+} catch (e) {
+  console.error('OTel register failed', e)
+}
 
 async function handler(request: NextRequest) {
   try {

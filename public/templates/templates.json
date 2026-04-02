@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "templates": [
+    {
+      "id": "apartment-floor-plan",
+      "title": "Apartment floor plan",
+      "description": "A beautiful apartment floor plan ready for your design.",
+      "category": "Residential",
+      "roomType": "Apartment",
+      "sidebarCategory": "All Products",
+      "readyToUse": true,
+      "thumbnail": "/templates/apartment-floor-plan/preview.png",
+      "sqft": 500,
+      "path": "apartment-floor-plan"
+    },
+    {
+      "id": "conference-floor-plan",
+      "title": "Conference floor plan",
+      "description": "A beautiful conference floor plan ready for your design.",
+      "category": "Commercial",
+      "roomType": "Conference",
+      "sidebarCategory": "All Products",
+      "readyToUse": true,
+      "thumbnail": "/templates/conference-floor-plan/preview.png",
+      "sqft": 500,
+      "path": "conference-floor-plan"
+    },
+    {
+      "id": "living-room-and-kitchen-floor-plan",
+      "title": "Living room and Kitchen floor plan",
+      "description": "A beautiful living room and kitchen floor plan ready for your design.",
+      "category": "Residential",
+      "roomType": "Living",
+      "sidebarCategory": "All Products",
+      "readyToUse": true,
+      "thumbnail": "/templates/living-room-and-kitchen-floor-plan/preview.png",
+      "sqft": 500,
+      "path": "living-room-and-kitchen-floor-plan"
+    },
+    {
+      "id": "multi-room-floor-plan",
+      "title": "Multi-room floor plan",
+      "description": "A beautiful multi-room floor plan ready for your design.",
+      "category": "Specialty",
+      "roomType": "Multi-room",
+      "sidebarCategory": "All Products",
+      "readyToUse": true,
+      "thumbnail": "/templates/multi-room-floor-plan/preview.png",
+      "sqft": 500,
+      "path": "multi-room-floor-plan"
+    },
+    {
+      "id": "office-floor-plan",
+      "title": "Office floor plan",
+      "description": "A beautiful office floor plan ready for your design.",
+      "category": "Commercial",
+      "roomType": "Office",
+      "sidebarCategory": "All Products",
+      "readyToUse": true,
+      "thumbnail": "/templates/office-floor-plan/preview.png",
+      "sqft": 500,
+      "path": "office-floor-plan"
+    },
+    {
+      "id": "school-floor-plan",
+      "title": "School floor plan",
+      "description": "A beautiful school floor plan ready for your design.",
+      "category": "Specialty",
+      "roomType": "School",
+      "sidebarCategory": "All Products",
+      "readyToUse": true,
+      "thumbnail": "/templates/school-floor-plan/preview.png",
+      "sqft": 500,
+      "path": "school-floor-plan"
+    }
+  ]
+}
