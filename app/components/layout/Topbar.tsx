@@ -1,15 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LayoutGrid, Box, Download, Play, Eye, EyeOff } from 'lucide-react'
+import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Camera, ChevronDown, MonitorStop, Globe, Locate } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 
 export function Topbar() {
-    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token } = useFloorplanStore()
+    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, setRealisticRenderActive } = useFloorplanStore()
     const [fileToUpload, setFileToUpload] = useState<File | null>(null)
     const [workerCount, setWorkerCount] = useState(1) // Optimistic: Assume 1 worker online until proven otherwise
     const [isDragging, setIsDragging] = useState(false)
+    const [cameraDropdownOpen, setCameraDropdownOpen] = useState(false)
 
     // Helper to process file (from input or drop)
     const handleFile_Local = (file: File) => {
@@ -184,6 +185,117 @@ export function Topbar() {
 
             <div className="flex items-center gap-2">
                 <div className="relative flex items-center gap-2">
+
+                    {/* Camera Options Dropdown */}
+                    <div 
+                        className="relative"
+                        onMouseEnter={() => setCameraDropdownOpen(true)}
+                        onMouseLeave={() => setCameraDropdownOpen(false)}
+                    >
+                        <button className="p-2 rounded-lg transition-all duration-200 flex items-center gap-1.5 text-zinc-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/5">
+                            <Camera className="w-4 h-4" />
+                            <ChevronDown className="w-3 h-3 opacity-70" />
+                        </button>
+
+                        {cameraDropdownOpen && (
+                            <div className="absolute top-full right-0 mt-2 w-56 bg-[#0c0d12]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="flex flex-col p-1.5 gap-0.5">
+                                    <button 
+                                        onClick={() => {
+                                            setCameraDropdownOpen(false);
+                                            setMode('3d');
+                                            syncSVGAndEnter3D();
+                                            setRealisticRenderActive(true);
+                                        }}
+                                        className="w-full text-left px-3 py-2.5 text-sm font-medium text-white bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 rounded-lg flex items-center gap-2.5 transition-all border border-blue-500/20"
+                                    >
+                                        <Camera className="w-4 h-4" />
+                                        Realistic Render
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setCameraDropdownOpen(false);
+                                            setMode('3d');
+                                            
+                                            useFloorplanStore.getState().showToast("Processing screenshot...", 'info')
+                                            
+                                            // Delay to ensure the 3D canvas has fully mounted and rendered
+                                            setTimeout(() => {
+                                                try {
+                                                    // R3F puts the id on the wrapper div, so we find the canvas inside it
+                                                    const canvas = document.querySelector('#three-canvas canvas') as HTMLCanvasElement || document.querySelector('canvas');
+                                                    
+                                                    if (!canvas) {
+                                                        console.error("Canvas element not found");
+                                                        useFloorplanStore.getState().showToast("Could not find 3D view to capture.", 'error');
+                                                        return;
+                                                    }
+
+                                                    const dataUrl = canvas.toDataURL('image/png');
+                                                    useFloorplanStore.getState().addRender(dataUrl);
+                                                    
+                                                    // Solid dark stylish popup
+                                                    const toastDiv = document.createElement('div');
+                                                    toastDiv.className = 'fixed top-16 right-4 z-[9999] bg-[#1a1b26] border border-gray-700/50 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] p-4 flex items-center justify-between gap-6 animate-in slide-in-from-top-4 fade-in duration-300';
+                                                    toastDiv.innerHTML = `
+                                                        <div class="flex flex-col">
+                                                            <h4 class="text-sm font-semibold text-white">Screenshot saved</h4>
+                                                            <p class="text-[11px] text-gray-400 mt-1">Saved to your screenshots library</p>
+                                                        </div>
+                                                        <button id="open-renders-btn" class="px-4 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-500 transition-colors shadow-sm">
+                                                            View Screenshots
+                                                        </button>
+                                                    `;
+                                                    document.body.appendChild(toastDiv);
+                                                    
+                                                    // Attach event to open Renders Modal
+                                                    document.getElementById('open-renders-btn')?.addEventListener('click', () => {
+                                                        useFloorplanStore.getState().setRendersModalOpen(true);
+                                                        document.body.removeChild(toastDiv);
+                                                    });
+                                                    
+                                                    // Auto remove after 5 seconds
+                                                    setTimeout(() => {
+                                                        if (document.body.contains(toastDiv)) {
+                                                            document.body.removeChild(toastDiv);
+                                                        }
+                                                    }, 5000);
+                                                } catch (e) {
+                                                    console.error("Screenshot error:", e);
+                                                    useFloorplanStore.getState().showToast("Failed to capture screenshot. Need WebGL context to be ready.", 'error');
+                                                }
+                                            }, 800) // Slightly longer to guarantee Mount + Paint
+                                        }}
+                                        className="w-full text-left px-3 py-2.5 text-sm font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-300 rounded-lg flex items-center gap-2.5 transition-all"
+                                    >
+                                        <MonitorStop className="w-4 h-4" />
+                                        Make Screenshot
+                                    </button>
+                                    <button 
+                                        disabled
+                                        className="w-full text-left px-3 py-2.5 text-sm font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-300 rounded-lg flex items-center justify-between cursor-not-allowed group transition-all"
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <Globe className="w-4 h-4" />
+                                            360° Panorama
+                                        </div>
+                                        <span className="text-[9px] uppercase tracking-wider font-bold bg-[#577eff]/10 text-[#577eff]/60 px-1.5 py-0.5 rounded shadow-sm">Pro</span>
+                                    </button>
+                                    <button 
+                                        disabled
+                                        className="w-full text-left px-3 py-2.5 text-sm font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-300 rounded-lg flex items-center justify-between cursor-not-allowed group transition-all"
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <Locate className="w-4 h-4" />
+                                            360° Walkthrough
+                                        </div>
+                                        <span className="text-[9px] uppercase tracking-wider font-bold bg-[#577eff]/10 text-[#577eff]/60 px-1.5 py-0.5 rounded shadow-sm">Pro</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Process Button - Only visible if file selected */}
                     {uploadedImage && (
                         <button

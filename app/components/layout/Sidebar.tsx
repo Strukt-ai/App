@@ -240,6 +240,32 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             </div>
                         </div>
 
+                        {/* User Library Buttons (Moved to top for visibility) */}
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                            {user ? (
+                                <button
+                                    onClick={() => setProjectsModalOpen(true)}
+                                    className="flex items-center justify-center gap-2 p-2 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-all group"
+                                >
+                                    <FolderOpen className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Projects</span>
+                                </button>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2 p-2 rounded-lg border border-border bg-secondary/10 text-muted-foreground opacity-50 cursor-not-allowed" title="Login to save projects">
+                                    <FolderOpen className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Projects</span>
+                                </div>
+                            )}
+                            
+                            <button
+                                onClick={() => useFloorplanStore.getState().setRendersModalOpen(true)}
+                                className="flex items-center justify-center gap-2 p-2 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-all group shadow-[0_0_15px_rgba(59,130,246,0.1)]"
+                            >
+                                <Camera className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Screenshots</span>
+                            </button>
+                        </div>
+
                         {/* Add Element Button */}
                         <div className="relative">
                             <button
@@ -780,16 +806,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
                 <div className="flex-1 flex flex-col overflow-y-auto min-h-0">
                     <div className="p-4 flex-1 flex flex-col justify-end">
-                        {/* Projects Button (Visible when logged in) */}
-                        {user && (
-                            <button
-                                onClick={() => setProjectsModalOpen(true)}
-                                className="w-full flex items-center justify-center gap-2 p-3 mb-3 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-all group"
-                            >
-                                <FolderOpen className="w-4 h-4" />
-                                <span className="text-[11px] font-medium uppercase tracking-wider">My Projects</span>
-                            </button>
-                        )}
+                        {/* Removed the library buttons from the bottom, moved to top */}
 
                         {/* User Profile / Login Section */}
                         <div className="border-t border-border pt-4 mt-2">

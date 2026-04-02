@@ -633,8 +633,10 @@ export function Scene() {
                     antialias: false, // Fix: Disabled to prevent black flickers when using EffectComposer
                     toneMapping: ACESFilmicToneMapping,
                     toneMappingExposure: 1.0,
+                    preserveDrawingBuffer: true,
                 }}
                 className="w-full h-full"
+                id="three-canvas"
             >
                 <Suspense fallback={null}>
                     <SceneContent />

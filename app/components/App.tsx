@@ -16,6 +16,7 @@ import { ContextToolbar } from '@/components/layout/ContextToolbar'
 import { ProjectsDashboard } from '@/components/layout/ProjectsDashboard'
 import { ReferenceOverlay } from '@/components/editor/ReferenceOverlay'
 import { TutorialOverlay } from '@/components/editor/TutorialOverlay'
+import { RealisticRenderOverlay } from '@/components/editor/RealisticRenderOverlay'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import dynamic from 'next/dynamic'
@@ -55,6 +56,8 @@ function App({ template }: AppProps) {
   const setUploadedImage = useFloorplanStore(s => s.setUploadedImage)
   const setCalibrationFactor = useFloorplanStore(s => s.setCalibrationFactor)
   const setMode = useFloorplanStore(s => s.setMode)
+  const isRealisticRenderActive = useFloorplanStore(s => s.isRealisticRenderActive)
+  const isRenderMaximized = useFloorplanStore(s => s.isRenderMaximized)
   const [showPremiumModal, setShowPremiumModal] = useState(false)
   const [showUpgradeCard, setShowUpgradeCard] = useState(true)
   const [showWelcome, setShowWelcome] = useState(!isEditorFlow)
@@ -110,22 +113,27 @@ function App({ template }: AppProps) {
       <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
         <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
         <GlobalToast />
-        <Topbar />
+        {!isRenderMaximized && <Topbar />}
         <div className="flex flex-1 overflow-hidden relative w-full">
-          <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
+          {!isRenderMaximized && <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />}
 
           {/* Main Editor Area */}
-          <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="flex-1 flex flex-col overflow-hidden relative" id="editor-main-area">
             <RoomDesignerEmbedded />
-            <ReferenceOverlay />
-            <TutorialOverlay />
-            <FloatingToolbar />
-            <ContextToolbar />
+            <RealisticRenderOverlay />
+            {!isRenderMaximized && (
+              <>
+                <ReferenceOverlay />
+                <TutorialOverlay />
+                <FloatingToolbar />
+                <ContextToolbar />
+              </>
+            )}
           </div>
 
-          <RightSidebar />
+          {!isRenderMaximized && <RightSidebar />}
 
-          {showUpgradeCard && (
+          {showUpgradeCard && !isRenderMaximized && (
             <FloatingUpgradeCard
               onUpgrade={() => setShowPremiumModal(true)}
               onClose={() => setShowUpgradeCard(false)}
@@ -152,22 +160,27 @@ function App({ template }: AppProps) {
         <>
           <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
           <GlobalToast />
-          <Topbar />
+          {!isRenderMaximized && <Topbar />}
           <div className="flex flex-1 overflow-hidden relative w-full">
-            <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
+            {!isRenderMaximized && <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />}
 
             {/* Main Editor Area */}
-            <div className="flex-1 flex flex-col overflow-hidden relative">
+            <div className="flex-1 flex flex-col overflow-hidden relative" id="editor-main-area">
               <RoomDesignerEmbedded />
-              <ReferenceOverlay />
-              <TutorialOverlay />
-              <FloatingToolbar />
-              <ContextToolbar />
+              <RealisticRenderOverlay />
+              {!isRenderMaximized && (
+                <>
+                  <ReferenceOverlay />
+                  <TutorialOverlay />
+                  <FloatingToolbar />
+                  <ContextToolbar />
+                </>
+              )}
             </div>
 
-            <RightSidebar />
+            {!isRenderMaximized && <RightSidebar />}
 
-            {showUpgradeCard && (
+            {showUpgradeCard && !isRenderMaximized && (
               <FloatingUpgradeCard
                 onUpgrade={() => setShowPremiumModal(true)}
                 onClose={() => setShowUpgradeCard(false)}

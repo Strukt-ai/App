@@ -1,0 +1,23 @@
+# Realistic Render Feature - UI/UX Summary
+
+## Feature Overview
+The `Realistic Render` mode is a premium tool within the Strukt.AI editor that allows users to seamlessly switch into a dedicated rendering workspace, select their desired output resolution, and securely checkout to generate high-fidelity 3D renders.
+
+## UI/UX Flow & Technical Details
+
+1. **Access Point (Topbar Dropdown)**
+   - Located under the main "Camera" icon in the Topbar.
+   - Designed with an ultra-premium "Luminous Prism" Dark Theme (backdrop-blur-xl, smooth glowing borders, nested glassmorphic layers).
+   - Shows active features (`Realistic Render` in Blue) while gracefully greying out disabled "Pro" features (Panorama, Walkarounds).
+
+2. **Render Workspace Overlay (`RealisticRenderOverlay.tsx`)**
+   - **Non-Obtrusive Entry:** When activated, it overlays a clean, dark banner at the top of the 3D canvas but keeps sidebars active so users can still edit.
+   - **Resolution Dropdown:** Fully functional, beautifully styled interactive dropdown letting users scale from 720p HD up to 8K Ultra.
+   - **Smart Maximization:** Hitting the explicit `<Maximize>` arrows smartly unmounts the structural Topbar and Sidebars. This immediately creates a 100% immersive, Full-Screen rendering environment (and hooks into the native OS fullscreen).
+   - **Render Call-to-Action:** Primary blue `Render` button with an electric glowing highlight to drive user conversion.
+
+3. **Secure Checkout Modal (`RenderPaymentModal.tsx`)**
+   - **Glassmorphic Presentation:** A dark, multi-dimensional obsidian modal with massive shadow depths and subtle background lighting. 
+   - **Event Safety:** Integrated deep `stopPropagation` controls on the window. Dragging/clicking the payment UI will never accidentally spin or disrupt the 3D floorplan layer lying beneath it.
+   - **Interactive Details:** Includes a clean faux-3D visual preview box, interactive package selection inputs with blue focus rings, and fully editable mocked payment fields.
+   - **Bulletproof Exit Paths:** Includes a highly prominent "Cancel & Go Back" button nestled directly under the payment CTA, ensuring users never feel trapped.

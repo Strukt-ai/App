@@ -17,10 +17,12 @@ import {
   Settings,
   LogOut,
   UserCircle2,
+  Camera,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { VideoModal } from './VideoModal'
+import { RenderGallery } from '@/components/editor/RenderGallery'
 
 type TemplateTab = 'All' | 'Residential' | 'Commercial' | 'Specialty' | 'Blank'
 
@@ -298,9 +300,20 @@ export function TemplateGrid() {
                   <button
                     onClick={() => {
                       setIsProfileMenuOpen(false)
-                      router.push('/pricing')
+                      useFloorplanStore.getState().setRendersModalOpen(true)
                     }}
                     className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-neutral-300 transition hover:bg-white/5 hover:text-white"
+                  >
+                    <Camera className="h-4 w-4" />
+                    My Screenshots
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsProfileMenuOpen(false)
+                      router.push('/pricing')
+                    }}
+                    className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-neutral-300 transition hover:bg-white/5 hover:text-white"
                   >
                     <Settings className="h-4 w-4" />
                     Manage account
@@ -573,6 +586,9 @@ export function TemplateGrid() {
         videos={helperVideos}
         selectedVideo={selectedVideo}
       />
+
+      {/* Renders Dashboard Modal */}
+      <RenderGallery />
     </div>
   )
 }

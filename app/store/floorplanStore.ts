@@ -89,11 +89,14 @@ export interface FloorplanState {
     isCalibrated: boolean
     isGenerating3D: boolean
     isRendering: boolean
+    isRealisticRenderActive: boolean // New state for Realistic Render Mode
+    isRenderMaximized: boolean // New state for maximizing editor layout
     showBackground: boolean // New state for background visibility
     testGLB: boolean // New state for test GLB loading
     showProcessingModal: boolean // New state for popup
     showQueueModal: boolean
     projectsModalOpen: boolean // Global state for Projects Modal
+    rendersModalOpen: boolean // Global state for Renders Modal
     mobileSidebarOpen: boolean
     mobileRightSidebarOpen: boolean
     tutorialStep: 'none' | 'upload' | 'process' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
@@ -134,8 +137,11 @@ export interface FloorplanState {
     setShowProcessingModal: (show: boolean) => void
     setShowQueueModal: (show: boolean) => void
     setProjectsModalOpen: (show: boolean) => void
+    setRendersModalOpen: (show: boolean) => void
     setMobileSidebarOpen: (show: boolean) => void
     setMobileRightSidebarOpen: (show: boolean) => void
+    setRealisticRenderActive: (active: boolean) => void // New setter
+    setRenderMaximized: (active: boolean) => void // New setter
     setTutorialStep: (step: FloorplanState['tutorialStep']) => void
     setTutorialMinimized: (minimized: boolean) => void
     setReferenceMinimized: (minimized: boolean) => void
@@ -219,15 +225,19 @@ export const useFloorplanStore = create<FloorplanState>()(
         selectedId: null as string | null,
         uploadedImage: null,
         imageDimensions: null,
+        pendingFile: null,
         calibrationFactor: 0.01, // Default 1px = 1cm
         isCalibrated: true, // Temporarily set to true for testing
         isGenerating3D: false,
         isRendering: false,
+        isRealisticRenderActive: false,
+        isRenderMaximized: false,
         showBackground: true, // Default visible
         testGLB: false, // Default off
         showProcessingModal: false, // Default
         showQueueModal: false, // Default
         projectsModalOpen: false, // Global state for Projects Modal
+        rendersModalOpen: false, // Global state for Renders Modal
         mobileSidebarOpen: false,
         mobileRightSidebarOpen: false,
         tutorialStep: 'none',
@@ -280,8 +290,11 @@ export const useFloorplanStore = create<FloorplanState>()(
         setShowProcessingModal: (show) => set((state) => { state.showProcessingModal = show }),
         setShowQueueModal: (show) => set((state) => { state.showQueueModal = show }),
         setProjectsModalOpen: (show) => set((state) => { state.projectsModalOpen = show }),
+        setRendersModalOpen: (show) => set((state) => { state.rendersModalOpen = show }),
         setMobileSidebarOpen: (show) => set((state) => { state.mobileSidebarOpen = show }),
         setMobileRightSidebarOpen: (show) => set((state) => { state.mobileRightSidebarOpen = show }),
+        setRealisticRenderActive: (active) => set((state) => { state.isRealisticRenderActive = active }),
+        setRenderMaximized: (active) => set((state) => { state.isRenderMaximized = active }),
 
         // Tutorial State
         lastQueuedTask: 'none',
