@@ -12,7 +12,7 @@ import { FooterCTA } from '@/components/landing/FooterCTA'
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-hidden">
+    <div className="w-full bg-background text-foreground">
       <Header />
       <HeroSection />
       <FeaturesGrid />

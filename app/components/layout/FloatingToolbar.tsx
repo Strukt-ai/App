@@ -3,6 +3,7 @@
 import {
     MousePointer2, Hand, PenTool, DoorOpen, AppWindow,
     Ruler, Tag, Trash2, Undo2, Redo2, Square, Box,
+    Zap, ScanLine, Eye, Sofa,
     type LucideIcon
 } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
@@ -22,7 +23,8 @@ type ToolDef = {
 export function FloatingToolbar() {
     const {
         activeTool, setActiveTool, mode, selectedId, deleteObject,
-        undo, redo, addFurniture, tutorialStep, triggerDetectRooms, currentRunId
+        undo, redo, addFurniture, tutorialStep, triggerDetectRooms, currentRunId,
+        triggerDetectWalls, triggerDetectDoors, triggerDetectWindows, triggerDetectFurniture
     } = useFloorplanStore()
 
     // Only show in 2D mode
@@ -95,10 +97,43 @@ export function FloatingToolbar() {
         {
             id: 'find-rooms',
             icon: Box,
-            label: 'Find Rooms',
+            label: 'Detect Rooms',
             shortcut: '',
             action: () => triggerDetectRooms(),
             isActive: false,
+        },
+        {
+            id: 'detect-walls',
+            icon: ScanLine,
+            label: 'Detect Walls',
+            shortcut: '',
+            action: () => triggerDetectWalls(),
+            isActive: false,
+        },
+        {
+            id: 'detect-doors',
+            icon: DoorOpen,
+            label: 'Detect Doors',
+            shortcut: '',
+            action: () => triggerDetectDoors(),
+            isActive: false,
+        },
+        {
+            id: 'detect-windows',
+            icon: Eye,
+            label: 'Detect Windows',
+            shortcut: '',
+            action: () => triggerDetectWindows(),
+            isActive: false,
+        },
+        {
+            id: 'detect-furniture',
+            icon: Sofa,
+            label: 'Detect Furniture',
+            shortcut: '',
+            action: () => triggerDetectFurniture(),
+            isActive: false,
+            dividerAfter: true,
         },
         {
             id: 'delete',
@@ -142,7 +177,7 @@ export function FloatingToolbar() {
                                     onClick={tool.action}
                                     disabled={
                                         (tool.id === 'delete' && !selectedId) ||
-                                        (tool.id === 'find-rooms' && (!currentRunId || tutorialStep === 'calibration'))
+                                        ((tool.id === 'find-rooms' || tool.id === 'detect-walls' || tool.id === 'detect-doors' || tool.id === 'detect-windows' || tool.id === 'detect-furniture') && (!currentRunId || tutorialStep === 'calibration'))
                                     }
                                     className={cn(
                                         "relative group flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-150",
@@ -152,7 +187,7 @@ export function FloatingToolbar() {
                                                 ? "text-white/40 hover:text-red-400 hover:bg-red-500/10"
                                                 : "text-white/40 hover:text-white hover:bg-white/8",
                                         (tool.id === 'delete' && !selectedId) && "opacity-30 cursor-not-allowed",
-                                        (tool.id === 'find-rooms' && !currentRunId) && "opacity-30 cursor-not-allowed",
+                                        ((tool.id === 'find-rooms' || tool.id === 'detect-walls' || tool.id === 'detect-doors' || tool.id === 'detect-windows' || tool.id === 'detect-furniture') && !currentRunId) && "opacity-30 cursor-not-allowed",
                                         tutorialStep === 'calibration' && tool.id === 'ruler' && "ring-1 ring-blue-400 animate-pulse"
                                     )}
                                 >

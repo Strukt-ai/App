@@ -1,18 +1,96 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LayoutGrid, Box, Download, Play, Eye, EyeOff } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Menu, SlidersHorizontal, ImagePlus } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 
+const FALLBACK_IMAGE_NAME = 'floorplan.png'
+const MIME_EXTENSION_MAP: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/bmp': 'bmp',
+    'image/tiff': 'tiff',
+}
+
+const inferImageFilename = (source: string, mimeType: string) => {
+    const fallbackExt = MIME_EXTENSION_MAP[mimeType] || 'png'
+    const fallbackName = FALLBACK_IMAGE_NAME.replace(/\.png$/, `.${fallbackExt}`)
+
+    if (source.startsWith('data:') || source.startsWith('blob:')) {
+        return fallbackName
+    }
+
+    try {
+        const url = new URL(source, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+        const rawName = url.pathname.split('/').pop() || ''
+        if (!rawName || rawName.includes(',') || rawName.includes(';')) return fallbackName
+        if (/\.[a-z0-9]+$/i.test(rawName)) return rawName
+        return `${rawName}.${fallbackExt}`
+    } catch {
+        return fallbackName
+    }
+}
+
 export function Topbar() {
-    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token } = useFloorplanStore()
-    const [fileToUpload, setFileToUpload] = useState<File | null>(null)
-    const [workerCount, setWorkerCount] = useState(1) // Optimistic: Assume 1 worker online until proven otherwise
+    const {
+        mode,
+        setMode,
+        currentRunId,
+        runStatus,
+        setRunId,
+        setRunStatus,
+        uploadedImage,
+        setUploadedImage,
+        isCalibrated,
+        isGenerating3D,
+        syncSVGAndEnter3D,
+        showBackground,
+        toggleBackground,
+        showToast,
+        tutorialStep,
+        setTutorialStep,
+        lastQueuedTask,
+        setLastQueuedTask,
+        token,
+        pendingFile,
+        setPendingFile,
+        mobileSidebarOpen,
+        mobileRightSidebarOpen,
+        setMobileSidebarOpen,
+        setMobileRightSidebarOpen,
+        setShowProcessingModal,
+        setShowQueueModal,
+        setProjectsModalOpen
+    } = useFloorplanStore()
+    const [fileToUpload, setFileToUpload] = useState<File | null>(pendingFile)
+    const [workerCount, setWorkerCount] = useState(0) // Pessimistic: assume offline until confirmed
     const [isDragging, setIsDragging] = useState(false)
 
+    // Pick up file from dashboard if set
+    useEffect(() => {
+        if (pendingFile && !fileToUpload) {
+            setFileToUpload(pendingFile)
+            setPendingFile(null)
+        }
+    }, [fileToUpload, pendingFile, setPendingFile])
+
     // Helper to process file (from input or drop)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+    const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/tiff']
+
     const handleFile_Local = (file: File) => {
+        if (file.size > MAX_FILE_SIZE) {
+            showToast('Image too large (max 50MB)', 'error')
+            return
+        }
+        if (!ALLOWED_TYPES.includes(file.type) && !file.name.match(/\.(png|jpe?g|webp|bmp|tiff?)$/i)) {
+            showToast('Unsupported image format', 'error')
+            return
+        }
         setFileToUpload(file)
 
         // Local Preview
@@ -33,6 +111,22 @@ export function Topbar() {
         setRunStatus('idle')
     }
 
+    const resolveUploadFile = async () => {
+        if (fileToUpload) return fileToUpload
+        if (!uploadedImage) return null
+
+        const res = await fetch(uploadedImage)
+        if (!res.ok) {
+            throw new Error(`Failed to load image source (${res.status})`)
+        }
+
+        const blob = await res.blob()
+        const mimeType = blob.type || 'image/png'
+        const file = new File([blob], inferImageFilename(uploadedImage, mimeType), { type: mimeType })
+        setFileToUpload(file)
+        return file
+    }
+
     // Poll Worker Status
     useEffect(() => {
         const checkWorkers = async () => {
@@ -42,7 +136,7 @@ export function Topbar() {
                     const data = await res.json()
                     setWorkerCount(data.workers_online || 0)
                 }
-            } catch (e) {
+            } catch {
                 // Backend not running, set worker count to 0
                 setWorkerCount(0)
             }
@@ -50,11 +144,11 @@ export function Topbar() {
         checkWorkers()
         const interval = setInterval(checkWorkers, 5000)
         return () => clearInterval(interval)
-    }, [])
+    }, [token])
 
     // Polling logic for Runs
     useEffect(() => {
-        let interval: any
+        let interval: ReturnType<typeof setInterval> | undefined
         console.log("[Topbar] Polling Effect:", { currentRunId, runStatus })
         if (currentRunId && runStatus === 'processing') {
             console.log("[Topbar] Starting Polling for:", currentRunId)
@@ -106,100 +200,137 @@ export function Topbar() {
             }, 1000)
         }
         return () => clearInterval(interval)
-    }, [currentRunId, runStatus, setRunStatus, lastQueuedTask, setLastQueuedTask, tutorialStep, setTutorialStep])
+    }, [currentRunId, runStatus, setRunStatus, lastQueuedTask, setLastQueuedTask, token, tutorialStep, setTutorialStep])
+
+    const hasUploadedImage = Boolean(uploadedImage)
+    const workerOnline = workerCount > 0
 
     return (
-        <div className="relative h-14 border-b bg-card flex items-center justify-between px-4 select-none">
-            <div className="flex items-center gap-2">
-                {/* clicking the logo returns to the templates homepage */}
-                <a href="/" className="w-8 h-8 flex items-center justify-center">
-                    <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
-                </a>
-                <div className="flex flex-col">
-                    <span className="font-bold text-sm tracking-tight leading-none">Strukt AI</span>
-                    <div className="flex items-center gap-2 mt-0.5">
-                        <div className={cn("w-2 h-2 rounded-full", workerCount > 0 ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                            {workerCount > 0 ? `${workerCount} WORKER ONLINE` : "NO WORKER"}
-                        </span>
+        <div className="border-b border-white/10 bg-slate-950/80 px-3 py-3 backdrop-blur-xl select-none supports-[backdrop-filter]:bg-slate-950/72 lg:px-5">
+            <div className="flex flex-wrap items-center gap-3 lg:flex-nowrap lg:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 xl:hidden"
+                        aria-label="Toggle tools panel"
+                    >
+                        <Menu className="h-4 w-4" />
+                    </button>
+
+                    <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                        <Image src="/logo.png" alt="Logo" width={24} height={24} className="h-6 w-6 object-contain" />
+                    </Link>
+
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-semibold tracking-tight text-white">Strukt AI Workspace</span>
+                            <span className={cn(
+                                "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em]",
+                                workerOnline
+                                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                    : "border-rose-400/20 bg-rose-400/10 text-rose-100"
+                            )}>
+                                <span className={cn("h-2 w-2 rounded-full", workerOnline ? "bg-emerald-400 animate-pulse" : "bg-rose-400")} />
+                                {workerOnline ? `${workerCount} Worker Online` : 'No Worker'}
+                            </span>
+                        </div>
+                        <p className="mt-1 hidden text-xs text-slate-400 md:block">
+                            Keep the canvas centered. Tools stay on the rails, and the mode switch stays in focus.
+                        </p>
                     </div>
                 </div>
-            </div>
 
-            {/* View Controls */}
-            <div className="h-8 w-[1px] bg-border mx-2" />
+                <div className="order-3 flex w-full justify-center lg:order-2 lg:w-auto">
+                    <div className="inline-flex flex-wrap items-center gap-1 rounded-[20px] border border-white/10 bg-white/[0.04] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                        <button
+                            onClick={toggleBackground}
+                            className={cn(
+                                "flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition",
+                                showBackground
+                                    ? "bg-slate-900 text-white shadow-[0_10px_30px_rgba(2,6,23,0.35)]"
+                                    : "text-slate-400 hover:bg-white/7 hover:text-white"
+                            )}
+                            title="Toggle Background Image"
+                        >
+                            {showBackground ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                            <span className="hidden sm:inline">Reference</span>
+                        </button>
 
-            {/* View Controls - Centered */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex bg-muted/50 p-1 rounded-lg gap-1">
-                <button
-                    onClick={toggleBackground}
-                    className={cn(
-                        "p-1.5 rounded-md transition-colors flex items-center gap-2 text-xs font-medium",
-                        showBackground ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
-                    )}
-                    title="Toggle Background Image"
-                >
-                    {showBackground ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    <span className="hidden sm:inline">Ref Image</span>
-                </button>
+                        <button
+                            onClick={() => setMode('2d')}
+                            className={cn(
+                                "flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition",
+                                mode === '2d'
+                                    ? "bg-cyan-500/14 text-cyan-50 ring-1 ring-cyan-400/20"
+                                    : "text-slate-400 hover:bg-white/7 hover:text-white"
+                            )}
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                            <span>2D Editor</span>
+                        </button>
 
-                <button
-                    onClick={() => setMode('2d')}
-                    className={cn(
-                        "p-1.5 rounded-md transition-colors flex items-center gap-2 text-xs font-medium",
-                        mode === '2d' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
-                    )}
-                >
-                    <LayoutGrid className="w-4 h-4" />
-                    <span>2D Editor</span>
-                </button>
-                <button
-                    onClick={() => {
-                        // Restore: Calibration Check & Generation Trigger
-                        if (!isCalibrated) {
-                            // Changed alert to nice toast
-                            showToast("Calibration Required! Please select the Ruler Tool to calibrate.", 'error')
-                            // setActiveTool('ruler') // Removed: User wants manual control
-                            return
-                        }
-                        if (isGenerating3D) {
-                            showToast("3D Generation is already in progress...", 'info')
-                            return
-                        }
-                        setMode('3d')
-                        syncSVGAndEnter3D()
-                    }}
-                    className={cn(
-                        "p-1.5 rounded-md transition-colors flex items-center gap-2 text-xs font-medium",
-                        mode === '3d' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50",
-                        // Add visual feedback for generating state
-                        isGenerating3D && "animate-pulse text-yellow-500"
-                    )}
-                    title="Generate 3D Model"
-                >
-                    <Box className="w-4 h-4" />
-                    <span>3D View</span>
-                </button>
-            </div>
+                        <button
+                            onClick={() => {
+                                if (!isCalibrated) {
+                                    showToast("Calibration Required! Please select the Ruler Tool to calibrate.", 'error')
+                                    return
+                                }
+                                if (isGenerating3D) {
+                                    showToast("3D Generation is already in progress...", 'info')
+                                    return
+                                }
+                                setMode('3d')
+                                syncSVGAndEnter3D()
+                            }}
+                            className={cn(
+                                "flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition",
+                                mode === '3d'
+                                    ? "bg-emerald-500/14 text-emerald-50 ring-1 ring-emerald-400/20"
+                                    : "text-slate-400 hover:bg-white/7 hover:text-white",
+                                isGenerating3D && "animate-pulse"
+                            )}
+                            title="Generate 3D Model"
+                        >
+                            <Box className="h-4 w-4" />
+                            <span>3D View</span>
+                        </button>
+                    </div>
+                </div>
 
-            <div className="flex items-center gap-2">
-                <div className="relative flex items-center gap-2">
-                    {/* Process Button - Only visible if file selected */}
-                    {uploadedImage && (
+                <div className="order-2 flex w-full flex-wrap items-center justify-end gap-2 lg:order-3 lg:w-auto">
+                    {hasUploadedImage && (
                         <button
                             disabled={runStatus === 'processing'}
                             onClick={async () => {
-                                if (!fileToUpload) return
-
-                                // Auth Check
                                 if (!token) {
                                     showToast("Please login to process floorplans", 'error')
                                     return
                                 }
 
                                 setRunStatus('processing')
+                                let imageFile: File | null = null
+
+                                try {
+                                    imageFile = await resolveUploadFile()
+                                } catch (e) {
+                                    console.error('Failed to prepare floorplan image for upload:', e)
+                                }
+
+                                if (!imageFile) {
+                                    showToast('Unable to prepare the floorplan image. Re-select it and try again.', 'error')
+                                    setRunStatus('idle')
+                                    return
+                                }
+
                                 const formData = new FormData()
-                                formData.append('image', fileToUpload)
+                                formData.append('image', imageFile)
+
+                                const pendingName = sessionStorage.getItem('pendingProjectName') || ''
+                                if (pendingName) {
+                                    formData.append('name', pendingName)
+                                    sessionStorage.removeItem('pendingProjectName')
+                                }
 
                                 try {
                                     const res = await fetch('/api/runs', {
@@ -210,20 +341,27 @@ export function Topbar() {
                                         body: formData
                                     })
 
-                                    // Trigger Popup based on Worker Status
-                                    if (workerCount > 0) {
-                                        useFloorplanStore.getState().setShowProcessingModal(true)
-                                    } else {
-                                        useFloorplanStore.getState().setShowQueueModal(true)
-                                    }
-
-                                    // Check Status
                                     if (res.status === 403) {
                                         showToast(`Limit Reached (5/5). Load an existing project or Delete one to create new.`, 'error')
-                                        // Auto-open projects modal to let them delete
-                                        useFloorplanStore.getState().setProjectsModalOpen(true)
+                                        setProjectsModalOpen(true)
                                         setRunStatus('idle')
-                                        useFloorplanStore.getState().setShowProcessingModal(false)
+                                        setShowProcessingModal(false)
+                                        return
+                                    }
+
+                                    if (res.status === 429) {
+                                        const errData = await res.json().catch(() => ({ detail: '' }))
+                                        const detail = errData.detail || ''
+                                        const isProjectLimit = detail.toLowerCase().includes('project limit')
+                                        if (isProjectLimit) {
+                                            showToast('Project limit reached. Delete an existing project to create a new one.', 'error')
+                                            setProjectsModalOpen(true)
+                                        } else {
+                                            showToast(detail || 'Token limit reached. Upgrade to Pro for 3x more tokens.', 'error')
+                                        }
+                                        setRunStatus('idle')
+                                        setShowProcessingModal(false)
+                                        setShowQueueModal(false)
                                         return
                                     }
 
@@ -233,43 +371,48 @@ export function Topbar() {
                                     const data = JSON.parse(text)
                                     if (data.ok) {
                                         setRunId(data.run_id)
-                                        useFloorplanStore.getState().setRunId(data.run_id)
 
-                                        // If Server says it's Offline Queue, switch modals
                                         if (data.status === 'QUEUED_OFFLINE') {
-                                            useFloorplanStore.getState().setShowProcessingModal(false)
-                                            useFloorplanStore.getState().setShowQueueModal(true)
-                                            showToast("Job saved to Offline Queue (No Workers Online)", 'info')
+                                            setShowProcessingModal(false)
+                                            setShowQueueModal(true)
+                                            showToast("Our servers are currently busy. Your project is saved — we'll process it automatically and email you when it's ready!", 'info')
+                                        } else {
+                                            setShowQueueModal(false)
+                                            setShowProcessingModal(true)
                                         }
                                     } else {
                                         throw new Error(data.detail)
                                     }
-                                } catch (e: any) {
-                                    console.error(e)
+                                } catch (error) {
+                                    console.error(error)
                                     setRunStatus('failed')
-                                    useFloorplanStore.getState().setShowProcessingModal(false) // Fix: Close modal on error
+                                    setShowProcessingModal(false)
 
-                                    // Don't alert if we already handled 403
-                                    if (!e.message?.includes("Limit")) {
-                                        alert('Upload failed: ' + e.message)
+                                    const message = error instanceof Error ? error.message : String(error)
+                                    if (!message.includes("Limit")) {
+                                        alert('Upload failed: ' + message)
                                     }
                                 }
                             }}
                             className={cn(
-                                "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
-                                "bg-green-600 text-white hover:bg-green-700 shadow-sm"
+                                "inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition",
+                                runStatus === 'processing'
+                                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                    : "border-emerald-400/25 bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-[0_16px_35px_rgba(22,163,74,0.28)] hover:brightness-110"
                             )}
                         >
-                            <Play className="w-4 h-4" />
-                            Process Floorplan
+                            <Play className="h-4 w-4" />
+                            {runStatus === 'processing' ? 'Processing...' : 'Process Floorplan'}
                         </button>
                     )}
 
                     <label
                         className={cn(
-                            "cursor-pointer px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
-                            "bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-transparent",
-                            isDragging && "border-primary bg-primary/10 text-primary"
+                            "inline-flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition-all",
+                            hasUploadedImage
+                                ? "border-white/10 bg-white/[0.05] text-white hover:bg-white/[0.09]"
+                                : "border-cyan-400/20 bg-cyan-400/10 text-cyan-50 hover:bg-cyan-400/16",
+                            isDragging && "border-cyan-300 bg-cyan-400/18 text-white shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
                         )}
                         onDragOver={(e) => {
                             e.preventDefault()
@@ -297,14 +440,26 @@ export function Topbar() {
                                 if (file) handleFile_Local(file)
                             }}
                         />
-                        <Download className={cn("w-4 h-4 rotate-180", runStatus === 'processing' && "animate-spin")} />
+                        {hasUploadedImage ? (
+                            <Download className={cn("h-4 w-4 rotate-180", runStatus === 'processing' && "animate-spin")} />
+                        ) : (
+                            <ImagePlus className="h-4 w-4" />
+                        )}
                         {runStatus === 'processing'
                             ? 'Processing...'
-                            : (uploadedImage ? 'Change Image' : 'Select Floorplan')}
+                            : (hasUploadedImage ? 'Change Image' : 'Select Floorplan')}
                     </label>
-                </div>
 
+                    <button
+                        type="button"
+                        onClick={() => setMobileRightSidebarOpen(!mobileRightSidebarOpen)}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 xl:hidden"
+                        aria-label="Toggle inspector panel"
+                    >
+                        <SlidersHorizontal className="h-4 w-4" />
+                    </button>
+                </div>
             </div>
-        </div >
+        </div>
     )
 }

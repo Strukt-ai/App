@@ -140,8 +140,12 @@ export interface FloorplanState {
     setTutorialMinimized: (minimized: boolean) => void
     setReferenceMinimized: (minimized: boolean) => void
     completeTutorial: () => void
-    setLastQueuedTask: (task: 'none' | 'detect_rooms' | 'gen_3d') => void
+    setLastQueuedTask: (task: 'none' | 'detect_rooms' | 'detect_walls' | 'detect_doors' | 'detect_windows' | 'detect_furniture' | 'gen_3d') => void
     triggerDetectRooms: () => Promise<void>
+    triggerDetectWalls: () => Promise<void>
+    triggerDetectDoors: () => Promise<void>
+    triggerDetectWindows: () => Promise<void>
+    triggerDetectFurniture: () => Promise<void>
     generateFloors: () => Promise<void>
     selectObject: (id: string | null) => void
     deleteObject: (id: string) => void
@@ -344,6 +348,218 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
         },
 
+
+        triggerDetectWalls: async () => {
+            const state = useFloorplanStore.getState()
+            if (!state.currentRunId) return
+            if (!state.isCalibrated) return
+
+            set((s) => {
+                s.lastQueuedTask = 'detect_walls'
+                s.runStatus = 'processing'
+            })
+
+            state.setShowProcessingModal(true)
+
+            const headers: Record<string, string> = {}
+            if (state.token) headers['Authorization'] = `Bearer ${state.token}`
+
+            // 1) Upload the latest edited SVG from the 2D editor (source of truth)
+            try {
+                const svgText = state.exportToSVG()
+                const putHeaders: Record<string, string> = {
+                    ...headers,
+                    'Content-Type': 'image/svg+xml'
+                }
+                const putRes = await fetch(`/api/runs/${state.currentRunId}/svg`, {
+                    method: 'PUT',
+                    headers: putHeaders,
+                    body: svgText
+                })
+                if (!putRes.ok) {
+                    throw new Error(await putRes.text())
+                }
+            } catch (e) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw e
+            }
+
+            const res = await fetch(`/api/runs/${state.currentRunId}/detect-walls`, {
+                method: 'POST',
+                headers
+            })
+            if (!res.ok) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw new Error(await res.text())
+            }
+        },
+
+        triggerDetectDoors: async () => {
+            const state = useFloorplanStore.getState()
+            if (!state.currentRunId) return
+            if (!state.isCalibrated) return
+
+            set((s) => {
+                s.lastQueuedTask = 'detect_doors'
+                s.runStatus = 'processing'
+            })
+
+            state.setShowProcessingModal(true)
+
+            const headers: Record<string, string> = {}
+            if (state.token) headers['Authorization'] = `Bearer ${state.token}`
+
+            // 1) Upload the latest edited SVG from the 2D editor (source of truth)
+            try {
+                const svgText = state.exportToSVG()
+                const putHeaders: Record<string, string> = {
+                    ...headers,
+                    'Content-Type': 'image/svg+xml'
+                }
+                const putRes = await fetch(`/api/runs/${state.currentRunId}/svg`, {
+                    method: 'PUT',
+                    headers: putHeaders,
+                    body: svgText
+                })
+                if (!putRes.ok) {
+                    throw new Error(await putRes.text())
+                }
+            } catch (e) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw e
+            }
+
+            const res = await fetch(`/api/runs/${state.currentRunId}/detect-doors`, {
+                method: 'POST',
+                headers
+            })
+            if (!res.ok) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw new Error(await res.text())
+            }
+        },
+
+        triggerDetectWindows: async () => {
+            const state = useFloorplanStore.getState()
+            if (!state.currentRunId) return
+            if (!state.isCalibrated) return
+
+            set((s) => {
+                s.lastQueuedTask = 'detect_windows'
+                s.runStatus = 'processing'
+            })
+
+            state.setShowProcessingModal(true)
+
+            const headers: Record<string, string> = {}
+            if (state.token) headers['Authorization'] = `Bearer ${state.token}`
+
+            // 1) Upload the latest edited SVG from the 2D editor (source of truth)
+            try {
+                const svgText = state.exportToSVG()
+                const putHeaders: Record<string, string> = {
+                    ...headers,
+                    'Content-Type': 'image/svg+xml'
+                }
+                const putRes = await fetch(`/api/runs/${state.currentRunId}/svg`, {
+                    method: 'PUT',
+                    headers: putHeaders,
+                    body: svgText
+                })
+                if (!putRes.ok) {
+                    throw new Error(await putRes.text())
+                }
+            } catch (e) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw e
+            }
+
+            const res = await fetch(`/api/runs/${state.currentRunId}/detect-windows`, {
+                method: 'POST',
+                headers
+            })
+            if (!res.ok) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw new Error(await res.text())
+            }
+        },
+
+        triggerDetectFurniture: async () => {
+            const state = useFloorplanStore.getState()
+            if (!state.currentRunId) return
+            if (!state.isCalibrated) return
+
+            set((s) => {
+                s.lastQueuedTask = 'detect_furniture'
+                s.runStatus = 'processing'
+            })
+
+            state.setShowProcessingModal(true)
+
+            const headers: Record<string, string> = {}
+            if (state.token) headers['Authorization'] = `Bearer ${state.token}`
+
+            // 1) Upload the latest edited SVG from the 2D editor (source of truth)
+            try {
+                const svgText = state.exportToSVG()
+                const putHeaders: Record<string, string> = {
+                    ...headers,
+                    'Content-Type': 'image/svg+xml'
+                }
+                const putRes = await fetch(`/api/runs/${state.currentRunId}/svg`, {
+                    method: 'PUT',
+                    headers: putHeaders,
+                    body: svgText
+                })
+                if (!putRes.ok) {
+                    throw new Error(await putRes.text())
+                }
+            } catch (e) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw e
+            }
+
+            const res = await fetch(`/api/runs/${state.currentRunId}/detect-furniture`, {
+                method: 'POST',
+                headers
+            })
+            if (!res.ok) {
+                set((s) => {
+                    s.runStatus = 'failed'
+                    s.lastQueuedTask = 'none'
+                })
+                state.setShowProcessingModal(false)
+                throw new Error(await res.text())
+            }
+        },
 
         selectObject: (id) => {
             console.log('selectObject called with id:', id)

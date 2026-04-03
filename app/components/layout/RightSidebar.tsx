@@ -1,10 +1,94 @@
 'use client'
 
-import { Upload, Loader2, MousePointer2, Box, RotateCw, Trash2, Tag } from 'lucide-react'
+import {
+    Upload,
+    Loader2,
+    MousePointer2,
+    Box,
+    RotateCw,
+    Trash2,
+    Tag,
+    X
+} from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { JobQueuePanel } from '@/components/layout/JobQueuePanel'
+
+type PolygonPoint = [number, number]
+
+type SegmentMask = {
+    ok?: boolean
+    mask_id?: string
+    job_id?: string
+    polygon?: PolygonPoint[]
+    status?: string
+    message?: string
+}
+
+type BlueprintSceneItem = {
+    metadata?: {
+        storeId?: string
+        itemName?: string
+    }
+    resize?: (height: number, width: number, depth: number) => void
+    rotation?: {
+        y: number
+    }
+    scene?: {
+        needsUpdate: boolean
+    }
+}
+
+const getBpItems = (): BlueprintSceneItem[] => {
+    if (typeof window === 'undefined') return []
+    const bp = (window as Window & {
+        __BP3D_INSTANCE__?: {
+            model?: {
+                scene?: {
+                    getItems?: () => BlueprintSceneItem[]
+                }
+            }
+        }
+    }).__BP3D_INSTANCE__
+
+    return bp?.model?.scene?.getItems?.() ?? []
+}
+
+function PanelSection({
+    eyebrow,
+    title,
+    description,
+    accent = 'default',
+    children,
+}: {
+    eyebrow?: string
+    title: string
+    description?: string
+    accent?: 'default' | 'emerald' | 'cyan'
+    children: ReactNode
+}) {
+    const accentClasses = {
+        default: 'border-white/10 bg-white/[0.03]',
+        emerald: 'border-emerald-400/15 bg-emerald-400/[0.06]',
+        cyan: 'border-cyan-400/15 bg-cyan-400/[0.06]',
+    }
+
+    return (
+        <section className={cn("overflow-hidden rounded-[24px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", accentClasses[accent])}>
+            <div className="border-b border-white/8 px-4 py-3">
+                {eyebrow && (
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">{eyebrow}</p>
+                )}
+                <div className={cn(eyebrow && 'mt-1.5')}>
+                    <h3 className="text-sm font-semibold text-white">{title}</h3>
+                    {description && <p className="mt-1 text-xs leading-relaxed text-slate-400">{description}</p>}
+                </div>
+            </div>
+            <div className="px-4 py-4">{children}</div>
+        </section>
+    )
+}
 
 export function RightSidebar() {
     const activeTool = useFloorplanStore(s => s.activeTool)
@@ -17,14 +101,14 @@ export function RightSidebar() {
     const testGLB = useFloorplanStore(s => s.testGLB)
     const toggleTestGLB = useFloorplanStore(s => s.toggleTestGLB)
     const setMode = useFloorplanStore(s => s.setMode)
+    const mobileRightSidebarOpen = useFloorplanStore(s => s.mobileRightSidebarOpen)
+    const setMobileRightSidebarOpen = useFloorplanStore(s => s.setMobileRightSidebarOpen)
 
-
-    // --- AI / SAM3D State ---
     const [imageSrc, setImageSrc] = useState<string | null>(null)
     const [jobId, setJobId] = useState<string | null>(null)
     const [isProcessingAI, setIsProcessingAI] = useState(false)
     const [statusMsg, setStatusMsg] = useState('')
-    const [masks, setMasks] = useState<any[]>([])
+    const [masks, setMasks] = useState<SegmentMask[]>([])
 
     const selectedFurn = useMemo(
         () => furniture.find(f => f.id === selectedId),
@@ -38,15 +122,10 @@ export function RightSidebar() {
     const overlayRef = useRef<HTMLCanvasElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Show sidebar if:
-    // 1. "Furniture" tool (now AI Reconstruction) is active
-    // 2. Mode is "3d" (3D Options/Results)
-    // 3. An item is selected (for size/label edits)
-    const isVisible = true // activeTool === 'furniture' || mode === '3d' || !!selectedFurn
-
-    console.log('RightSidebar visibility:', { isVisible, activeTool, mode, selectedFurn, testGLB })
-
     const mToCm = (v: number) => v * 100
+    const showAiPanel = activeTool === 'furniture'
+    const showPreviewPanel = mode === '3d' || testGLB
+    const showEmptyState = !selectedFurn && !showAiPanel && !showPreviewPanel
 
     useEffect(() => {
         if (!selectedFurn) {
@@ -60,14 +139,7 @@ export function RightSidebar() {
             depth: selectedFurn.dimensions.depth.toFixed(2),
         })
         setLabelDraft(selectedFurn.label || selectedFurn.type || '')
-    }, [
-        selectedFurn?.id,
-        selectedFurn?.dimensions.width,
-        selectedFurn?.dimensions.height,
-        selectedFurn?.dimensions.depth,
-        selectedFurn?.label,
-        selectedFurn?.type,
-    ])
+    }, [selectedFurn])
 
     const commitSize = () => {
         if (!selectedFurn) return
@@ -81,8 +153,7 @@ export function RightSidebar() {
             dimensions: { width, height, depth }
         })
 
-        const bp = (window as any).__BP3D_INSTANCE__
-        const item = bp?.model?.scene?.getItems?.()?.find((it: any) => it?.metadata?.storeId === selectedFurn.id)
+        const item = getBpItems().find((it) => it.metadata?.storeId === selectedFurn.id)
         if (item?.resize) {
             item.resize(mToCm(height), mToCm(width), mToCm(depth))
         }
@@ -91,8 +162,7 @@ export function RightSidebar() {
     const commitLabel = () => {
         if (!selectedFurn) return
         updateFurniture(selectedFurn.id, { label: labelDraft })
-        const bp = (window as any).__BP3D_INSTANCE__
-        const item = bp?.model?.scene?.getItems?.()?.find((it: any) => it?.metadata?.storeId === selectedFurn.id)
+        const item = getBpItems().find((it) => it.metadata?.storeId === selectedFurn.id)
         if (item?.metadata) {
             item.metadata.itemName = labelDraft
         }
@@ -103,17 +173,13 @@ export function RightSidebar() {
         const delta = (deg * Math.PI) / 180
         const next = (selectedFurn.rotation?.y || 0) + delta
         updateFurniture(selectedFurn.id, { rotation: { y: next } })
-        const bp = (window as any).__BP3D_INSTANCE__
-        const item = bp?.model?.scene?.getItems?.()?.find((it: any) => it?.metadata?.storeId === selectedFurn.id)
+        const item = getBpItems().find((it) => it.metadata?.storeId === selectedFurn.id)
         if (item) {
-            item.rotation.y = next
-            item.scene.needsUpdate = true
+            if (item.rotation) item.rotation.y = next
+            if (item.scene) item.scene.needsUpdate = true
         }
     }
 
-    // --- AI Handlers ---
-
-    // 1. Upload Image
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -121,14 +187,12 @@ export function RightSidebar() {
         setIsProcessingAI(true)
         setStatusMsg("Uploading...")
 
-        // Preview
         const reader = new FileReader()
         reader.onload = (ev) => {
             if (ev.target?.result) setImageSrc(ev.target.result as string)
         }
         reader.readAsDataURL(file)
 
-        // Upload to API
         const formData = new FormData()
         formData.append('image', file)
 
@@ -149,7 +213,6 @@ export function RightSidebar() {
         }
     }
 
-    // 2. Adjust Canvas Size when image loads
     useEffect(() => {
         if (!imageSrc || !canvasRef.current || !overlayRef.current) return
 
@@ -157,13 +220,6 @@ export function RightSidebar() {
         img.src = imageSrc
         img.onload = () => {
             if (canvasRef.current && overlayRef.current) {
-                // Fit to sidebar width (approx 280px minus padding)
-                // We keep aspect ratio but scale down for display
-                // Actually, for segmentation click coordinates to match, we need to handle scaling carefully.
-                // We'll let CSS handle display size, but set internal resolution to match image?
-                // Or just set strict width.
-
-                // Let's stick to intrinsic size for canvas and scale visually with CSS max-w-full
                 canvasRef.current.width = img.width
                 canvasRef.current.height = img.height
                 overlayRef.current.width = img.width
@@ -175,7 +231,30 @@ export function RightSidebar() {
         }
     }, [imageSrc])
 
-    // 3. Click Segmentation
+    const drawMasks = (maskList: SegmentMask[]) => {
+        if (!overlayRef.current) return
+        const ctx = overlayRef.current.getContext('2d')
+        if (!ctx) return
+
+        ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height)
+
+        maskList.forEach(mask => {
+            if (mask.polygon && mask.polygon.length > 0) {
+                ctx.beginPath()
+                ctx.moveTo(mask.polygon[0][0], mask.polygon[0][1])
+                for (let i = 1; i < mask.polygon.length; i++) {
+                    ctx.lineTo(mask.polygon[i][0], mask.polygon[i][1])
+                }
+                ctx.closePath()
+                ctx.fillStyle = 'rgba(34, 211, 238, 0.22)'
+                ctx.fill()
+                ctx.strokeStyle = '#f8fafc'
+                ctx.lineWidth = 3
+                ctx.stroke()
+            }
+        })
+    }
+
     const handleCanvasClick = async (e: React.MouseEvent) => {
         if (!jobId || isProcessingAI || !canvasRef.current) return
 
@@ -201,7 +280,7 @@ export function RightSidebar() {
                 body: formData,
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             })
-            const data = await res.json().catch(() => ({} as any))
+            const data = await res.json().catch(() => ({} as SegmentMask)) as SegmentMask
 
             if (res.status === 429) {
                 setStatusMsg(data?.message || 'GPU busy. Please wait and try again.')
@@ -209,41 +288,41 @@ export function RightSidebar() {
             }
 
             if (data.ok || data.mask_id) {
-                // The new server endpoint returns `job_id` for the specific click task.
-                const clickJobId = data.job_id;
+                const clickJobId = data.job_id
+                let result: SegmentMask = data
 
-                // If polygon is missing (async worker), poll for it via the status endpoint
-                let result = data;
                 if (!result.polygon && clickJobId) {
-                    setStatusMsg("Processing click...");
-                    const pollStart = Date.now();
-                    while (Date.now() - pollStart < 15000) { // 15s timeout
-                        await new Promise(r => setTimeout(r, 150));
+                    setStatusMsg("Processing click...")
+                    const pollStart = Date.now()
+                    while (Date.now() - pollStart < 15000) {
+                        await new Promise(r => setTimeout(r, 150))
                         try {
-                            const check = await fetch(`/api/sam3d/jobs/${clickJobId}/status`);
+                            const check = await fetch(`/api/sam3d/jobs/${clickJobId}/status`)
                             if (check.ok) {
-                                const statusData = await check.json();
+                                const statusData = await check.json() as SegmentMask
                                 if (statusData.status === 'COMPLETED' && statusData.polygon && statusData.polygon.length > 0) {
-                                    result = statusData;
-                                    break;
+                                    result = statusData
+                                    break
                                 } else if (statusData.status === 'FAILED') {
-                                    setStatusMsg("Segmentation failed internally.");
-                                    break;
+                                    setStatusMsg("Segmentation failed internally.")
+                                    break
                                 }
                             }
-                        } catch (e) { }
+                        } catch {
+                            // ignore transient polling failure
+                        }
                     }
                 }
 
                 if (result.polygon) {
-                    setMasks([result]);
-                    drawMasks([result]);
-                    setStatusMsg("Segmented! Ready to generate.");
+                    setMasks([result])
+                    drawMasks([result])
+                    setStatusMsg("Segmented! Ready to generate.")
                 } else {
-                    setStatusMsg("Segmentation timed out.");
+                    setStatusMsg("Segmentation timed out.")
                 }
             } else {
-                setStatusMsg("No object found.");
+                setStatusMsg("No object found.")
             }
         } catch (err) {
             console.error(err)
@@ -253,31 +332,6 @@ export function RightSidebar() {
         }
     }
 
-    const drawMasks = (maskList: any[]) => {
-        if (!overlayRef.current) return
-        const ctx = overlayRef.current.getContext('2d')
-        if (!ctx) return
-
-        ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height)
-
-        maskList.forEach(mask => {
-            if (mask.polygon && mask.polygon.length > 0) {
-                ctx.beginPath()
-                ctx.moveTo(mask.polygon[0][0], mask.polygon[0][1])
-                for (let i = 1; i < mask.polygon.length; i++) {
-                    ctx.lineTo(mask.polygon[i][0], mask.polygon[i][1])
-                }
-                ctx.closePath()
-                ctx.fillStyle = 'rgba(99, 102, 241, 0.4)'
-                ctx.fill()
-                ctx.strokeStyle = '#fff'
-                ctx.lineWidth = 4
-                ctx.stroke()
-            }
-        })
-    }
-
-    // 4. Trigger 3D
     const trigger3D = async () => {
         if (!jobId || masks.length === 0) return
 
@@ -295,264 +349,329 @@ export function RightSidebar() {
             })
             const data = await res.json()
             if (data.ok) {
-                // Don't poll here. Just notify queued.
-                // The backend handles the job separately.
                 setStatusMsg(`Queued: ${data.message || "3D Model"}`)
-                setIsProcessingAI(false)
-
-                // Add to list immediately as placeholder? 
-                // No, let the user continue.
             } else {
                 setStatusMsg("Failed to start 3D gen.")
-                setIsProcessingAI(false)
             }
         } catch (err) {
             console.error(err)
-            setIsProcessingAI(false)
             setStatusMsg("Error calling backend.")
+        } finally {
+            setIsProcessingAI(false)
         }
     }
 
-
-
-    if (!isVisible) return null
-
     return (
-        <div className="w-[320px] border-l bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-hidden animate-in slide-in-from-right duration-300">
-
-            {/* Selected Item Controls */}
-            {selectedFurn && (
-                <div className="p-4 border-b bg-secondary/5">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Selected Item</h3>
-                    <div className="space-y-3">
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-muted-foreground uppercase font-bold">Label</label>
-                            <div className="flex items-center gap-2">
-                                <Tag className="w-4 h-4 text-muted-foreground/70" />
-                                <input
-                                    type="text"
-                                    value={labelDraft}
-                                    onChange={(e) => setLabelDraft(e.target.value)}
-                                    onBlur={commitLabel}
-                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                                    placeholder="Item label..."
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[10px] text-muted-foreground uppercase font-bold">Size (m)</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={sizeDraft.width}
-                                    onChange={(e) => setSizeDraft(s => ({ ...s, width: e.target.value }))}
-                                    onBlur={commitSize}
-                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                    placeholder="W"
-                                />
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={sizeDraft.height}
-                                    onChange={(e) => setSizeDraft(s => ({ ...s, height: e.target.value }))}
-                                    onBlur={commitSize}
-                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                    placeholder="H"
-                                />
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={sizeDraft.depth}
-                                    onChange={(e) => setSizeDraft(s => ({ ...s, depth: e.target.value }))}
-                                    onBlur={commitSize}
-                                    className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                    placeholder="D"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => rotateBy(-15)}
-                                className="flex-1 flex items-center justify-center gap-2 rounded-md border border-border bg-secondary/30 py-2 text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
-                            >
-                                <RotateCw className="w-3 h-3 rotate-180" />
-                                Rotate -15°
-                            </button>
-                            <button
-                                onClick={() => rotateBy(15)}
-                                className="flex-1 flex items-center justify-center gap-2 rounded-md border border-border bg-secondary/30 py-2 text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
-                            >
-                                <RotateCw className="w-3 h-3" />
-                                Rotate +15°
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => deleteObject(selectedFurn.id)}
-                            className="w-full flex items-center justify-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 py-2 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors"
-                        >
-                            <Trash2 className="w-3 h-3" />
-                            Delete Item
-                        </button>
-                    </div>
-                </div>
+        <aside
+            className={cn(
+                "absolute inset-y-3 right-3 z-40 flex w-[min(92vw,360px)] max-w-[360px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#070b12]/94 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur-2xl transition-transform duration-300 xl:relative xl:inset-auto xl:z-0 xl:h-full xl:w-[340px] xl:max-w-none xl:translate-x-0 xl:rounded-none xl:border-y-0 xl:border-r-0 xl:border-l xl:bg-slate-950/72 xl:shadow-none xl:backdrop-blur-xl",
+                mobileRightSidebarOpen ? "translate-x-0" : "translate-x-[108%] xl:translate-x-0"
             )}
-
-            {/* --- AI Reconstruction Panel (Visible when activeTool === 'furniture') --- */}
-            {activeTool === 'furniture' && (
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b">
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI Reconstruction</h3>
-                        <p className="text-[10px] text-muted-foreground mt-1">Upload an image and segment objects to create 3D models.</p>
+        >
+            <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.08),transparent_40%),linear-gradient(180deg,rgba(15,23,42,0.75),rgba(2,6,23,0.6))] px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Inspector</p>
+                        <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">Scene Controls</h2>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                            Keep the canvas clean. Selection details, preview controls, and AI utilities stay docked here.
+                        </p>
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => setMobileRightSidebarOpen(false)}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 xl:hidden"
+                        aria-label="Close inspector panel"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
 
-                    <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                <div className="mt-4 flex flex-wrap gap-2">
+                    <span className={cn(
+                        "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+                        mode === '3d'
+                            ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                            : "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                    )}>
+                        {mode === '3d' ? '3D Mode' : '2D Mode'}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
+                        {selectedFurn ? 'Item Selected' : 'Canvas Ready'}
+                    </span>
+                    {showAiPanel && (
+                        <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-100">
+                            Furn AI Active
+                        </span>
+                    )}
+                </div>
+            </div>
 
-                        {/* Control Bar */}
-                        <div className="flex flex-col gap-2">
-                            <div className="flex gap-2">
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                {showEmptyState && (
+                    <PanelSection
+                        eyebrow="Workspace"
+                        title="Nothing selected yet"
+                        description="Select a placed item to edit it, open Furn AI to extract a new asset, or switch to 3D mode to preview the scene."
+                        accent="cyan"
+                    >
+                        <div className="grid gap-3 text-sm text-slate-300">
+                            <div className="rounded-2xl border border-white/8 bg-slate-950/60 p-3">
+                                <p className="font-medium text-white">Quick flow</p>
+                                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                    Build the floor in 2D, calibrate scale, then move to 3D once the structure is stable.
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-white/8 bg-slate-950/60 p-3">
+                                <p className="font-medium text-white">Inspector use</p>
+                                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                    This rail becomes active when you pick furniture, run AI segmentation, or load the 3D preview.
+                                </p>
+                            </div>
+                        </div>
+                    </PanelSection>
+                )}
+
+                {selectedFurn && (
+                    <PanelSection
+                        eyebrow="Selection"
+                        title={selectedFurn.label || selectedFurn.type || 'Selected item'}
+                        description="Rename, resize, rotate, or remove the currently selected furniture."
+                        accent="default"
+                    >
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Label</label>
+                                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2">
+                                    <Tag className="h-4 w-4 text-slate-500" />
+                                    <input
+                                        type="text"
+                                        value={labelDraft}
+                                        onChange={(e) => setLabelDraft(e.target.value)}
+                                        onBlur={commitLabel}
+                                        className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+                                        placeholder="Item label..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Dimensions (m)</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={sizeDraft.width}
+                                        onChange={(e) => setSizeDraft(s => ({ ...s, width: e.target.value }))}
+                                        onBlur={commitSize}
+                                        className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+                                        placeholder="W"
+                                    />
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={sizeDraft.height}
+                                        onChange={(e) => setSizeDraft(s => ({ ...s, height: e.target.value }))}
+                                        onBlur={commitSize}
+                                        className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+                                        placeholder="H"
+                                    />
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={sizeDraft.depth}
+                                        onChange={(e) => setSizeDraft(s => ({ ...s, depth: e.target.value }))}
+                                        onBlur={commitSize}
+                                        className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+                                        placeholder="D"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
                                 <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="flex-1 flex items-center justify-center gap-2 bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 px-3 py-2 rounded text-xs font-semibold transition-colors"
+                                    onClick={() => rotateBy(-15)}
+                                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-xs font-semibold text-slate-200 transition hover:bg-white/[0.08]"
                                 >
-                                    <Upload className="w-3 h-3" />
-                                    Upload Image
+                                    <RotateCw className="h-3.5 w-3.5 rotate-180" />
+                                    Rotate -15°
                                 </button>
-                                <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-
                                 <button
-                                    onClick={trigger3D}
-                                    disabled={masks.length === 0 || isProcessingAI}
-                                    className={cn(
-                                        "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-semibold transition-colors border",
-                                        masks.length > 0 ? "bg-accent text-accent-foreground border-accent" : "bg-muted text-muted-foreground border-border cursor-not-allowed"
-                                    )}
+                                    onClick={() => rotateBy(15)}
+                                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-xs font-semibold text-slate-200 transition hover:bg-white/[0.08]"
                                 >
-                                    {isProcessingAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Box className="w-3 h-3" />}
-                                    Generate 3D
+                                    <RotateCw className="h-3.5 w-3.5" />
+                                    Rotate +15°
                                 </button>
                             </div>
 
-                            {statusMsg && (
-                                <div className={`text-[10px] font-mono text-center p-1.5 rounded ${statusMsg.includes("Queued") ? "bg-green-500/20 text-green-300" :
-                                    (statusMsg.includes("Error") || statusMsg.includes("Failed") ? "bg-red-500/20 text-red-300" : "bg-secondary/30 text-muted-foreground")
-                                    }`}>
-                                    {statusMsg}
-                                </div>
-                            )}
-
-                            {/* Generate Another Button (appears after queueing) */}
-                            {statusMsg.includes("Queued") && (
-                                <button
-                                    onClick={() => {
-                                        setStatusMsg("Ready. Click object to segment.");
-                                        setMasks([]);
-                                        if (overlayRef.current) {
-                                            const ctx = overlayRef.current.getContext('2d');
-                                            ctx?.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
-                                        }
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded text-xs font-semibold transition-colors animate-in fade-in"
-                                >
-                                    <MousePointer2 className="w-3 h-3" />
-                                    Segment Another Object
-                                </button>
-                            )}
+                            <button
+                                onClick={() => deleteObject(selectedFurn.id)}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-3 py-2.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/16"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete Item
+                            </button>
                         </div>
+                    </PanelSection>
+                )}
 
-                        {/* Canvas Area */}
-                        <div className="relative border rounded-lg overflow-hidden bg-black/20 flex items-center justify-center min-h-[200px] border-dashed border-border/50">
-                            {!imageSrc && (
-                                <div className="text-center text-muted-foreground/50 p-4">
-                                    <MousePointer2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                                    <p className="text-xs">No image loaded</p>
+                {showAiPanel && (
+                    <PanelSection
+                        eyebrow="Furn AI"
+                        title="AI Reconstruction"
+                        description="Upload a reference image, click the target object, and queue a 3D asset."
+                        accent="emerald"
+                    >
+                        <div className="space-y-4">
+                            <div className="grid gap-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/16"
+                                    >
+                                        <Upload className="h-3.5 w-3.5" />
+                                        Upload Image
+                                    </button>
+                                    <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+
+                                    <button
+                                        onClick={trigger3D}
+                                        disabled={masks.length === 0 || isProcessingAI}
+                                        className={cn(
+                                            "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-semibold transition",
+                                            masks.length > 0 && !isProcessingAI
+                                                ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/16"
+                                                : "cursor-not-allowed border-white/10 bg-white/[0.04] text-slate-500"
+                                        )}
+                                    >
+                                        {isProcessingAI ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Box className="h-3.5 w-3.5" />}
+                                        Generate 3D
+                                    </button>
                                 </div>
-                            )}
 
-                            {imageSrc && (
-                                <div className="relative max-w-full">
-                                    <canvas
-                                        ref={canvasRef}
-                                        className="block w-full h-auto cursor-crosshair"
-                                        onMouseDown={handleCanvasClick}
-                                    />
-                                    <canvas
-                                        ref={overlayRef}
-                                        className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                                    />
-                                </div>
-                            )}
-                        </div>
+                                {statusMsg && (
+                                    <div className={cn(
+                                        "rounded-2xl border px-3 py-2 text-[11px] font-medium",
+                                        statusMsg.includes("Queued")
+                                            ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                            : (statusMsg.includes("Error") || statusMsg.includes("Failed"))
+                                                ? "border-rose-400/20 bg-rose-400/10 text-rose-100"
+                                                : "border-white/10 bg-white/[0.04] text-slate-300"
+                                    )}>
+                                        {statusMsg}
+                                    </div>
+                                )}
+                            </div>
 
-                        <div className="p-4 bg-primary/5 rounded-lg">
-                            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">AI Status</h3>
-                            <div className="space-y-2">
+                            <div className="overflow-hidden rounded-[22px] border border-dashed border-white/12 bg-slate-950/70">
+                                {!imageSrc ? (
+                                    <div className="flex min-h-[220px] flex-col items-center justify-center px-5 text-center">
+                                        <MousePointer2 className="mb-3 h-8 w-8 text-slate-500" />
+                                        <p className="text-sm font-medium text-white">No image loaded</p>
+                                        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                            Upload a reference photo, then click the object you want to segment.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        <canvas
+                                            ref={canvasRef}
+                                            className="block h-auto w-full cursor-crosshair"
+                                            onMouseDown={handleCanvasClick}
+                                        />
+                                        <canvas
+                                            ref={overlayRef}
+                                            className="pointer-events-none absolute inset-0 h-full w-full"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid gap-2 rounded-[22px] border border-white/10 bg-slate-950/70 p-3">
                                 <div className="flex items-center justify-between text-[11px]">
-                                    <span className="text-muted-foreground">Job ID:</span>
-                                    <span className="font-mono text-primary truncate max-w-[100px]">{jobId || 'None'}</span>
+                                    <span className="text-slate-400">Job ID</span>
+                                    <span className="max-w-[130px] truncate font-mono text-cyan-100">{jobId || 'None'}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-[11px]">
-                                    <span className="text-muted-foreground">State:</span>
+                                    <span className="text-slate-400">State</span>
                                     <span className={cn(
                                         "font-semibold",
-                                        statusMsg.includes("Error") ? "text-red-400" : (statusMsg.includes("Ready") ? "text-green-400" : "text-yellow-400")
+                                        statusMsg.includes("Error") || statusMsg.includes("Failed")
+                                            ? "text-rose-200"
+                                            : statusMsg.includes("Ready") || statusMsg.includes("Segmented")
+                                                ? "text-emerald-200"
+                                                : "text-slate-200"
                                     )}>
                                         {statusMsg || 'Idle'}
                                     </span>
                                 </div>
                             </div>
+
+                            {statusMsg.includes("Queued") && (
+                                <button
+                                    onClick={() => {
+                                        setStatusMsg("Ready. Click object to segment.")
+                                        setMasks([])
+                                        if (overlayRef.current) {
+                                            const ctx = overlayRef.current.getContext('2d')
+                                            ctx?.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height)
+                                        }
+                                    }}
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/16"
+                                >
+                                    <MousePointer2 className="h-3.5 w-3.5" />
+                                    Segment Another Object
+                                </button>
+                            )}
                         </div>
+                    </PanelSection>
+                )}
 
-                    </div>
-
-                    {/* Job Queue — always visible at bottom, outside scroll */}
-                    <JobQueuePanel />
-
-                </div>
-            )}
-
-            {/* --- 3D Options Panel (Visible when mode === '3d') --- */}
-            {true && ( // mode === '3d' && (
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b">
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">3D Options</h3>
-                        <p className="text-[10px] text-muted-foreground mt-1">Control 3D rendering and test features.</p>
-                    </div>
-
-                    <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                {showPreviewPanel && (
+                    <PanelSection
+                        eyebrow="Preview"
+                        title="3D Stage"
+                        description="Use the canvas for navigation and keep a fallback test model ready while the main scene loads."
+                        accent="cyan"
+                    >
                         <div className="space-y-3">
                             <button
                                 onClick={() => {
-                                    console.log('Test GLB button clicked, current state:', testGLB)
                                     if (!testGLB) {
-                                        // Show test GLB even before calibration by entering 3D mode
                                         setMode('3d')
                                     }
                                     toggleTestGLB()
                                 }}
                                 className={cn(
-                                    "w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-semibold transition-colors border",
-                                    testGLB ? "bg-accent text-accent-foreground border-accent" : "bg-secondary/30 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/50"
+                                    "inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-semibold transition",
+                                    testGLB
+                                        ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
                                 )}
                             >
-                                <Box className="w-3 h-3" />
-                                {testGLB ? "Hide Test GLB" : "Load Test GLB"}
+                                <Box className="h-3.5 w-3.5" />
+                                {testGLB ? 'Hide Test GLB' : 'Load Test GLB'}
                             </button>
-                            <p className="text-[10px] text-muted-foreground">Load and render a test GLB file from the test folder.</p>
-                        </div>
-                    </div>
 
-                    {/* Job Queue — always visible at bottom, outside scroll */}
+                            <div className="rounded-[22px] border border-white/10 bg-slate-950/70 p-3">
+                                <p className="text-xs font-medium text-white">Preview state</p>
+                                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                    {mode === '3d'
+                                        ? 'The scene is in 3D. Use orbit controls directly in the stage and keep this panel for quick preview utilities.'
+                                        : 'You can preload a test GLB from here before switching your main project into 3D.'}
+                                </p>
+                            </div>
+                        </div>
+                    </PanelSection>
+                )}
+            </div>
+
+            {token && (
+                <div className="border-t border-white/10 bg-slate-950/40 pb-2 pt-2">
                     <JobQueuePanel />
                 </div>
             )}
-
-            {/* Job Queue — always show when sidebar is open */}
-            {activeTool !== 'furniture' && <JobQueuePanel />}
-
-        </div>
+        </aside>
     )
 }

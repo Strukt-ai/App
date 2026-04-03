@@ -2525,16 +2525,25 @@ var BP3D;
             Scene.prototype.addItem = function (itemType, fileName, metadata, position, rotation, scale, fixed) {
                 itemType = itemType || 1;
                 var scope = this;
+                var itemLoadSettled = false;
+                var settleItemLoad = function (item) {
+                    if (itemLoadSettled) {
+                        return;
+                    }
+                    itemLoadSettled = true;
+                    scope.itemLoadedCallbacks.fire(item || null);
+                };
                 var loaderCallback = function (geometry, materials) {
                     var item = new (BP3D.Items.Factory.getClass(itemType))(scope.model, metadata, geometry, new THREE.MeshFaceMaterial(materials), position, rotation, scale);
                     item.fixed = fixed || false;
                     scope.items.push(item);
                     scope.add(item);
                     item.initObject();
-                    scope.itemLoadedCallbacks.fire(item);
+                    settleItemLoad(item);
                 };
                 var objectCallback = function (object) {
                     if (!object) {
+                        settleItemLoad(null);
                         return;
                     }
                     object.updateMatrixWorld(true);
@@ -2599,7 +2608,7 @@ var BP3D;
                     scope.items.push(item);
                     scope.add(item);
                     item.initObject();
-                    scope.itemLoadedCallbacks.fire(item);
+                    settleItemLoad(item);
                 };
                 var lower = (fileName || '').toLowerCase();
                 this.itemLoadingCallbacks.fire();
@@ -2617,6 +2626,7 @@ var BP3D;
                             }
                             else {
                                 console.warn('OBJLoader not available for', fileName);
+                                settleItemLoad(null);
                             }
                         });
                     }
@@ -2624,10 +2634,13 @@ var BP3D;
                         var objLoader = new THREE.OBJLoader();
                         objLoader.load(fileName, function (object) {
                             objectCallback(object);
+                        }, undefined, function () {
+                            settleItemLoad(null);
                         });
                     }
                     else {
                         console.warn('OBJ loaders not available for', fileName);
+                        settleItemLoad(null);
                     }
                     return;
                 }
@@ -2639,14 +2652,18 @@ var BP3D;
                             objectCallback(object);
                         }, undefined, function (err) {
                             console.warn('GLTF load failed for', fileName, err);
+                            settleItemLoad(null);
                         });
                     }
                     else {
                         console.warn('GLTFLoader not available for', fileName);
+                        settleItemLoad(null);
                     }
                     return;
                 }
-                this.loader.load(fileName, loaderCallback, undefined // TODO_Ekki 
+                this.loader.load(fileName, loaderCallback, undefined, function () {
+                    settleItemLoad(null);
+                } // TODO_Ekki 
                 );
             };
             return Scene;
@@ -3058,6 +3075,10 @@ var BP3D;
                 this.canvasElement.mouseleave(function () {
                     scope.mouseleave();
                 });
+                this.canvasElement.on('wheel', function (event) {
+                    scope.mousewheel(event.originalEvent || event);
+                    return false;
+                });
                 $(document).keyup(function (e) {
                     if (e.keyCode == 27) {
                         scope.escapeKey();
@@ -3189,6 +3210,61 @@ var BP3D;
             Floorplanner.prototype.mouseleave = function () {
                 this.mouseDown = false;
                 //scope.setMode(scope.modes.MOVE);
+            };
+            /** */
+            Floorplanner.prototype.mousewheel = function (event) {
+                if (!event) {
+                    return false;
+                }
+                if (event.preventDefault) {
+                    event.preventDefault();
+                }
+                if (event.stopPropagation) {
+                    event.stopPropagation();
+                }
+                var delta = 0;
+                if (event.deltaY !== undefined && event.deltaY !== 0) {
+                    delta = -event.deltaY;
+                }
+                else if (event.wheelDelta !== undefined && event.wheelDelta !== 0) {
+                    delta = event.wheelDelta;
+                }
+                else if (event.detail !== undefined && event.detail !== 0) {
+                    delta = -event.detail;
+                }
+                if (delta === 0) {
+                    return false;
+                }
+                var offset = this.canvasElement.offset();
+                if (!offset) {
+                    return false;
+                }
+                var clientX = event.clientX;
+                var clientY = event.clientY;
+                if ((clientX === undefined || clientY === undefined) && event.touches && event.touches.length > 0) {
+                    clientX = event.touches[0].clientX;
+                    clientY = event.touches[0].clientY;
+                }
+                if (clientX === undefined || clientY === undefined) {
+                    return false;
+                }
+                var canvasX = clientX - offset.left;
+                var canvasY = clientY - offset.top;
+                var oldCmPerPixel = this.cmPerPixel;
+                var zoomScale = (delta > 0) ? (1 / 1.15) : 1.15;
+                var newCmPerPixel = oldCmPerPixel * zoomScale;
+                newCmPerPixel = Math.max(0.1, Math.min(40, newCmPerPixel));
+                if (Math.abs(newCmPerPixel - oldCmPerPixel) < 0.000001) {
+                    return false;
+                }
+                var worldX = (canvasX + this.originX) * oldCmPerPixel;
+                var worldY = (canvasY + this.originY) * oldCmPerPixel;
+                this.cmPerPixel = newCmPerPixel;
+                this.pixelsPerCm = 1.0 / this.cmPerPixel;
+                this.originX = worldX / this.cmPerPixel - canvasX;
+                this.originY = worldY / this.cmPerPixel - canvasY;
+                this.view.draw();
+                return false;
             };
             /** */
             Floorplanner.prototype.reset = function () {
@@ -4392,12 +4468,24 @@ var BP3D;
             function onMouseWheel(event) {
                 if (scope.enabled === false || scope.noZoom === true)
                     return;
+                if (event.preventDefault) {
+                    event.preventDefault();
+                }
+                if (event.stopPropagation) {
+                    event.stopPropagation();
+                }
                 var delta = 0;
-                if (event.wheelDelta) {
+                if (event.deltaY !== undefined && event.deltaY !== 0) {
+                    delta = -event.deltaY;
+                }
+                else if (event.wheelDelta) {
                     delta = event.wheelDelta;
                 }
                 else if (event.detail) {
                     delta = -event.detail;
+                }
+                if (delta === 0) {
+                    return;
                 }
                 if (delta > 0) {
                     scope.dollyOut();
@@ -4532,6 +4620,7 @@ var BP3D;
             }
             this.domElement.addEventListener('contextmenu', function (event) { event.preventDefault(); }, false);
             this.domElement.addEventListener('mousedown', onMouseDown, false);
+            this.domElement.addEventListener('wheel', onMouseWheel, false);
             this.domElement.addEventListener('mousewheel', onMouseWheel, false);
             this.domElement.addEventListener('DOMMouseScroll', onMouseWheel, false); // firefox
             this.domElement.addEventListener('touchstart', touchstart, false);

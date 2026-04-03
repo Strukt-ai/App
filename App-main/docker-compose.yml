@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      BACKEND_DIRECT_CALL: "false"
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+      NEXT_PUBLIC_BACKEND_URL: "https://api.myapp.com"   # set to your backend URL
+    volumes:
+      - ./app:/app/app    # frontend code only
+    depends_on:
+      - postgres
+      - redis
+    # backend service is external; not managed by compose
+    networks:
+      - strukt
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: strukt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: strukt
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - strukt
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - strukt
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  strukt:
+    driver: bridge

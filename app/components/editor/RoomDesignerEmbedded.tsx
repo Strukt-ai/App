@@ -5,7 +5,6 @@ import Script from 'next/script'
 import dynamic from 'next/dynamic'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { FurnAIAssetsManager } from '@/components/editor/FurnAIAssetsManager'
-import { shallow } from 'zustand/shallow'
 
 type Bp3dInstance = any
 
@@ -18,7 +17,9 @@ const CM_PER_M = 100
 const cmToM = (v: number) => v / CM_PER_M
 const mToCm = (v: number) => v * CM_PER_M
 
-const DEFAULT_DOOR_MODEL = 'models/glb-legacy/door.glb'
+// Blueprint3D's legacy Three.js stack loads JSON models reliably, while the
+// bundled GLTF loader path is still brittle in this app shell.
+const DEFAULT_DOOR_MODEL = 'models/js/closed-door28x80_baked.js'
 const DEFAULT_WINDOW_MODEL = 'models/js/whitewindow.js'
 const EMPTY_SERIALIZED = '{"floorplan":{"corners":{},"walls":[],"wallTextures":[],"floorTextures":{},"newFloorTextures":{}},"items":[]}'
 
@@ -155,6 +156,8 @@ export function RoomDesignerEmbedded() {
   const bpRef = useRef<Bp3dInstance | null>(null)
   const syncRef = useRef<'bp3d' | 'store' | null>(null)
   const debounceRef = useRef<number | null>(null)
+  const initRetryRef = useRef<number | null>(null)
+  const bpInitStartedRef = useRef(false)
   const wallMapRef = useRef<Map<string, string>>(new Map())
   const roomMapRef = useRef<Map<string, string>>(new Map())
   const activeToolRef = useRef(activeTool)
@@ -795,20 +798,62 @@ export function RoomDesignerEmbedded() {
   // Initialize BP3D once scripts are ready
   useEffect(() => {
     if (!scriptsReady) return
-    const init = (window as any).__BP3D_INIT__
-    if (init) {
-      const bp = init(
-        {
-          floorplannerElement: 'floorplanner-canvas',
-          threeElement: '#viewer',
-          threeCanvasElement: 'three-canvas',
-          textureDir: 'models/textures/',
-          widget: false,
-        },
-        { loadSample: false }
-      )
-      if (bp?.model?.loadSerialized) {
-        bp.model.loadSerialized(EMPTY_SERIALIZED)
+
+    let cancelled = false
+    let attempts = 0
+
+    const tryInit = () => {
+      if (cancelled || bpInitStartedRef.current) return
+
+      const w = window as any
+      const init = w.__BP3D_INIT__
+      const ctor = w.BP3D?.Blueprint3d
+
+      if (typeof init !== 'function' || typeof ctor !== 'function') {
+        attempts += 1
+        if (attempts > 100) {
+          console.error('Blueprint3D bootstrap timed out.', {
+            hasInit: typeof init === 'function',
+            ctorType: typeof ctor,
+          })
+          return
+        }
+        initRetryRef.current = window.setTimeout(tryInit, 50)
+        return
+      }
+
+      try {
+        bpInitStartedRef.current = true
+        const bp = init(
+          {
+            floorplannerElement: 'floorplanner-canvas',
+            threeElement: '#viewer',
+            threeCanvasElement: 'three-canvas',
+            textureDir: 'models/textures/',
+            widget: false,
+          },
+          { loadSample: false }
+        )
+        if (bp?.model?.loadSerialized) {
+          bp.model.loadSerialized(EMPTY_SERIALIZED)
+        }
+      } catch (error) {
+        bpInitStartedRef.current = false
+        attempts += 1
+        console.error('Blueprint3D init failed, retrying...', error)
+        if (attempts <= 100) {
+          initRetryRef.current = window.setTimeout(tryInit, 100)
+        }
+      }
+    }
+
+    tryInit()
+
+    return () => {
+      cancelled = true
+      if (initRetryRef.current) {
+        window.clearTimeout(initRetryRef.current)
+        initRetryRef.current = null
       }
     }
   }, [scriptsReady])
@@ -816,17 +861,20 @@ export function RoomDesignerEmbedded() {
   // Sync store -> BP3D when external updates occur
   useEffect(() => {
     if (!bpReady) return
-    const unsub = useFloorplanStore.subscribe(
-      s => [s.walls, s.rooms, s.furniture],
-      () => {
-        if (syncRef.current === 'bp3d') return
-        applyStoreToBp3d()
-      },
-      { equalityFn: shallow }
-    )
-    return () => unsub()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bpReady])
+    if (syncRef.current === 'bp3d') return
+
+    applyStoreToBp3d()
+
+    // Imported SVG updates originate outside Blueprint3D. When the user is already
+    // in 3D mode, re-center once after the new floorplan is applied so the viewer
+    // doesn't stay focused on the previous empty scene.
+    if (mode === '3d') {
+      requestAnimationFrame(() => {
+        bpRef.current?.three?.updateWindowSize?.()
+        bpRef.current?.three?.centerCamera?.()
+      })
+    }
+  }, [bpReady, mode, walls, rooms, furniture])
 
   // Keep BP3D selection in sync with store selection
   useEffect(() => {
@@ -970,6 +1018,10 @@ export function RoomDesignerEmbedded() {
         $('#floorplan_tab').click()
       } else {
         $('#design_tab').click()
+        requestAnimationFrame(() => {
+          bpRef.current?.three?.updateWindowSize?.()
+          bpRef.current?.three?.centerCamera?.()
+        })
       }
     }
 
@@ -1004,6 +1056,34 @@ export function RoomDesignerEmbedded() {
       }
     }
   }, [bpReady, mode, activeTool])
+
+  const zoomEditor = (direction: 'in' | 'out') => {
+    const bp = bpRef.current
+    if (!bp) return
+
+    if (mode === '3d') {
+      const controls = bp?.three?.controls
+      if (!controls) return
+
+      if (direction === 'in') controls.dollyIn?.(1.15)
+      else controls.dollyOut?.(1.15)
+      controls.update?.()
+      return
+    }
+
+    const fp = bp?.floorplanner
+    const canvasEl = fp?.canvasElement?.get?.(0) || document.getElementById('floorplanner-canvas')
+    if (!fp || !canvasEl) return
+
+    const rect = canvasEl.getBoundingClientRect()
+    fp.mousewheel?.({
+      deltaY: direction === 'in' ? -120 : 120,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      preventDefault() { },
+      stopPropagation() { },
+    })
+  }
 
   return (
     <div className="flex-1 h-full w-full overflow-hidden bg-transparent">
@@ -1120,6 +1200,27 @@ export function RoomDesignerEmbedded() {
             </div>
 
             <div className="col-xs-12 main">
+              <div className="absolute right-4 top-4 z-20 flex flex-col gap-2 rounded-[22px] border border-white/10 bg-slate-950/60 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.32)] backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={() => zoomEditor('in')}
+                  className="h-10 w-10 rounded-2xl border border-white/10 bg-white/[0.05] text-lg font-semibold text-white transition hover:bg-white/[0.1]"
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => zoomEditor('out')}
+                  className="h-10 w-10 rounded-2xl border border-white/10 bg-white/[0.05] text-lg font-semibold text-white transition hover:bg-white/[0.1]"
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                >
+                  -
+                </button>
+              </div>
+
               <div id="viewer">
                 <div id="camera-controls">
                   <a href="#" className="btn btn-default bottom" id="zoom-out"><span className="glyphicon glyphicon-zoom-out"></span></a>

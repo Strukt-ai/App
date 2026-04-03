@@ -18,6 +18,7 @@ import { ReferenceOverlay } from '@/components/editor/ReferenceOverlay'
 import { TutorialOverlay } from '@/components/editor/TutorialOverlay'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useFloorplanStore } from '@/store/floorplanStore'
+import { cn } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 
 // Blueprint3D Room Designer - imported dynamically to avoid SSR issues
@@ -34,7 +35,8 @@ interface AppProps {
   template?: string
 }
 
-function App({ template }: AppProps) {
+function App({ template: _template }: AppProps) {
+  void _template
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const templateQuery = searchParams.get('template')
@@ -55,6 +57,14 @@ function App({ template }: AppProps) {
   const setUploadedImage = useFloorplanStore(s => s.setUploadedImage)
   const setCalibrationFactor = useFloorplanStore(s => s.setCalibrationFactor)
   const setMode = useFloorplanStore(s => s.setMode)
+  const mode = useFloorplanStore(s => s.mode)
+  const activeTool = useFloorplanStore(s => s.activeTool)
+  const uploadedImage = useFloorplanStore(s => s.uploadedImage)
+  const isCalibrated = useFloorplanStore(s => s.isCalibrated)
+  const mobileSidebarOpen = useFloorplanStore(s => s.mobileSidebarOpen)
+  const mobileRightSidebarOpen = useFloorplanStore(s => s.mobileRightSidebarOpen)
+  const setMobileSidebarOpen = useFloorplanStore(s => s.setMobileSidebarOpen)
+  const setMobileRightSidebarOpen = useFloorplanStore(s => s.setMobileRightSidebarOpen)
   const [showPremiumModal, setShowPremiumModal] = useState(false)
   const [showUpgradeCard, setShowUpgradeCard] = useState(true)
   const [showWelcome, setShowWelcome] = useState(!isEditorFlow)
@@ -104,44 +114,118 @@ function App({ template }: AppProps) {
     }
   }, [templateQuery, resetFloorplan, setUploadedImage, setCalibrationFactor, setMode])
 
+  useEffect(() => {
+    if (!isEditorFlow) {
+      setMobileSidebarOpen(false)
+      setMobileRightSidebarOpen(false)
+    }
+  }, [isEditorFlow, setMobileRightSidebarOpen, setMobileSidebarOpen])
+
+  const editorHint = useMemo(() => {
+    if (mode === '3d') return 'Orbit, inspect, and render the scene from the framed preview stage.'
+    switch (activeTool) {
+      case 'wall':
+        return 'Draw walls directly on the plan. Hold Shift for hard orthogonal lines.'
+      case 'floor':
+        return 'Block out rooms as clean rectangles, then refine from the inspector.'
+      case 'ruler':
+        return 'Select a wall and enter its real length to lock the plan scale.'
+      case 'label':
+        return 'Click a room or item to rename it and keep the layout readable.'
+      case 'move':
+        return 'Drag walls, rooms, and furniture into place.'
+      default:
+        return uploadedImage
+          ? 'Work the 2D plan on the left and use the right inspector for context-sensitive controls.'
+          : 'Upload a floorplan to start building. The editor keeps the canvas clear while controls stay docked.'
+    }
+  }, [activeTool, mode, uploadedImage])
+
+  const editorShell = (
+    <>
+      <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
+      <GlobalToast />
+      <Topbar />
+      <div className="relative flex flex-1 overflow-hidden">
+        <button
+          type="button"
+          aria-label="Close editor panels"
+          className={cn(
+            "absolute inset-0 z-30 bg-slate-950/55 opacity-0 backdrop-blur-sm transition xl:hidden",
+            (mobileSidebarOpen || mobileRightSidebarOpen) ? "pointer-events-auto opacity-100" : "pointer-events-none"
+          )}
+          onClick={() => {
+            setMobileSidebarOpen(false)
+            setMobileRightSidebarOpen(false)
+          }}
+        />
+
+        <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
+
+        <div className="relative flex-1 min-w-0 overflow-hidden px-3 pb-3 pt-3 xl:px-4 xl:pb-4 xl:pt-4">
+          <div className="relative h-full overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.92),rgba(2,6,23,0.98)_65%),linear-gradient(180deg,rgba(15,23,42,0.18),rgba(2,6,23,0.75))] shadow-[0_35px_120px_rgba(2,6,23,0.55)]">
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-slate-950/55 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-28 bg-gradient-to-t from-slate-950/60 to-transparent" />
+
+            <div className="pointer-events-none absolute left-5 top-5 z-20 hidden max-w-[460px] rounded-2xl border border-white/10 bg-slate-950/58 px-4 py-3 text-slate-100 shadow-[0_16px_45px_rgba(2,6,23,0.4)] backdrop-blur-xl lg:block">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-cyan-400/25 bg-cyan-400/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-100">
+                  {mode === '3d' ? '3D Preview' : '2D Editor'}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
+                  {activeTool === 'none' ? 'Idle' : activeTool}
+                </span>
+                <span className={cn(
+                  "rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
+                  isCalibrated
+                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                    : "border-amber-400/20 bg-amber-400/10 text-amber-100"
+                )}>
+                  {isCalibrated ? 'Scale Synced' : 'Needs Calibration'}
+                </span>
+              </div>
+              <p className="mt-3 text-sm font-medium text-white">{uploadedImage ? 'Editor Workspace' : 'Start With A Reference'}</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-300">{editorHint}</p>
+            </div>
+
+            <div className="relative h-full overflow-hidden">
+              <RoomDesignerEmbedded />
+              <ReferenceOverlay />
+              <TutorialOverlay />
+              <FloatingToolbar />
+              <ContextToolbar />
+
+              {showUpgradeCard && (
+                <FloatingUpgradeCard
+                  className="bottom-5 left-5 right-auto"
+                  onUpgrade={() => setShowPremiumModal(true)}
+                  onClose={() => setShowUpgradeCard(false)}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <RightSidebar />
+      </div>
+      <RenderGallery />
+
+      <FurnAIProcessingModal isOpen={showProcessingModal} />
+      <FurnAIQueueModal isOpen={showQueueModal} onClose={() => setShowQueueModal(false)} />
+    </>
+  )
+
 
   if (isEditorFlow) {
     return (
-      <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
-        <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
-        <GlobalToast />
-        <Topbar />
-        <div className="flex flex-1 overflow-hidden relative w-full">
-          <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
-
-          {/* Main Editor Area */}
-          <div className="flex-1 flex flex-col overflow-hidden relative">
-            <RoomDesignerEmbedded />
-            <ReferenceOverlay />
-            <TutorialOverlay />
-            <FloatingToolbar />
-            <ContextToolbar />
-          </div>
-
-          <RightSidebar />
-
-          {showUpgradeCard && (
-            <FloatingUpgradeCard
-              onUpgrade={() => setShowPremiumModal(true)}
-              onClose={() => setShowUpgradeCard(false)}
-            />
-          )}
-        </div>
-        <RenderGallery />
-
-        <FurnAIProcessingModal isOpen={showProcessingModal} />
-        <FurnAIQueueModal isOpen={showQueueModal} onClose={() => setShowQueueModal(false)} />
+      <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.75),rgba(2,6,23,1)_58%)] text-foreground">
+        {editorShell}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground relative">
+    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.75),rgba(2,6,23,1)_58%)] text-foreground">
       {/* Welcome Screen */}
       {showWelcome && (
         <WelcomeScreen onStart={() => setShowWelcome(false)} />
@@ -150,31 +234,7 @@ function App({ template }: AppProps) {
       {/* Editor - always rendered after welcome */}
       {!showWelcome && (
         <>
-          <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
-          <GlobalToast />
-          <Topbar />
-          <div className="flex flex-1 overflow-hidden relative w-full">
-            <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
-
-            {/* Main Editor Area */}
-            <div className="flex-1 flex flex-col overflow-hidden relative">
-              <RoomDesignerEmbedded />
-              <ReferenceOverlay />
-              <TutorialOverlay />
-              <FloatingToolbar />
-              <ContextToolbar />
-            </div>
-
-            <RightSidebar />
-
-            {showUpgradeCard && (
-              <FloatingUpgradeCard
-                onUpgrade={() => setShowPremiumModal(true)}
-                onClose={() => setShowUpgradeCard(false)}
-              />
-            )}
-          </div>
-          <RenderGallery />
+          {editorShell}
 
           {/* Projects Dashboard - closable overlay */}
           {(showDashboard || projectsModalOpen) && (
@@ -186,10 +246,6 @@ function App({ template }: AppProps) {
           )}
         </>
       )}
-
-      {/* Modals */}
-      <FurnAIProcessingModal isOpen={showProcessingModal} />
-      <FurnAIQueueModal isOpen={showQueueModal} onClose={() => setShowQueueModal(false)} />
     </div>
   )
 }

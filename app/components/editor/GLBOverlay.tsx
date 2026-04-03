@@ -64,7 +64,8 @@ export function GLBOverlay() {
       >
         <ambientLight intensity={0.6} />
         <directionalLight position={[10, 10, 10]} intensity={1} />
-        <Environment preset="city" />
+        {/* Avoid external HDR load failure in constrained environments */}
+        {/* <Environment preset="city" /> */}
         <GLBModel />
         <OrbitControls />
       </Canvas>

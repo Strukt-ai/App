@@ -17,7 +17,7 @@ import { ProjectsModal } from './ProjectsModal' // Ensuring import exists
 import { TexturizeModal } from './TexturizeModal'
 import { GoogleLogin } from '@react-oauth/google'
 import { jwtDecode } from 'jwt-decode'
-import { LogOut } from 'lucide-react'
+import { LogOut, X } from 'lucide-react'
 
 export function Sidebar({ onLogout }: { onLogout?: () => void }) {
     const {
@@ -30,7 +30,9 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
         projectsModalOpen, setProjectsModalOpen, // Use global state
         runStatus,
         furniture,
-        updateFurniture
+        updateFurniture,
+        mobileSidebarOpen,
+        setMobileSidebarOpen
     } = useFloorplanStore()
 
     const selectedFurn = useMemo(() => furniture.find(f => f.id === selectedId), [furniture, selectedId])
@@ -204,18 +206,58 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
     return (
         <>
-            <div className="w-164 border-r bg-card h-[calc(100vh-3.5rem)] flex flex-col select-none overflow-y-auto custom-scrollbar">
-                <div className="p-4 border-b">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tools</h3>
+            <div className={cn(
+                "absolute inset-y-3 left-3 z-40 flex w-[min(92vw,380px)] max-w-[380px] flex-col overflow-y-auto rounded-[28px] border border-white/10 bg-[#070b12]/94 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur-2xl transition-transform duration-300 select-none custom-scrollbar xl:relative xl:inset-auto xl:z-0 xl:h-full xl:w-[360px] xl:max-w-none xl:translate-x-0 xl:rounded-none xl:border-y-0 xl:border-l-0 xl:border-r xl:border-white/10 xl:bg-slate-950/72 xl:shadow-none xl:backdrop-blur-xl",
+                mobileSidebarOpen ? "translate-x-0" : "-translate-x-[108%] xl:translate-x-0"
+            )}>
+                <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_38%),linear-gradient(180deg,rgba(15,23,42,0.78),rgba(2,6,23,0.64))] px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Builder</p>
+                            <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">Tools & Assets</h3>
+                            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                Build the plan here, keep the canvas clear in the middle, and use the inspector for selection-specific edits.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setMobileSidebarOpen(false)}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 xl:hidden"
+                            aria-label="Close tools panel"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
+                            {mode === '3d' ? 'Preview On' : 'Draft Mode'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
+                            {user ? 'Signed In' : 'Guest'}
+                        </span>
+                        <span className={cn(
+                            "rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em]",
+                            currentRunId
+                                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                : "border-white/10 bg-white/5 text-slate-400"
+                        )}>
+                            {currentRunId ? 'Run Loaded' : 'No Run Yet'}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="p-4 border-b border-white/8">
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Tools</h3>
                     <div className="flex flex-col gap-2">
                         {/* Plan Controls */}
-                        <div className="rounded-lg border border-border bg-secondary/10 p-3">
-                            <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Plan</h4>
+                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                            <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Plan</h4>
                             <div className="grid grid-cols-3 gap-2">
                                 <button
                                     id="new"
                                     type="button"
-                                    className="flex flex-col items-center justify-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-2 text-[9px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                                    className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2.5 text-[10px] text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
                                 >
                                     <Plus className="h-3 w-3" />
                                     New
@@ -223,7 +265,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                                 <button
                                     id="saveFile"
                                     type="button"
-                                    className="flex flex-col items-center justify-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-2 text-[9px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                                    className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2.5 text-[10px] text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
                                 >
                                     <Download className="h-3 w-3" />
                                     Save
@@ -231,7 +273,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                                 <button
                                     type="button"
                                     onClick={() => document.getElementById('loadFile')?.click()}
-                                    className="flex flex-col items-center justify-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-2 text-[9px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                                    className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2.5 text-[10px] text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
                                 >
                                     <FolderOpen className="h-3 w-3" />
                                     Load
