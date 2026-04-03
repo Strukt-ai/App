@@ -707,7 +707,7 @@ export function ContextToolbar() {
 
     return (
         <div className="pointer-events-none fixed inset-0 z-50">
-            {furniture.map(item => {
+            {furniture.map((item, index) => {
                 const footprint = layout.furniture[item.id]
                 if (!footprint) return null
 
@@ -717,7 +717,7 @@ export function ContextToolbar() {
 
                 return (
                     <button
-                        key={item.id}
+                        key={`${item.id}-${index}`}
                         type="button"
                         aria-label={`Select ${label}`}
                         onPointerDown={(event) => handleFurniturePointerDown(event, item.id)}

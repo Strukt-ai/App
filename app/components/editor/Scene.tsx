@@ -403,13 +403,6 @@ function SceneContent() {
     }
     const lighting = lightingConfigs[lightingPreset]
 
-    // Determine Environment Preset (drei types: apartment, city, park, lobby, etc.)
-    // We map our custom names to closest available Drei presets
-    const getEnvPreset = (name: string) => {
-        const config = lightingConfigs[name as keyof typeof lightingConfigs]
-        return config?.env || 'apartment'
-    }
-
     return (
         <>
             {/* Background: sky in 3D, dark in 2D */}
@@ -437,10 +430,8 @@ function SceneContent() {
             {/* Hemisphere Light — warm sky, neutral ground for natural fill */}
             <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
 
-            {/* HDRI Environment — apartment preset for best interior reflections */}
-            {mode === '3d' && (
-                <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.3} environmentIntensity={0.8} />
-            )}
+            {/* HDRI Environment disabled due to preset loading issues - Sky component provides adequate environment */}
+            {/* Environment presets from drei may fail to fetch, so we rely on Sky + hemisphere + directional lights */}
 
             {/* Key Light — soft directional from upper right */}
             <directionalLight

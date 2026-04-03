@@ -260,9 +260,9 @@ export function FurnitureManager() {
 
     return (
         <group>
-            {visibleFurniture.map((item) => (
+            {visibleFurniture.map((item, index) => (
                 <FurnitureItem
-                    key={item.id}
+                    key={`${item.id}-${index}`}
                     item={item}
                     isSelected={selectedId === item.id}
                     mode={mode}

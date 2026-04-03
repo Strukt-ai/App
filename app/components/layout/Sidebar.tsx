@@ -218,7 +218,7 @@ export function Sidebar({
 
     return (
         <>
-            <div className="absolute left-3 top-3 bottom-3 z-40">
+            <div className={cn("absolute left-3 top-3 bottom-3 z-40 flex flex-col overflow-hidden rounded-[28px] border border-white/10 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur-2xl transition-all duration-300", desktopExpanded ? "bg-slate-950/90 w-[332px] max-w-[332px]" : "w-16 max-w-16")} onMouseEnter={onDesktopHoverStart} onMouseLeave={onDesktopHoverEnd}>
                 {/* Dockbar content when minimized */}
                 {!desktopExpanded && (
                     <div className="flex flex-col items-center gap-4 p-3">
@@ -244,7 +244,7 @@ export function Sidebar({
 
                 {/* Full content when expanded */}
                 {desktopExpanded && (
-                <div>
+                <div className="bg-slate-950/90 rounded-lg border border-white/10 p-4 shadow-[0_24px_60px_rgba(2,6,23,0.45)] backdrop-blur-xl">
                     <div className="flex items-start justify-between gap-3">
                         <div className="flex flex-wrap gap-2">
                             <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
