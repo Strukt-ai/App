@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Grid, OrbitControls, useGLTF } from '@react-three/drei'
 import { Box3, DoubleSide, Mesh, Vector3 } from 'three'
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useFloorplanStore } from '@/store/floorplanStore'
 
 const TEST_GLB_URL = '/test/floorplan-20260331_134956_970900.glb'
@@ -26,7 +25,7 @@ function CameraFramer({
 }: {
   focusPoint: Vector3 | null
   focusSize: Vector3 | null
-  controlsRef: RefObject<OrbitControlsImpl | null>
+  controlsRef: RefObject<any>
 }) {
   const invalidate = useThree((state) => state.invalidate)
 
@@ -109,7 +108,7 @@ export function GLBOverlay() {
   const runStatus = useFloorplanStore(s => s.runStatus)
   const token = useFloorplanStore(s => s.token)
 
-  const controlsRef = useRef<OrbitControlsImpl | null>(null)
+  const controlsRef = useRef<any>(null)
   const [assetUrl, setAssetUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
