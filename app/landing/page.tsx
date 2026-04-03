@@ -14,7 +14,7 @@ export default function LandingPage() {
   return (
     <div className="w-full bg-background text-foreground">
       <Header />
-      <HeroSection />
+      <HeroSection onOpenVideo={() => {}} />
       <FeaturesGrid />
       <OnboardingSteps />
       <TargetAudience />

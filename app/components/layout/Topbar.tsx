@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Menu, SlidersHorizontal, ImagePlus } from 'lucide-react'
+import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Menu, SlidersHorizontal, ImagePlus, Camera, Save, Clock3, CheckCircle2, AlertCircle, Layers3, Plus, Trash2 } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 
@@ -38,7 +38,9 @@ const inferImageFilename = (source: string, mimeType: string) => {
 export function Topbar() {
     const {
         mode,
+        cameraMode,
         setMode,
+        setCameraMode,
         currentRunId,
         runStatus,
         setRunId,
@@ -50,6 +52,7 @@ export function Topbar() {
         syncSVGAndEnter3D,
         showBackground,
         toggleBackground,
+        setGlbPreviewSource,
         showToast,
         tutorialStep,
         setTutorialStep,
@@ -58,17 +61,102 @@ export function Topbar() {
         token,
         pendingFile,
         setPendingFile,
+        levels,
+        activeLevelId,
+        addLevel,
+        removeLevel,
+        setActiveLevel,
+        workersOnline,
+        setWorkersOnline,
+        deferredTasks,
+        flushDeferredTasks,
+        saveLocalDraft,
+        restoreLocalDraft,
+        localDraftStatus,
+        lastLocalSaveAt,
+        walls,
+        rooms,
+        furniture,
+        labels,
         mobileSidebarOpen,
         mobileRightSidebarOpen,
         setMobileSidebarOpen,
         setMobileRightSidebarOpen,
+        setActiveTool,
         setShowProcessingModal,
         setShowQueueModal,
         setProjectsModalOpen
     } = useFloorplanStore()
     const [fileToUpload, setFileToUpload] = useState<File | null>(pendingFile)
-    const [workerCount, setWorkerCount] = useState(0) // Pessimistic: assume offline until confirmed
     const [isDragging, setIsDragging] = useState(false)
+    const autosaveTimerRef = useRef<number | null>(null)
+    const flushInFlightRef = useRef(false)
+    const draftRestoredRef = useRef(false)
+
+    const requireCalibration = () => {
+        if (!isCalibrated) {
+            showToast('Calibrate first! Select the Ruler tool (C), click a wall, enter its real length.', 'error')
+            setTutorialStep('calibration')
+            setActiveTool('ruler')
+            return true
+        }
+        return false
+    }
+
+    const workerOnline = workersOnline > 0
+    const queuedTaskCount = deferredTasks.length
+    const currentLevel = levels.find((level) => level.id === activeLevelId) || levels[0] || null
+    const autosaveMeta = useMemo(() => {
+        if (localDraftStatus === 'saving') {
+            return {
+                icon: Clock3,
+                text: 'Saving locally',
+                className: 'border-cyan-400/20 bg-cyan-400/10 text-cyan-50',
+            }
+        }
+        if (localDraftStatus === 'saved') {
+            const timeLabel = lastLocalSaveAt
+                ? new Date(lastLocalSaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'just now'
+            return {
+                icon: CheckCircle2,
+                text: `Saved ${timeLabel}`,
+                className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-50',
+            }
+        }
+        if (localDraftStatus === 'restored') {
+            return {
+                icon: Save,
+                text: 'Draft restored',
+                className: 'border-sky-400/20 bg-sky-400/10 text-sky-50',
+            }
+        }
+        if (localDraftStatus === 'error') {
+            return {
+                icon: AlertCircle,
+                text: 'Local save failed',
+                className: 'border-rose-400/20 bg-rose-400/10 text-rose-50',
+            }
+        }
+        return {
+            icon: Save,
+            text: 'Auto-saves every 1 min',
+            className: 'border-white/10 bg-white/[0.04] text-slate-200',
+        }
+    }, [lastLocalSaveAt, localDraftStatus])
+
+    const requestLive3D = async (nextCameraMode: 'orbit' | 'fpv') => {
+        if (requireCalibration()) return
+        if (isGenerating3D) {
+            showToast('3D generation is already in progress...', 'info')
+            return
+        }
+
+        setGlbPreviewSource('none')
+        setCameraMode(nextCameraMode)
+        setMode('3d')
+        await syncSVGAndEnter3D()
+    }
 
     // Pick up file from dashboard if set
     useEffect(() => {
@@ -98,7 +186,7 @@ export function Topbar() {
         reader.onload = (ev) => {
             if (ev.target?.result) {
                 const url = ev.target.result as string
-                const img = new Image()
+                const img = new window.Image()
                 img.onload = () => {
                     setUploadedImage(url, img.width, img.height)
                     setMode('2d')
@@ -127,6 +215,110 @@ export function Topbar() {
         return file
     }
 
+    const downloadFile = async (path: string, filename: string) => {
+        const res = await fetch(path, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        })
+
+        if (!res.ok) {
+            throw new Error(await res.text())
+        }
+
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+    }
+
+    const waitForRunCompletion = async () => {
+        await new Promise<void>((resolve, reject) => {
+            let attempts = 0
+            const pollInterval = window.setInterval(() => {
+                attempts += 1
+                const status = useFloorplanStore.getState().runStatus
+                if (status === 'completed') {
+                    clearInterval(pollInterval)
+                    resolve()
+                } else if (status === 'failed' || attempts > 120) {
+                    clearInterval(pollInterval)
+                    reject(new Error('3D generation failed or timed out.'))
+                }
+            }, 1500)
+        })
+    }
+
+    const ensureGeneratedAsset = async (formats: string[] | undefined, message: string) => {
+        if (runStatus === 'processing') return
+
+        showToast(message, 'info')
+        await useFloorplanStore.getState().triggerBlenderGeneration(formats)
+
+        if (useFloorplanStore.getState().runStatus !== 'processing') {
+            throw new Error('3D generation did not start.')
+        }
+
+        await waitForRunCompletion()
+    }
+
+    const handleGeneratedDownload = async ({
+        path,
+        filename,
+        formats,
+        generatingMessage,
+        failureMessage,
+        analyticsAction,
+    }: {
+        path: string
+        filename: string
+        formats?: string[]
+        generatingMessage: string
+        failureMessage: string
+        analyticsAction?: string
+    }) => {
+        if (!currentRunId || !token) {
+            showToast('Please login to download', 'error')
+            return
+        }
+        if (requireCalibration()) return
+
+        if (analyticsAction) {
+            useFloorplanStore.getState().logAnalyticsEvent(analyticsAction)
+        }
+
+        try {
+            await ensureGeneratedAsset(formats, generatingMessage)
+            await downloadFile(path, filename)
+        } catch (e) {
+            console.error(e)
+            showToast(failureMessage, 'error')
+        }
+    }
+
+    const handleRawSvgDownload = async () => {
+        if (!currentRunId || !token) {
+            showToast('Please login to download', 'error')
+            return
+        }
+
+        try {
+            await downloadFile(`/api/runs/${currentRunId}/svg/raw?t=${Date.now()}`, `inference_raw_${currentRunId}.svg`)
+        } catch (e) {
+            console.error(e)
+            showToast('Failed to download SVG.', 'error')
+        }
+    }
+
+    useEffect(() => {
+        if (draftRestoredRef.current) return
+        draftRestoredRef.current = true
+        restoreLocalDraft()
+    }, [restoreLocalDraft])
+
     // Poll Worker Status
     useEffect(() => {
         const checkWorkers = async () => {
@@ -134,17 +326,76 @@ export function Topbar() {
                 const res = await fetch('/api/system/status')
                 if (res.ok) {
                     const data = await res.json()
-                    setWorkerCount(data.workers_online || 0)
+                    setWorkersOnline(data.workers_online || 0)
                 }
             } catch {
                 // Backend not running, set worker count to 0
-                setWorkerCount(0)
+                setWorkersOnline(0)
             }
         }
         checkWorkers()
         const interval = setInterval(checkWorkers, 5000)
         return () => clearInterval(interval)
-    }, [token])
+    }, [setWorkersOnline, token])
+
+    useEffect(() => {
+        if (autosaveTimerRef.current) {
+            window.clearTimeout(autosaveTimerRef.current)
+        }
+
+        autosaveTimerRef.current = window.setTimeout(() => {
+            saveLocalDraft()
+        }, 60_000)
+
+        return () => {
+            if (autosaveTimerRef.current) {
+                window.clearTimeout(autosaveTimerRef.current)
+                autosaveTimerRef.current = null
+            }
+        }
+    }, [
+        activeLevelId,
+        cameraMode,
+        currentRunId,
+        levels,
+        mode,
+        runStatus,
+        saveLocalDraft,
+        uploadedImage,
+        walls,
+        rooms,
+        furniture,
+        labels,
+    ])
+
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                saveLocalDraft()
+            }
+        }
+        const handleBeforeUnload = () => {
+            saveLocalDraft()
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            window.removeEventListener('beforeunload', handleBeforeUnload)
+        }
+    }, [saveLocalDraft])
+
+    useEffect(() => {
+        if (!workerOnline || queuedTaskCount === 0 || runStatus === 'processing' || flushInFlightRef.current) {
+            return
+        }
+
+        flushInFlightRef.current = true
+        flushDeferredTasks().finally(() => {
+            flushInFlightRef.current = false
+        })
+    }, [flushDeferredTasks, queuedTaskCount, runStatus, workerOnline])
 
     // Polling logic for Runs
     useEffect(() => {
@@ -178,6 +429,10 @@ export function Topbar() {
                                 // Detect rooms returns a new SVG with room labels/geometry.
                                 setTutorialStep('floor_review')
                                 setLastQueuedTask('none')
+                            } else if (lastQueuedTask === 'gen_3d') {
+                                setMode('3d')
+                                setGlbPreviewSource('generated')
+                                setLastQueuedTask('none')
                             } else {
                                 // Initial prediction job: if not calibrated, start tutorial.
                                 if (tutorialStep === 'none' && !useFloorplanStore.getState().isCalibrated) {
@@ -200,13 +455,13 @@ export function Topbar() {
             }, 1000)
         }
         return () => clearInterval(interval)
-    }, [currentRunId, runStatus, setRunStatus, lastQueuedTask, setLastQueuedTask, token, tutorialStep, setTutorialStep])
+    }, [currentRunId, runStatus, setGlbPreviewSource, setMode, setRunStatus, lastQueuedTask, setLastQueuedTask, token, tutorialStep, setTutorialStep])
 
     const hasUploadedImage = Boolean(uploadedImage)
-    const workerOnline = workerCount > 0
+    const AutosaveIcon = autosaveMeta.icon
 
     return (
-        <div className="border-b border-white/10 bg-slate-950/80 px-3 py-3 backdrop-blur-xl select-none supports-[backdrop-filter]:bg-slate-950/72 lg:px-5">
+        <div className="overflow-x-hidden border-b border-white/10 bg-slate-950/80 px-3 py-3 backdrop-blur-xl select-none supports-[backdrop-filter]:bg-slate-950/72 lg:px-5">
             <div className="flex flex-wrap items-center gap-3 lg:flex-nowrap lg:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                     <button
@@ -224,25 +479,74 @@ export function Topbar() {
 
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-semibold tracking-tight text-white">Strukt AI Workspace</span>
+                            <span className="truncate text-sm font-semibold tracking-tight text-white">Strukt AI</span>
                             <span className={cn(
-                                "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em]",
-                                workerOnline
-                                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
-                                    : "border-rose-400/20 bg-rose-400/10 text-rose-100"
+                                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium",
+                                autosaveMeta.className
                             )}>
-                                <span className={cn("h-2 w-2 rounded-full", workerOnline ? "bg-emerald-400 animate-pulse" : "bg-rose-400")} />
-                                {workerOnline ? `${workerCount} Worker Online` : 'No Worker'}
+                                <AutosaveIcon className="h-3.5 w-3.5" />
+                                {autosaveMeta.text}
                             </span>
+                            {queuedTaskCount > 0 && (
+                                <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[11px] font-medium text-amber-50">
+                                    <Clock3 className="h-3.5 w-3.5" />
+                                    {queuedTaskCount} queued until workers are back
+                                </span>
+                            )}
+                            {!workerOnline && (
+                                <span className="inline-flex items-center gap-2 rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1.5 text-[11px] font-medium text-rose-50">
+                                    <AlertCircle className="h-3.5 w-3.5" />
+                                    Workers offline
+                                </span>
+                            )}
                         </div>
-                        <p className="mt-1 hidden text-xs text-slate-400 md:block">
-                            Keep the canvas centered. Tools stay on the rails, and the mode switch stays in focus.
-                        </p>
                     </div>
                 </div>
 
                 <div className="order-3 flex w-full justify-center lg:order-2 lg:w-auto">
                     <div className="inline-flex flex-wrap items-center gap-1 rounded-[20px] border border-white/10 bg-white/[0.04] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                        <div className="mr-1 inline-flex items-center gap-1 rounded-2xl border border-white/10 bg-slate-950/65 px-2 py-1">
+                            <Layers3 className="h-4 w-4 text-slate-300" />
+                            <select
+                                value={activeLevelId}
+                                onChange={(event) => setActiveLevel(event.target.value)}
+                                className="min-w-[120px] bg-transparent text-xs font-medium text-slate-100 outline-none"
+                                aria-label="Active floor"
+                            >
+                                {levels.map((level) => (
+                                    <option key={level.id} value={level.id} className="bg-slate-950 text-slate-100">
+                                        {level.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                onClick={() => addLevel()}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
+                                title="Add floor"
+                            >
+                                <Plus className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                disabled={levels.length <= 1}
+                                onClick={() => {
+                                    if (!currentLevel || levels.length <= 1) return
+                                    const confirmed = window.confirm(`Remove ${currentLevel.name}? This deletes only that floor from the editor.`)
+                                    if (!confirmed) return
+                                    removeLevel(currentLevel.id)
+                                }}
+                                className={cn(
+                                    "inline-flex h-7 w-7 items-center justify-center rounded-xl transition",
+                                    levels.length <= 1
+                                        ? "cursor-not-allowed text-slate-600"
+                                        : "text-slate-300 hover:bg-white/10 hover:text-white"
+                                )}
+                                title="Remove floor"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </div>
                         <button
                             onClick={toggleBackground}
                             className={cn(
@@ -258,7 +562,10 @@ export function Topbar() {
                         </button>
 
                         <button
-                            onClick={() => setMode('2d')}
+                            onClick={() => {
+                                setCameraMode('orbit')
+                                setMode('2d')
+                            }}
                             className={cn(
                                 "flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition",
                                 mode === '2d'
@@ -271,21 +578,10 @@ export function Topbar() {
                         </button>
 
                         <button
-                            onClick={() => {
-                                if (!isCalibrated) {
-                                    showToast("Calibration Required! Please select the Ruler Tool to calibrate.", 'error')
-                                    return
-                                }
-                                if (isGenerating3D) {
-                                    showToast("3D Generation is already in progress...", 'info')
-                                    return
-                                }
-                                setMode('3d')
-                                syncSVGAndEnter3D()
-                            }}
+                            onClick={() => { void requestLive3D('orbit') }}
                             className={cn(
                                 "flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition",
-                                mode === '3d'
+                                mode === '3d' && cameraMode === 'orbit'
                                     ? "bg-emerald-500/14 text-emerald-50 ring-1 ring-emerald-400/20"
                                     : "text-slate-400 hover:bg-white/7 hover:text-white",
                                 isGenerating3D && "animate-pulse"
@@ -295,10 +591,113 @@ export function Topbar() {
                             <Box className="h-4 w-4" />
                             <span>3D View</span>
                         </button>
+
+                        <button
+                            onClick={() => { void requestLive3D('fpv') }}
+                            className={cn(
+                                "flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition",
+                                mode === '3d' && cameraMode === 'fpv'
+                                    ? "bg-amber-500/14 text-amber-50 ring-1 ring-amber-400/20"
+                                    : "text-slate-400 hover:bg-white/7 hover:text-white"
+                            )}
+                            title="First person view"
+                        >
+                            <Camera className="h-4 w-4" />
+                            <span>FPV</span>
+                        </button>
                     </div>
                 </div>
 
                 <div className="order-2 flex w-full flex-wrap items-center justify-end gap-2 lg:order-3 lg:w-auto">
+                    {currentRunId && (
+                        <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                            <button
+                                type="button"
+                                disabled={isGenerating3D}
+                                onClick={() => handleGeneratedDownload({
+                                    path: `/api/runs/${currentRunId}/download/glb`,
+                                    filename: `floorplan-${currentRunId}.glb`,
+                                    generatingMessage: 'Generating high quality 3D model...',
+                                    failureMessage: 'Failed to download GLB. Wait a moment and try again.',
+                                    analyticsAction: 'download_3d',
+                                })}
+                                className={cn(
+                                    "rounded-xl px-3 py-2 text-xs font-semibold transition",
+                                    "bg-white/[0.05] text-white hover:bg-white/[0.1]",
+                                    isGenerating3D && "cursor-not-allowed opacity-60"
+                                )}
+                                title="Generate and download GLB"
+                            >
+                                GLB
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isGenerating3D}
+                                onClick={() => handleGeneratedDownload({
+                                    path: `/api/runs/${currentRunId}/download/blend`,
+                                    filename: `floorplan-${currentRunId}.blend`,
+                                    formats: ['blend'],
+                                    generatingMessage: 'Generating Blender file...',
+                                    failureMessage: 'Failed to download Blend. Wait a moment and try again.',
+                                })}
+                                className={cn(
+                                    "rounded-xl px-3 py-2 text-xs font-semibold transition",
+                                    "bg-white/[0.05] text-white hover:bg-white/[0.1]",
+                                    isGenerating3D && "cursor-not-allowed opacity-60"
+                                )}
+                                title="Generate and download Blend"
+                            >
+                                BLEND
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isGenerating3D}
+                                onClick={() => handleGeneratedDownload({
+                                    path: `/api/runs/${currentRunId}/download/dae`,
+                                    filename: `floorplan-${currentRunId}.dae`,
+                                    formats: ['dae'],
+                                    generatingMessage: 'Generating DAE for SketchUp...',
+                                    failureMessage: 'Failed to download SketchUp file. Wait a moment and try again.',
+                                })}
+                                className={cn(
+                                    "rounded-xl px-3 py-2 text-xs font-semibold transition",
+                                    "bg-sky-500/15 text-sky-50 hover:bg-sky-500/24",
+                                    isGenerating3D && "cursor-not-allowed opacity-60"
+                                )}
+                                title="Generate and download DAE"
+                            >
+                                SKP
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isGenerating3D}
+                                onClick={() => handleGeneratedDownload({
+                                    path: `/api/runs/${currentRunId}/download/ifc`,
+                                    filename: `floorplan-${currentRunId}.ifc`,
+                                    formats: ['ifc'],
+                                    generatingMessage: 'Generating IFC for Revit...',
+                                    failureMessage: 'Failed to download IFC. Wait a moment and try again.',
+                                })}
+                                className={cn(
+                                    "rounded-xl px-3 py-2 text-xs font-semibold transition",
+                                    "bg-amber-500/15 text-amber-50 hover:bg-amber-500/24",
+                                    isGenerating3D && "cursor-not-allowed opacity-60"
+                                )}
+                                title="Generate and download IFC"
+                            >
+                                IFC
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleRawSvgDownload}
+                                className="rounded-xl bg-white/[0.05] px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/[0.1]"
+                                title="Download raw SVG"
+                            >
+                                SVG
+                            </button>
+                        </div>
+                    )}
+
                     {hasUploadedImage && (
                         <button
                             disabled={runStatus === 'processing'}
@@ -308,6 +707,7 @@ export function Topbar() {
                                     return
                                 }
 
+                                setProjectsModalOpen(false)
                                 setRunStatus('processing')
                                 let imageFile: File | null = null
 
@@ -366,7 +766,13 @@ export function Topbar() {
                                     }
 
                                     const text = await res.text()
-                                    if (!res.ok) throw new Error(text)
+                                    if (!res.ok) {
+                                        console.error('API Error:', res.status, text)
+                                        showToast(`Server error (${res.status}): ${text || 'Unknown error'}`, 'error')
+                                        setRunStatus('idle')
+                                        setShowProcessingModal(false)
+                                        return
+                                    }
 
                                     const data = JSON.parse(text)
                                     if (data.ok) {
@@ -398,11 +804,13 @@ export function Topbar() {
                                 "inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition",
                                 runStatus === 'processing'
                                     ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
-                                    : "border-emerald-400/25 bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-[0_16px_35px_rgba(22,163,74,0.28)] hover:brightness-110"
+                                    : workerOnline
+                                        ? "border-emerald-400/25 bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-[0_16px_35px_rgba(22,163,74,0.28)] hover:brightness-110"
+                                        : "border-amber-400/30 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_16px_35px_rgba(245,158,11,0.28)] hover:brightness-110"
                             )}
                         >
                             <Play className="h-4 w-4" />
-                            {runStatus === 'processing' ? 'Processing...' : 'Process Floorplan'}
+                            {runStatus === 'processing' ? 'Processing...' : workerOnline ? 'Process Floorplan' : 'Save & Queue Floorplan'}
                         </button>
                     )}
 

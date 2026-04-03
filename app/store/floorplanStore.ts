@@ -11,12 +11,38 @@ export interface Vector2 {
     y: number
 }
 
+export const DEFAULT_LEVEL_ID = 'level-ground'
+export const DEFAULT_LEVEL_ELEVATION_STEP = 3.2
+
+export type CameraMode = 'orbit' | 'fpv'
+export type DeferredTaskType = 'detect_rooms' | 'detect_walls' | 'detect_doors' | 'detect_windows' | 'detect_furniture' | 'gen_3d'
+export type LocalDraftStatus = 'idle' | 'saving' | 'saved' | 'restored' | 'error'
+
+export interface FloorLevel {
+    id: string
+    name: string
+    elevation: number
+    referenceImage: string | null
+    referenceImageDimensions: { width: number; height: number } | null
+}
+
+export interface DeferredTask {
+    id: string
+    runId: string
+    type: DeferredTaskType
+    createdAt: string
+    payload?: {
+        formats?: string[]
+    }
+}
+
 export type Wall = {
     id: string
     start: Vector2
     end: Vector2
     thickness: number
     height: number
+    levelId?: string
     label?: string
     color?: string // Added
     textureDataUrl?: string
@@ -32,6 +58,7 @@ export type Wall = {
 export type FurnItem = {
     id: string
     type: string
+    levelId?: string
     position: { x: number; y: number; z: number }
     rotation: { x: number; y: number; z: number }
     dimensions: { width: number; height: number; depth: number }
@@ -45,6 +72,7 @@ export type FurnItem = {
 export type Room = {
     id: string
     name: string
+    levelId?: string
     points: Vector2[] // Polygon vertices
     color: string
     center: Vector2 // For label positioning
@@ -61,15 +89,182 @@ export type Room = {
 export type TextLabel = {
     id: string
     text: string
+    levelId?: string
     position: Vector2
 }
 
+type HistorySnapshot = {
+    walls: Wall[]
+    furniture: FurnItem[]
+    rooms: Room[]
+    labels: TextLabel[]
+}
+
+type ClipboardPayload =
+    | { type: 'wall'; data: Wall }
+    | { type: 'furniture'; data: FurnItem }
+    | { type: 'room'; data: Room }
+    | { type: 'label'; data: TextLabel }
+
+type MutableHistoryState = FloorplanState & {
+    history?: HistorySnapshot[]
+    historyIndex?: number
+    clipboard?: ClipboardPayload
+}
+
+const createHistorySnapshot = (state: Pick<FloorplanState, 'walls' | 'furniture' | 'rooms' | 'labels'>): HistorySnapshot => ({
+    walls: JSON.parse(JSON.stringify(state.walls)),
+    furniture: JSON.parse(JSON.stringify(state.furniture)),
+    rooms: JSON.parse(JSON.stringify(state.rooms)),
+    labels: JSON.parse(JSON.stringify(state.labels)),
+})
+
+const pushHistorySnapshot = (state: MutableHistoryState) => {
+    const snapshot = createHistorySnapshot(state)
+    const history = state.history || []
+    const historyIndex = state.historyIndex ?? history.length - 1
+    const nextHistory = [...history.slice(0, historyIndex + 1), snapshot].slice(-20)
+    state.history = nextHistory
+    state.historyIndex = nextHistory.length - 1
+}
+
+const LOCAL_DRAFT_STORAGE_KEY = 'strukt:editor-draft:v1'
+const DEFERRED_TASK_STORAGE_KEY = 'strukt:editor-deferred:v1'
+
+const createDefaultLevel = (index = 0): FloorLevel => ({
+    id: index === 0 ? DEFAULT_LEVEL_ID : `level-${index + 1}`,
+    name: index === 0 ? 'Ground Floor' : `Floor ${index + 1}`,
+    elevation: index * DEFAULT_LEVEL_ELEVATION_STEP,
+    referenceImage: null,
+    referenceImageDimensions: null,
+})
+
+const normalizeLevelId = (levelId?: string | null) => levelId || DEFAULT_LEVEL_ID
+
+const getLevelById = (levels: FloorLevel[], levelId?: string | null) => {
+    const normalizedId = normalizeLevelId(levelId)
+    return levels.find((level) => level.id === normalizedId) || levels[0] || createDefaultLevel()
+}
+
+const canPersistUploadedImage = (source: string | null) => {
+    if (!source) return true
+    if (source.startsWith('blob:')) return false
+    return source.length <= 2_000_000
+}
+
+type LocalDraftPayload = {
+    version: 1
+    savedAt: number
+    mode: '2d' | '3d'
+    cameraMode: CameraMode
+    activeTool: FloorplanState['activeTool']
+    walls: Wall[]
+    furniture: FurnItem[]
+    rooms: Room[]
+    labels: TextLabel[]
+    levels: FloorLevel[]
+    activeLevelId: string
+    currentRunId: string | null
+    runStatus: FloorplanState['runStatus']
+    uploadedImage: string | null
+    imageDimensions: { width: number; height: number } | null
+    calibrationFactor: number
+    isCalibrated: boolean
+    showBackground: boolean
+    glbPreviewSource: FloorplanState['glbPreviewSource']
+    exportScale: number
+}
+
+const readDeferredTasks = (): DeferredTask[] => {
+    if (typeof window === 'undefined') return []
+    try {
+        const raw = window.localStorage.getItem(DEFERRED_TASK_STORAGE_KEY)
+        if (!raw) return []
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed : []
+    } catch {
+        return []
+    }
+}
+
+const persistDeferredTasks = (tasks: DeferredTask[]) => {
+    if (typeof window === 'undefined') return
+    try {
+        if (tasks.length === 0) {
+            window.localStorage.removeItem(DEFERRED_TASK_STORAGE_KEY)
+            return
+        }
+        window.localStorage.setItem(DEFERRED_TASK_STORAGE_KEY, JSON.stringify(tasks))
+    } catch (error) {
+        console.error('Failed to persist deferred tasks', error)
+    }
+}
+
+const buildLocalDraft = (state: FloorplanState): LocalDraftPayload => ({
+    version: 1,
+    savedAt: Date.now(),
+    mode: state.mode,
+    cameraMode: state.cameraMode,
+    activeTool: state.activeTool,
+    walls: JSON.parse(JSON.stringify(state.walls)),
+    furniture: JSON.parse(JSON.stringify(state.furniture)),
+    rooms: JSON.parse(JSON.stringify(state.rooms)),
+    labels: JSON.parse(JSON.stringify(state.labels)),
+    levels: state.levels.map((level) => ({
+        ...JSON.parse(JSON.stringify(level)),
+        referenceImage: canPersistUploadedImage(level.referenceImage) ? level.referenceImage : null,
+    })),
+    activeLevelId: state.activeLevelId,
+    currentRunId: state.currentRunId,
+    runStatus: state.runStatus,
+    uploadedImage: canPersistUploadedImage(state.uploadedImage) ? state.uploadedImage : null,
+    imageDimensions: state.imageDimensions ? { ...state.imageDimensions } : null,
+    calibrationFactor: state.calibrationFactor,
+    isCalibrated: state.isCalibrated,
+    showBackground: state.showBackground,
+    glbPreviewSource: state.glbPreviewSource,
+    exportScale: state.exportScale,
+})
+
+const readLocalDraft = (): LocalDraftPayload | null => {
+    if (typeof window === 'undefined') return null
+    try {
+        const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY)
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        if (!parsed || parsed.version !== 1) return null
+        return parsed
+    } catch {
+        return null
+    }
+}
+
+const clearLocalDraftStorage = () => {
+    if (typeof window === 'undefined') return
+    try {
+        window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
+    } catch {
+        // ignore
+    }
+}
+
+const filterEntitiesForLevel = <T extends { levelId?: string }>(entities: T[], levelId: string) => (
+    entities.filter((entity) => normalizeLevelId(entity.levelId) === normalizeLevelId(levelId))
+)
+
+const filterEntitiesOutsideLevel = <T extends { levelId?: string }>(entities: T[], levelId: string) => (
+    entities.filter((entity) => normalizeLevelId(entity.levelId) !== normalizeLevelId(levelId))
+)
+
 export interface FloorplanState {
     mode: '2d' | '3d'
+    cameraMode: CameraMode
     activeTool: 'select' | 'move' | 'resize' | 'rotate' | 'delete' | 'label' | 'wall' | 'ruler' | 'furniture' | 'floor' | 'none'
     lightingPreset: 'day' | 'night' | 'studio' | 'sunset'
     drawing: boolean
     activeWallId: string | null
+    levels: FloorLevel[]
+    activeLevelId: string
     walls: Wall[]
     furniture: FurnItem[]
     rooms: Room[]
@@ -90,7 +285,7 @@ export interface FloorplanState {
     isGenerating3D: boolean
     isRendering: boolean
     showBackground: boolean // New state for background visibility
-    testGLB: boolean // New state for test GLB loading
+    glbPreviewSource: 'none' | 'test' | 'generated'
     showProcessingModal: boolean // New state for popup
     showQueueModal: boolean
     projectsModalOpen: boolean // Global state for Projects Modal
@@ -99,7 +294,7 @@ export interface FloorplanState {
     tutorialStep: 'none' | 'upload' | 'process' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
     tutorialMinimized: boolean
     referenceMinimized: boolean
-    lastQueuedTask: 'none' | 'detect_rooms' | 'gen_3d'
+    lastQueuedTask: 'none' | 'detect_rooms' | 'detect_walls' | 'detect_doors' | 'detect_windows' | 'detect_furniture' | 'gen_3d'
     renders: string[]
     fitViewTrigger: number
     exportScale: number // Ratio to send to backend for 3D generation
@@ -122,15 +317,24 @@ export interface FloorplanState {
     setToken: (token: string | null) => void
     setUser: (user: any) => void
     setRememberMe: (remember: boolean) => void
+    workersOnline: number
+    deferredTasks: DeferredTask[]
+    localDraftStatus: LocalDraftStatus
+    lastLocalSaveAt: number | null
 
     // Actions
     setMode: (mode: '2d' | '3d') => void
+    setCameraMode: (mode: CameraMode) => void
     setActiveTool: (tool: FloorplanState['activeTool']) => void
     setLightingPreset: (preset: FloorplanState['lightingPreset']) => void
     setUploadedImage: (url: string | null, width?: number, height?: number) => void
+    addLevel: () => void
+    removeLevel: (levelId: string) => void
+    setActiveLevel: (levelId: string) => void
     setCalibrationFactor: (factor: number) => void
     setRunId: (runId: string | null) => void
     setRunStatus: (status: 'idle' | 'processing' | 'completed' | 'failed') => void
+    setWorkersOnline: (count: number) => void
     setShowProcessingModal: (show: boolean) => void
     setShowQueueModal: (show: boolean) => void
     setProjectsModalOpen: (show: boolean) => void
@@ -160,10 +364,11 @@ export interface FloorplanState {
     triggerBlenderGeneration: (formats?: string[]) => Promise<void>
     triggerRender: () => Promise<void>
     toggleBackground: () => void
-    toggleTestGLB: () => void
+    setGlbPreviewSource: (source: FloorplanState['glbPreviewSource']) => void
 
     updateFurniture: (id: string, updates: Partial<FurnItem>) => void
     updateLabel: (id: string, label: string) => void
+    updateTextLabel: (id: string, updates: Partial<TextLabel>) => void
     updateWall: (id: string, updates: Partial<Wall>) => void
     updateRoom: (id: string, updates: Partial<Room>) => void
 
@@ -185,11 +390,16 @@ export interface FloorplanState {
     saveHistory: () => void
     consumeDrop: () => void
     addRender: (url: string) => void
+    logAnalyticsEvent: (action: string) => void
     showToast: (message: string, type?: 'error' | 'info' | 'success') => void
     cornerSnapMode: boolean
     setCornerSnapMode: (active: boolean) => void
     snapCorners: { wallId: string; type: 'start' | 'end' }[]
     addSnapCorner: (corner: { wallId: string; type: 'start' | 'end' }) => void
+    enqueueDeferredTask: (task: Omit<DeferredTask, 'id' | 'createdAt'>) => void
+    flushDeferredTasks: () => Promise<void>
+    saveLocalDraft: () => void
+    restoreLocalDraft: () => boolean
 
     // Join Mode Interactions
     joinMode: boolean
@@ -207,12 +417,15 @@ export interface FloorplanState {
 // --- Store ---
 
 export const useFloorplanStore = create<FloorplanState>()(
-    immer((set): FloorplanState => ({
+    immer((set, get): FloorplanState => ({
         mode: '2d', // Start in 2D to allow immediate editing
+        cameraMode: 'orbit',
         activeTool: 'wall', // Default to drawing walls
         lightingPreset: 'day', // Default lighting
         drawing: false,
         activeWallId: null as string | null,
+        levels: [createDefaultLevel()],
+        activeLevelId: DEFAULT_LEVEL_ID,
         walls: [] as Wall[],
         furniture: [] as FurnItem[],
         rooms: [] as Room[],
@@ -224,11 +437,11 @@ export const useFloorplanStore = create<FloorplanState>()(
         uploadedImage: null,
         imageDimensions: null,
         calibrationFactor: 0.01, // Default 1px = 1cm
-        isCalibrated: true, // Temporarily set to true for testing
+        isCalibrated: false,
         isGenerating3D: false,
         isRendering: false,
         showBackground: true, // Default visible
-        testGLB: false, // Default off
+        glbPreviewSource: 'none',
         showProcessingModal: false, // Default
         showQueueModal: false, // Default
         projectsModalOpen: false, // Global state for Projects Modal
@@ -245,6 +458,19 @@ export const useFloorplanStore = create<FloorplanState>()(
         },
         fitViewTrigger: 0,
         exportScale: 1,
+        pendingFile: null,
+        logAnalyticsEvent: (action: string) => {
+            const state = useFloorplanStore.getState()
+            if (!state.token && !state.user) return
+            fetch('/api/admin/log-event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(state.token ? { 'Authorization': `Bearer ${state.token}` } : {}),
+                },
+                body: JSON.stringify({ action, job_id: state.currentRunId })
+            }).catch((e) => console.error('Analytics error:', e))
+        },
         toast: null,
         cornerSnapMode: false,
         snapCorners: [],
@@ -257,6 +483,10 @@ export const useFloorplanStore = create<FloorplanState>()(
         token: typeof window !== 'undefined' ? localStorage.getItem('google_token') || null : null,
         user: null,
         rememberMe: true,
+        workersOnline: 0,
+        deferredTasks: readDeferredTasks(),
+        localDraftStatus: 'idle',
+        lastLocalSaveAt: null,
 
         setToken: (token) => set((state) => {
             state.token = token
@@ -268,19 +498,86 @@ export const useFloorplanStore = create<FloorplanState>()(
         setUser: (user) => set((state) => { state.user = user }),
         setRememberMe: (remember) => set((state) => { state.rememberMe = remember }),
 
-        setMode: (mode) => set((state) => { state.mode = mode }),
+        setMode: (mode) => set((state) => {
+            state.mode = mode
+            if (mode === '2d') {
+                state.glbPreviewSource = 'none'
+                state.cameraMode = 'orbit'
+            }
+        }),
+        setCameraMode: (cameraMode) => set((state) => { state.cameraMode = cameraMode }),
         setActiveTool: (tool) => set((state) => { state.activeTool = tool }),
         setLightingPreset: (preset) => set((state) => { state.lightingPreset = preset }),
         setUploadedImage: (url, width, height) => set((state) => {
             state.uploadedImage = url
-            if (width && height) state.imageDimensions = { width, height }
+            if (width && height) {
+                state.imageDimensions = { width, height }
+            } else if (url === null) {
+                state.imageDimensions = null
+            }
+
+            const activeLevel = getLevelById(state.levels, state.activeLevelId)
+            if (activeLevel) {
+                activeLevel.referenceImage = url
+                activeLevel.referenceImageDimensions = width && height
+                    ? { width, height }
+                    : (url === null ? null : activeLevel.referenceImageDimensions)
+            }
+
+            if (url && state.tutorialStep === 'upload') {
+                state.tutorialStep = 'process'
+                state.tutorialMinimized = false
+            }
+        }),
+        addLevel: () => set((state) => {
+            const nextIndex = state.levels.length
+            const lastElevation = state.levels[state.levels.length - 1]?.elevation ?? 0
+            const level = createDefaultLevel(nextIndex)
+            level.id = `level-${Date.now()}-${nextIndex + 1}`
+            level.name = `Floor ${nextIndex + 1}`
+            level.elevation = lastElevation + DEFAULT_LEVEL_ELEVATION_STEP
+            state.levels.push(level)
+            state.activeLevelId = level.id
+            state.uploadedImage = level.referenceImage
+            state.imageDimensions = level.referenceImageDimensions
+            state.selectedId = null
+        }),
+        removeLevel: (levelId) => set((state) => {
+            if (state.levels.length <= 1) return
+            const normalizedLevelId = normalizeLevelId(levelId)
+            state.levels = state.levels.filter((level) => level.id !== normalizedLevelId)
+            state.walls = filterEntitiesOutsideLevel(state.walls, normalizedLevelId)
+            state.furniture = filterEntitiesOutsideLevel(state.furniture, normalizedLevelId)
+            state.rooms = filterEntitiesOutsideLevel(state.rooms, normalizedLevelId)
+            state.labels = filterEntitiesOutsideLevel(state.labels, normalizedLevelId)
+            const fallbackLevel = state.levels[0] || createDefaultLevel()
+            if (state.activeLevelId === normalizedLevelId) {
+                state.activeLevelId = fallbackLevel.id
+                state.uploadedImage = fallbackLevel.referenceImage
+                state.imageDimensions = fallbackLevel.referenceImageDimensions
+                state.selectedId = null
+            }
+        }),
+        setActiveLevel: (levelId) => set((state) => {
+            const level = getLevelById(state.levels, levelId)
+            state.activeLevelId = level.id
+            state.uploadedImage = level.referenceImage
+            state.imageDimensions = level.referenceImageDimensions
+            state.selectedId = null
         }),
         setCalibrationFactor: (factor) => set((state) => {
             state.calibrationFactor = factor
             state.isCalibrated = true
+            if (state.tutorialStep === 'calibration') {
+                state.tutorialStep = 'correction'
+                state.tutorialMinimized = false
+                state.activeTool = 'select'
+            }
+            get().logAnalyticsEvent('ruler_calibrate')
         }),
         setRunId: (runId) => set((state) => { state.currentRunId = runId }),
         setRunStatus: (status) => set((state) => { state.runStatus = status }),
+        setWorkersOnline: (workersOnline) => set((state) => { state.workersOnline = workersOnline }),
         setShowProcessingModal: (show) => set((state) => { state.showProcessingModal = show }),
         setShowQueueModal: (show) => set((state) => { state.showQueueModal = show }),
         setProjectsModalOpen: (show) => set((state) => { state.projectsModalOpen = show }),
@@ -289,7 +586,10 @@ export const useFloorplanStore = create<FloorplanState>()(
 
         // Tutorial State
         lastQueuedTask: 'none',
-        setTutorialStep: (step) => set((state) => { state.tutorialStep = step }),
+        setTutorialStep: (step) => set((state) => {
+            state.tutorialStep = step
+            state.tutorialMinimized = false
+        }),
         setTutorialMinimized: (minimized) => set((state) => { state.tutorialMinimized = minimized }),
         setReferenceMinimized: (minimized) => set((state) => { state.referenceMinimized = minimized }),
         completeTutorial: () => set((state) => { state.tutorialStep = 'none' }),
@@ -299,6 +599,11 @@ export const useFloorplanStore = create<FloorplanState>()(
             const state = useFloorplanStore.getState()
             if (!state.currentRunId) return
             if (!state.isCalibrated) return
+            if (state.workersOnline < 1) {
+                state.enqueueDeferredTask({ runId: state.currentRunId, type: 'detect_rooms' })
+                state.showToast('Workers are offline. Room detection is saved locally and will queue automatically.', 'info')
+                return
+            }
 
             set((s) => {
                 s.lastQueuedTask = 'detect_rooms'
@@ -339,13 +644,24 @@ export const useFloorplanStore = create<FloorplanState>()(
                 headers
             })
             if (!res.ok) {
+                const errText = await res.text()
                 set((s) => {
                     s.runStatus = 'failed'
                     s.lastQueuedTask = 'none'
                 })
                 state.setShowProcessingModal(false)
-                throw new Error(await res.text())
+                if (res.status === 429) {
+                    try {
+                        const errData = JSON.parse(errText)
+                        state.showToast(errData.detail || 'Token limit reached. Upgrade to Pro.', 'error')
+                    } catch {
+                        state.showToast('Token limit reached. Upgrade to Pro for more.', 'error')
+                    }
+                    return
+                }
+                throw new Error(errText)
             }
+            get().logAnalyticsEvent('detect_rooms')
         },
 
 
@@ -353,6 +669,11 @@ export const useFloorplanStore = create<FloorplanState>()(
             const state = useFloorplanStore.getState()
             if (!state.currentRunId) return
             if (!state.isCalibrated) return
+            if (state.workersOnline < 1) {
+                state.enqueueDeferredTask({ runId: state.currentRunId, type: 'detect_walls' })
+                state.showToast('Workers are offline. Wall detection is saved locally and will queue automatically.', 'info')
+                return
+            }
 
             set((s) => {
                 s.lastQueuedTask = 'detect_walls'
@@ -406,6 +727,11 @@ export const useFloorplanStore = create<FloorplanState>()(
             const state = useFloorplanStore.getState()
             if (!state.currentRunId) return
             if (!state.isCalibrated) return
+            if (state.workersOnline < 1) {
+                state.enqueueDeferredTask({ runId: state.currentRunId, type: 'detect_doors' })
+                state.showToast('Workers are offline. Door detection is saved locally and will queue automatically.', 'info')
+                return
+            }
 
             set((s) => {
                 s.lastQueuedTask = 'detect_doors'
@@ -459,6 +785,11 @@ export const useFloorplanStore = create<FloorplanState>()(
             const state = useFloorplanStore.getState()
             if (!state.currentRunId) return
             if (!state.isCalibrated) return
+            if (state.workersOnline < 1) {
+                state.enqueueDeferredTask({ runId: state.currentRunId, type: 'detect_windows' })
+                state.showToast('Workers are offline. Window detection is saved locally and will queue automatically.', 'info')
+                return
+            }
 
             set((s) => {
                 s.lastQueuedTask = 'detect_windows'
@@ -512,6 +843,11 @@ export const useFloorplanStore = create<FloorplanState>()(
             const state = useFloorplanStore.getState()
             if (!state.currentRunId) return
             if (!state.isCalibrated) return
+            if (state.workersOnline < 1) {
+                state.enqueueDeferredTask({ runId: state.currentRunId, type: 'detect_furniture' })
+                state.showToast('Workers are offline. Furniture detection is saved locally and will queue automatically.', 'info')
+                return
+            }
 
             set((s) => {
                 s.lastQueuedTask = 'detect_furniture'
@@ -561,15 +897,15 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
         },
 
-        selectObject: (id) => {
-            console.log('selectObject called with id:', id)
-            set((state) => { state.selectedId = id })
-        },
+        selectObject: (id) => set((state) => { state.selectedId = id }),
 
         deleteObject: (id) => set((state) => {
             state.walls = state.walls.filter((w: Wall) => w.id !== id)
             state.furniture = state.furniture.filter((f: FurnItem) => f.id !== id)
+            state.rooms = state.rooms.filter((r: Room) => r.id !== id)
+            state.labels = state.labels.filter((l: TextLabel) => l.id !== id)
             if (state.selectedId === id) state.selectedId = null
+            pushHistorySnapshot(state as MutableHistoryState)
         }),
 
         startInteraction: (type, targetId, point, subType) => set((state) => {
@@ -580,11 +916,23 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const snap = 0.1
                 const safeX = isNaN(point.x) ? 0 : Math.min(Math.max(point.x, -50), 50)
                 const safeY = isNaN(point.y) ? 0 : Math.min(Math.max(point.y, -50), 50)
-                const sp = { x: Math.round(safeX / snap) * snap, y: Math.round(safeY / snap) * snap }
+                let sp = { x: Math.round(safeX / snap) * snap, y: Math.round(safeY / snap) * snap }
+
+                const ENDPOINT_SNAP = 0.25
+                for (const other of state.walls) {
+                    for (const ep of [other.start, other.end]) {
+                        if (Math.abs(sp.x - ep.x) < ENDPOINT_SNAP && Math.abs(sp.y - ep.y) < ENDPOINT_SNAP) {
+                            sp = { x: ep.x, y: ep.y }
+                            break
+                        }
+                    }
+                }
+
                 state.walls.push({
                     id,
                     start: sp,
                     end: sp,
+                    levelId: state.activeLevelId,
                     thickness: 0.15,
                     height: 2.5
                 })
@@ -600,6 +948,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 state.rooms.push({
                     id,
                     name: 'New Room',
+                    levelId: state.activeLevelId,
                     color: '#fbbf24', // Default amber
                     points: [
                         { ...sp }, { ...sp }, { ...sp }, { ...sp }
@@ -626,22 +975,37 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const wall = state.walls.find(w => w.id === targetId)
                 if (wall) {
                     wall.end = sp
-                    // Auto-straighten to 90 degrees (orthogonal snapping) by default.
-                    // If Shift is held, force absolute exact ortho.
-                    // Otherwise, soft snap if within a tolerance (e.g., 0.5m deviation).
-                    const dx = Math.abs(wall.end.x - wall.start.x)
-                    const dy = Math.abs(wall.end.y - wall.start.y)
-                    const SNAP_TOLERANCE = 0.5 // meters
+                    const ENDPOINT_SNAP = 0.25
+                    let snappedToEndpoint = false
 
-                    if (options?.shiftKey) {
-                        if (dx > dy) wall.end.y = wall.start.y
-                        else wall.end.x = wall.start.x
-                    } else {
-                        // Soft snap
-                        if (dy < SNAP_TOLERANCE && dx > dy) {
-                            wall.end.y = wall.start.y // Snap horizontal
-                        } else if (dx < SNAP_TOLERANCE && dy > dx) {
-                            wall.end.x = wall.start.x // Snap vertical
+                    for (const other of state.walls) {
+                        if (other.id === wall.id) continue
+                        for (const ep of [other.start, other.end]) {
+                            const edx = Math.abs(wall.end.x - ep.x)
+                            const edy = Math.abs(wall.end.y - ep.y)
+                            if (edx < ENDPOINT_SNAP && edy < ENDPOINT_SNAP) {
+                                wall.end = { x: ep.x, y: ep.y }
+                                snappedToEndpoint = true
+                                break
+                            }
+                        }
+                        if (snappedToEndpoint) break
+                    }
+
+                    if (!snappedToEndpoint) {
+                        const dx = Math.abs(wall.end.x - wall.start.x)
+                        const dy = Math.abs(wall.end.y - wall.start.y)
+                        const SNAP_TOLERANCE = 0.5
+
+                        if (options?.shiftKey) {
+                            if (dx > dy) wall.end.y = wall.start.y
+                            else wall.end.x = wall.start.x
+                        } else {
+                            if (dy < SNAP_TOLERANCE && dx > dy) {
+                                wall.end.y = wall.start.y
+                            } else if (dx < SNAP_TOLERANCE && dy > dx) {
+                                wall.end.x = wall.start.x
+                            }
                         }
                     }
                 }
@@ -850,6 +1214,7 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
 
         endInteraction: () => set((state) => {
+            const hadMeaningfulAction = state.interaction.type !== 'none'
             // Clean up degenerate (zero-length) walls from accidental clicks
             if (state.interaction.type === 'drawing' && state.interaction.targetId) {
                 const wall = state.walls.find(w => w.id === state.interaction.targetId)
@@ -864,6 +1229,9 @@ export const useFloorplanStore = create<FloorplanState>()(
                 }
             }
             state.interaction = { type: 'none', targetId: null, lastPoint: null }
+            if (hadMeaningfulAction) {
+                pushHistorySnapshot(state as MutableHistoryState)
+            }
         }),
 
         setCornerSnapMode: (active) => set((state) => {
@@ -902,6 +1270,230 @@ export const useFloorplanStore = create<FloorplanState>()(
                 state.cornerSnapMode = false;
             }
         }),
+
+        enqueueDeferredTask: (task) => set((state) => {
+            const existingIndex = state.deferredTasks.findIndex((queued) => queued.runId === task.runId)
+            const existing = existingIndex >= 0 ? state.deferredTasks[existingIndex] : null
+            const nextTask: DeferredTask = {
+                id: existing?.id || uuidv4(),
+                runId: task.runId,
+                type: task.type,
+                createdAt: existing?.createdAt || new Date().toISOString(),
+                payload: task.payload,
+            }
+
+            if (existing?.type === 'gen_3d' && task.type === 'gen_3d') {
+                nextTask.payload = {
+                    formats: Array.from(new Set([
+                        ...(existing.payload?.formats || []),
+                        ...(task.payload?.formats || []),
+                    ])),
+                }
+            }
+
+            if (existingIndex >= 0) {
+                state.deferredTasks[existingIndex] = nextTask
+            } else {
+                state.deferredTasks.push(nextTask)
+            }
+
+            persistDeferredTasks(state.deferredTasks)
+        }),
+
+        flushDeferredTasks: async () => {
+            const state = get()
+            if (!state.token) return
+            if (state.workersOnline < 1) return
+            if (state.deferredTasks.length === 0) return
+            if (state.runStatus === 'processing') return
+
+            const [nextTask] = [...state.deferredTasks].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+            if (!nextTask) return
+
+            const removeTask = () => set((draft) => {
+                draft.deferredTasks = draft.deferredTasks.filter((queued) => queued.id !== nextTask.id)
+                persistDeferredTasks(draft.deferredTasks)
+            })
+
+            const headers: Record<string, string> = {}
+            if (state.token) {
+                headers.Authorization = `Bearer ${state.token}`
+            }
+
+            const syncCurrentRunSvg = async () => {
+                if (nextTask.runId !== get().currentRunId) return
+                const svgText = get().exportToSVG()
+                const putHeaders: Record<string, string> = {
+                    ...headers,
+                    'Content-Type': 'image/svg+xml',
+                }
+                const putRes = await fetch(`/api/runs/${nextTask.runId}/svg`, {
+                    method: 'PUT',
+                    headers: putHeaders,
+                    body: svgText,
+                })
+                if (!putRes.ok) {
+                    throw new Error(await putRes.text())
+                }
+            }
+
+            try {
+                let response: Response
+
+                switch (nextTask.type) {
+                    case 'detect_rooms':
+                        await syncCurrentRunSvg()
+                        response = await fetch(`/api/runs/${nextTask.runId}/detect-rooms`, {
+                            method: 'POST',
+                            headers,
+                        })
+                        break
+                    case 'detect_walls':
+                        await syncCurrentRunSvg()
+                        response = await fetch(`/api/runs/${nextTask.runId}/detect-walls`, {
+                            method: 'POST',
+                            headers,
+                        })
+                        break
+                    case 'detect_doors':
+                        await syncCurrentRunSvg()
+                        response = await fetch(`/api/runs/${nextTask.runId}/detect-doors`, {
+                            method: 'POST',
+                            headers,
+                        })
+                        break
+                    case 'detect_windows':
+                        await syncCurrentRunSvg()
+                        response = await fetch(`/api/runs/${nextTask.runId}/detect-windows`, {
+                            method: 'POST',
+                            headers,
+                        })
+                        break
+                    case 'detect_furniture':
+                        await syncCurrentRunSvg()
+                        response = await fetch(`/api/runs/${nextTask.runId}/detect-furniture`, {
+                            method: 'POST',
+                            headers,
+                        })
+                        break
+                    case 'gen_3d':
+                        if (nextTask.runId === get().currentRunId) {
+                            await get().syncSVGAndEnter3D()
+                        }
+                        response = await fetch(`/api/runs/${nextTask.runId}/generate-3d`, {
+                            method: 'POST',
+                            headers: {
+                                ...headers,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                scale: get().exportScale || get().calibrationFactor,
+                                formats: nextTask.payload?.formats || ['glb'],
+                            }),
+                        })
+                        break
+                    default:
+                        return
+                }
+
+                if (!response.ok) {
+                    const message = await response.text().catch(() => 'Failed to queue deferred task.')
+                    if ([401, 403, 404, 429].includes(response.status)) {
+                        removeTask()
+                    }
+                    throw new Error(message)
+                }
+
+                removeTask()
+
+                if (nextTask.runId === get().currentRunId) {
+                    set((draft) => {
+                        draft.lastQueuedTask = nextTask.type
+                        draft.runStatus = 'processing'
+                        if (nextTask.type === 'gen_3d') {
+                            draft.isGenerating3D = false
+                        }
+                    })
+                    get().setShowProcessingModal(true)
+                }
+            } catch (error) {
+                console.error('Failed to flush deferred task', error)
+                const message = error instanceof Error ? error.message : 'Failed to queue deferred task.'
+                get().showToast(message, 'error')
+            }
+        },
+
+        saveLocalDraft: () => {
+            const state = get()
+            const draft = buildLocalDraft(state)
+            set((snapshot) => {
+                snapshot.localDraftStatus = 'saving'
+            })
+
+            try {
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(LOCAL_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+                }
+                set((snapshot) => {
+                    snapshot.localDraftStatus = 'saved'
+                    snapshot.lastLocalSaveAt = draft.savedAt
+                })
+            } catch (error) {
+                console.error('Failed to save local draft', error)
+                set((snapshot) => {
+                    snapshot.localDraftStatus = 'error'
+                })
+            }
+        },
+
+        restoreLocalDraft: () => {
+            const state = get()
+            const isEditorEmpty =
+                state.walls.length === 0 &&
+                state.furniture.length === 0 &&
+                state.rooms.length === 0 &&
+                state.labels.length === 0 &&
+                !state.currentRunId &&
+                !state.uploadedImage
+
+            if (!isEditorEmpty) return false
+
+            const draft = readLocalDraft()
+            if (!draft) return false
+
+            set((snapshot) => {
+                const nextLevels = Array.isArray(draft.levels) && draft.levels.length > 0
+                    ? draft.levels.map((level, index) => ({
+                        ...createDefaultLevel(index),
+                        ...level,
+                    }))
+                    : [createDefaultLevel()]
+                const activeLevel = getLevelById(nextLevels, draft.activeLevelId)
+
+                snapshot.levels = nextLevels
+                snapshot.activeLevelId = activeLevel.id
+                snapshot.mode = draft.mode || '2d'
+                snapshot.cameraMode = draft.cameraMode || 'orbit'
+                snapshot.activeTool = draft.activeTool || 'select'
+                snapshot.walls = (draft.walls || []).map((wall) => ({ ...wall, levelId: normalizeLevelId(wall.levelId || activeLevel.id) }))
+                snapshot.furniture = (draft.furniture || []).map((item) => ({ ...item, levelId: normalizeLevelId(item.levelId || activeLevel.id) }))
+                snapshot.rooms = (draft.rooms || []).map((room) => ({ ...room, levelId: normalizeLevelId(room.levelId || activeLevel.id) }))
+                snapshot.labels = (draft.labels || []).map((label) => ({ ...label, levelId: normalizeLevelId(label.levelId || activeLevel.id) }))
+                snapshot.currentRunId = draft.currentRunId || null
+                snapshot.runStatus = draft.runStatus || 'idle'
+                snapshot.uploadedImage = activeLevel.referenceImage ?? draft.uploadedImage ?? null
+                snapshot.imageDimensions = activeLevel.referenceImageDimensions ?? draft.imageDimensions ?? null
+                snapshot.calibrationFactor = draft.calibrationFactor || 0.01
+                snapshot.isCalibrated = !!draft.isCalibrated
+                snapshot.showBackground = draft.showBackground ?? true
+                snapshot.glbPreviewSource = draft.glbPreviewSource || 'none'
+                snapshot.exportScale = draft.exportScale || draft.calibrationFactor || 1
+                snapshot.localDraftStatus = 'restored'
+                snapshot.lastLocalSaveAt = draft.savedAt || Date.now()
+            })
+
+            return true
+        },
 
         setJoinMode: (active) => set((state) => {
             if (active) {
@@ -1160,6 +1752,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 state.furniture.push({
                     id: payload.id,
                     type: payload.type || 'imported',
+                    levelId: state.activeLevelId,
                     furnAiId: payload.furnAiId,
                     position: { x: payload.position.x, y: 0, z: payload.position.y },
                     rotation: { x: 0, y: 0, z: 0 },
@@ -1178,8 +1771,17 @@ export const useFloorplanStore = create<FloorplanState>()(
                 if (wall) wall.label = label
                 const item = state.furniture.find(f => f.id === id)
                 if (item) item.label = label
+                const textLabel = state.labels.find(l => l.id === id)
+                if (textLabel) textLabel.text = label
             })
         },
+
+        updateTextLabel: (id, updates) => set((state) => {
+            const label = state.labels.find((entry) => entry.id === id)
+            if (label) {
+                Object.assign(label, updates)
+            }
+        }),
 
         syncSVGAndEnter3D: async () => {
             const state = useFloorplanStore.getState()
@@ -1218,6 +1820,16 @@ export const useFloorplanStore = create<FloorplanState>()(
         triggerBlenderGeneration: async (formats?: string[]) => {
             const state = useFloorplanStore.getState()
             if (!state.currentRunId || !state.isCalibrated) return
+            state.logAnalyticsEvent('furn3d_gen')
+            if (state.workersOnline < 1) {
+                state.enqueueDeferredTask({
+                    runId: state.currentRunId,
+                    type: 'gen_3d',
+                    payload: { formats: formats || ['glb'] },
+                })
+                state.showToast('Workers are offline. 3D generation is saved locally and will queue automatically.', 'info')
+                return
+            }
 
             set((s) => { s.isGenerating3D = true })
 
@@ -1242,7 +1854,18 @@ export const useFloorplanStore = create<FloorplanState>()(
                     state.setRunStatus('processing')
                     state.setLastQueuedTask('gen_3d')
                 } else {
-                    console.error("Blender Gen Trigger Failed:", await res.text())
+                    const errText = await res.text()
+                    if (res.status === 429) {
+                        try {
+                            const errData = JSON.parse(errText)
+                            state.showToast(errData.detail || 'Token limit reached. Upgrade to Pro.', 'error')
+                        } catch {
+                            state.showToast('Token limit reached. Upgrade to Pro for more.', 'error')
+                        }
+                    } else {
+                        console.error("Blender Gen Trigger Failed:", errText)
+                        state.showToast('3D generation failed. Please try again.', 'error')
+                    }
                 }
             } catch (e) {
                 console.error("Blender Gen Trigger Error:", e)
@@ -1255,9 +1878,9 @@ export const useFloorplanStore = create<FloorplanState>()(
                 state.showBackground = !state.showBackground
             })
         },
-        toggleTestGLB: () => {
+        setGlbPreviewSource: (source) => {
             set((state) => {
-                state.testGLB = !state.testGLB
+                state.glbPreviewSource = source
             })
         },
         triggerRender: async () => {
@@ -1302,6 +1925,7 @@ export const useFloorplanStore = create<FloorplanState>()(
             state.furniture.push({
                 id: uuidv4(),
                 type,
+                levelId: state.activeLevelId,
                 position: { x: position.x, y: type === 'window' ? 1.0 : 0, z: position.y },
                 rotation: { x: 0, y: 0, z: 0 },
                 dimensions: type === 'door'
@@ -1318,12 +1942,14 @@ export const useFloorplanStore = create<FloorplanState>()(
                 existing.type = existing.type || 'imported'
                 existing.modelUrl = relPath
                 if (label) existing.label = label
+                existing.levelId = existing.levelId || state.activeLevelId
                 return
             }
 
             state.furniture.push({
                 id,
                 type: 'imported',
+                levelId: state.activeLevelId,
                 position: { x: 0, y: 0, z: 0 },
                 rotation: { x: 0, y: 0, z: 0 },
                 dimensions: { width: 1, height: 1, depth: 1 },
@@ -1371,10 +1997,18 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
 
         replaceScene: (payload) => set((state) => {
-            state.walls = payload.walls
-            state.rooms = payload.rooms
-            state.furniture = payload.furniture
-            if (payload.labels) state.labels = payload.labels
+            const activeLevelId = state.activeLevelId
+            const nextWalls = payload.walls.map((wall) => ({ ...wall, levelId: normalizeLevelId(wall.levelId || activeLevelId) }))
+            const nextRooms = payload.rooms.map((room) => ({ ...room, levelId: normalizeLevelId(room.levelId || activeLevelId) }))
+            const nextFurniture = payload.furniture.map((item) => ({ ...item, levelId: normalizeLevelId(item.levelId || activeLevelId) }))
+            const nextLabels = (payload.labels || []).map((label) => ({ ...label, levelId: normalizeLevelId(label.levelId || activeLevelId) }))
+
+            state.walls = [...filterEntitiesOutsideLevel(state.walls, activeLevelId), ...nextWalls]
+            state.rooms = [...filterEntitiesOutsideLevel(state.rooms, activeLevelId), ...nextRooms]
+            state.furniture = [...filterEntitiesOutsideLevel(state.furniture, activeLevelId), ...nextFurniture]
+            if (payload.labels) {
+                state.labels = [...filterEntitiesOutsideLevel(state.labels, activeLevelId), ...nextLabels]
+            }
         }),
 
         importFromSVG: (svgText) => set((state) => {
@@ -1382,6 +2016,8 @@ export const useFloorplanStore = create<FloorplanState>()(
             console.log('[DEBUG importFromSVG] has rooms-geometry?', svgText.includes('rooms-geometry'), 'polygon count in text:', (svgText.match(/<polygon/g) || []).length)
             const parser = new DOMParser()
             const doc = parser.parseFromString(svgText, "image/svg+xml")
+            const importTargetLevelId = state.activeLevelId
+            const getElementLevelId = (el: Element) => normalizeLevelId(el.getAttribute('data-level-id') || importTargetLevelId)
 
             const walls: Wall[] = []
             const furniture: FurnItem[] = []
@@ -1444,10 +2080,12 @@ export const useFloorplanStore = create<FloorplanState>()(
                     if (w > h) {
                         const id = r.getAttribute('id') || uuidv4()
                         const existing = state.walls.find(w => w.id === id)
+                        const levelId = getElementLevelId(r)
                         // Horizontal wall - width is length, height is thickness
                         const thickness = Math.max(0.05, Math.min(h, 2.0)) || 0.15
                         walls.push({
                             id,
+                            levelId,
                             start: { x, y: y + h / 2 },
                             end: { x: x + w, y: y + h / 2 },
                             thickness,
@@ -1461,10 +2099,12 @@ export const useFloorplanStore = create<FloorplanState>()(
                     } else {
                         const id = r.getAttribute('id') || uuidv4()
                         const existing = state.walls.find(w => w.id === id)
+                        const levelId = getElementLevelId(r)
                         // Vertical wall - height is length, width is thickness
                         const thickness = Math.max(0.05, Math.min(w, 2.0)) || 0.15
                         walls.push({
                             id,
+                            levelId,
                             start: { x: x + w / 2, y },
                             end: { x: x + w / 2, y: y + h },
                             thickness,
@@ -1512,6 +2152,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                     furniture.push({
                         id,
                         type: 'imported',
+                        levelId: getElementLevelId(r),
                         position: { x: (cx - offsetX) * pxToM, y: 0, z: (cy - offsetY) * pxToM },
                         rotation: { x: 0, y: rotY, z: 0 },
                         dimensions: { width: Math.max(w, 0.5), height: 1.5, depth: Math.max(h, 0.5) },
@@ -1563,6 +2204,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                     furniture.push({
                         id,
                         type: 'imported',
+                        levelId: getElementLevelId(g),
                         position: { x: (cx - offsetX) * pxToM, y: 0, z: (cy - offsetY) * pxToM },
                         rotation: { x: 0, y: 0, z: 0 },
                         dimensions: { width: 1, height: 1, depth: 1 },
@@ -1616,6 +2258,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                         furniture.push({
                             id: r.getAttribute('id') || uuidv4(),
                             type: type as any,
+                            levelId: getElementLevelId(r),
                             position: { x: x + w / 2, y: type === 'window' ? 1.0 : 0, z: y + hOriginal / 2 },
                             rotation: { x: 0, y: objRotationY, z: 0 },
                             dimensions: { width: openingWidth, height: type === 'window' ? 1.2 : 2.1, depth: thickness }
@@ -1625,7 +2268,7 @@ export const useFloorplanStore = create<FloorplanState>()(
             })
 
             // 4. Parse Room Polygons
-            const rooms: { id: string; name: string; points: { x: number; y: number }[]; color: string; center: { x: number; y: number } }[] = []
+            const rooms: { id: string; name: string; levelId?: string; points: { x: number; y: number }[]; color: string; center: { x: number; y: number } }[] = []
             const roomColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899']
             let colorIndex = 0
 
@@ -1712,6 +2355,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 rooms.push({
                     id,
                     name,
+                    levelId: getElementLevelId(polyEl),
                     points: pts,
                     color: roomColors[colorIndex % roomColors.length],
                     center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
@@ -1758,6 +2402,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                     rooms.push({
                         id,
                         name: label,
+                        levelId: getElementLevelId(r),
                         points: [
                             { x, y },
                             { x: x + w, y },
@@ -1818,12 +2463,14 @@ export const useFloorplanStore = create<FloorplanState>()(
                         }
                     }
 
-                    // Always add to labels array for 2D display
-                    labels.push({
-                        id: uuidv4(),
-                        text: textContent,
-                        position: { x: textX, y: textY }
-                    })
+                    if (!matched) {
+                        labels.push({
+                            id: uuidv4(),
+                            text: textContent,
+                            levelId: getElementLevelId(textEl),
+                            position: { x: textX, y: textY }
+                        })
+                    }
                 }
             })
 
@@ -1908,6 +2555,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                     rooms.push({
                         id: uuidv4(),
                         name: 'Floor',
+                        levelId: importTargetLevelId,
                         points: [
                             { x: floorMinX - padX, y: floorMinY - padY },
                             { x: floorMaxX + padX, y: floorMinY - padY },
@@ -1922,30 +2570,98 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
 
             // Auto-fit camera only on FIRST import (not on every poll re-import)
-            if (state.walls.length === 0 && walls.length > 0) {
+            if (filterEntitiesForLevel(state.walls, importTargetLevelId).length === 0 && walls.length > 0) {
                 state.fitViewTrigger = (state.fitViewTrigger || 0) + 1
             }
 
             state.walls = walls
-            state.furniture = furniture
-            state.labels = labels
-            // Prevent "random" floor/room disappearance:
-            if (rooms.length > 0 || state.rooms.length === 0) {
-                state.rooms = rooms
+
+            const SNAP_THRESHOLD = 0.5
+            for (const furn of furniture) {
+                if (furn.type !== 'door' && furn.type !== 'window') continue
+                let bestDist = SNAP_THRESHOLD
+                let bestPoint: { x: number; z: number } | null = null
+                let bestAngle = 0
+                let bestThickness = 0.15
+
+                for (const wall of walls) {
+                    if (normalizeLevelId(wall.levelId) !== normalizeLevelId(furn.levelId)) continue
+                    const wx = wall.end.x - wall.start.x
+                    const wy = wall.end.y - wall.start.y
+                    const lenSq = wx * wx + wy * wy
+                    if (lenSq < 0.001) continue
+
+                    let t = ((furn.position.x - wall.start.x) * wx + (furn.position.z - wall.start.y) * wy) / lenSq
+                    t = Math.max(0, Math.min(1, t))
+
+                    const cx = wall.start.x + t * wx
+                    const cz = wall.start.y + t * wy
+                    const dx = furn.position.x - cx
+                    const dz = furn.position.z - cz
+                    const dist = Math.sqrt(dx * dx + dz * dz)
+
+                    if (dist < bestDist) {
+                        bestDist = dist
+                        bestPoint = { x: cx, z: cz }
+                        bestAngle = Math.atan2(wy, wx)
+                        bestThickness = wall.thickness || 0.15
+                    }
+                }
+
+                if (bestPoint) {
+                    furn.position.x = bestPoint.x
+                    furn.position.z = bestPoint.z
+                    furn.rotation.y = bestAngle
+                    furn.dimensions.depth = bestThickness
+                }
             }
 
-            // Start Tutorial Flow if not calibrated.
-            // IMPORTANT: Don't force tutorial steps when loading an existing project SVG.
-            // New-run tutorial progression is handled by Topbar polling and explicit actions.
-            if (!state.isCalibrated && state.tutorialStep === 'none' && walls.length === 0 && rooms.length === 0) {
-                state.tutorialStep = 'calibration'
-                state.activeTool = 'none' // forcing user to select ruler themselves? Or maybe set to 'none' so overlay guides them
+            const importedLevelIds = new Set<string>([
+                ...walls.map((wall) => normalizeLevelId(wall.levelId)),
+                ...furniture.map((item) => normalizeLevelId(item.levelId)),
+                ...rooms.map((room) => normalizeLevelId(room.levelId)),
+                ...labels.map((label) => normalizeLevelId(label.levelId)),
+            ])
+            if (importedLevelIds.size === 0) {
+                importedLevelIds.add(importTargetLevelId)
+            }
+
+            state.walls = [
+                ...state.walls.filter((wall) => !importedLevelIds.has(normalizeLevelId(wall.levelId))),
+                ...walls,
+            ]
+            state.furniture = [
+                ...state.furniture.filter((item) => !importedLevelIds.has(normalizeLevelId(item.levelId))),
+                ...furniture,
+            ]
+            state.labels = [
+                ...state.labels.filter((label) => !importedLevelIds.has(normalizeLevelId(label.levelId))),
+                ...labels,
+            ]
+            state.rooms = [
+                ...state.rooms.filter((room) => !importedLevelIds.has(normalizeLevelId(room.levelId))),
+                ...rooms,
+            ]
+
+            pushHistorySnapshot(state as MutableHistoryState)
+
+            if (!state.isCalibrated && (state.tutorialStep === 'none' || state.tutorialStep === 'process')) {
+                if (state.tutorialStep === 'process' || (walls.length === 0 && rooms.length === 0)) {
+                    state.tutorialStep = 'calibration'
+                    state.tutorialMinimized = false
+                    state.activeTool = 'none'
+                }
             }
         }),
 
         exportToSVG: () => {
             const state = useFloorplanStore.getState()
-            const { walls, furniture, calibrationFactor } = state
+            const calibrationFactor = state.calibrationFactor
+            const activeLevelId = state.activeLevelId
+            const walls = filterEntitiesForLevel(state.walls, activeLevelId)
+            const furniture = filterEntitiesForLevel(state.furniture, activeLevelId)
+            const rooms = filterEntitiesForLevel(state.rooms, activeLevelId)
+            const labels = filterEntitiesForLevel(state.labels, activeLevelId)
             // Inverse calibration: Metrics stored in meters. SVG usually in pixels or relative units.
             // importFromSVG used: val_m = (val_px - offset) * pxToM
             // So: val_px = (val_m / pxToM) + offset
@@ -1963,11 +2679,15 @@ export const useFloorplanStore = create<FloorplanState>()(
                 minX = Math.min(minX, f.position.x - f.dimensions.width / 2)
                 minY = Math.min(minY, f.position.z - f.dimensions.depth / 2)
             })
-            state.rooms.forEach(r => {
+            rooms.forEach(r => {
                 r.points.forEach(p => {
                     minX = Math.min(minX, p.x)
                     minY = Math.min(minY, p.y)
                 })
+            })
+            labels.forEach(label => {
+                minX = Math.min(minX, label.position.x)
+                minY = Math.min(minY, label.position.y)
             })
             // If empty, default 0
             if (minX === Infinity) { minX = 0; minY = 0 }
@@ -2000,7 +2720,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 maxX = Math.max(maxX, f.position.x + f.dimensions.width / 2)
                 maxY = Math.max(maxY, f.position.z + f.dimensions.depth / 2)
             })
-            state.rooms.forEach(r => {
+            rooms.forEach(r => {
                 r.points.forEach(p => {
                     maxX = Math.max(maxX, p.x)
                     maxY = Math.max(maxY, p.y)
@@ -2013,6 +2733,10 @@ export const useFloorplanStore = create<FloorplanState>()(
                         `<pattern id="tex_${r.id}" patternUnits="userSpaceOnUse" x="0" y="0" width="${tw}" height="${th}"><image href="${r.textureDataUrl}" x="0" y="0" width="${tw}" height="${th}" preserveAspectRatio="none" /></pattern>`
                     )
                 }
+            })
+            labels.forEach(label => {
+                maxX = Math.max(maxX, label.position.x)
+                maxY = Math.max(maxY, label.position.y)
             })
             if (maxX === -Infinity) { maxX = 10; maxY = 10 }
 
@@ -2132,14 +2856,23 @@ export const useFloorplanStore = create<FloorplanState>()(
             }
 
             // E. Rooms (export so backend can target floors by id for texturize)
-            if (state.rooms.length > 0) {
+            if (rooms.length > 0) {
                 svg += `  <g id="rooms-geometry" opacity="0.35">\n`
-                state.rooms.forEach(r => {
+                rooms.forEach(r => {
                     const pts = r.points
                         .map(p => `${toPxX(p.x)},${toPxY(p.y)}`)
                         .join(' ')
                     const safeName = String(r.name || '').replace(/"/g, '')
                     svg += `    <polygon id="${r.id}" points="${pts}" fill="${r.color || '#e2e8f0'}" stroke="none" data-name="${safeName}" />\n`
+                })
+                svg += `  </g>\n`
+            }
+
+            if (labels.length > 0) {
+                svg += `  <g id="labels">\n`
+                labels.forEach(label => {
+                    const safeText = String(label.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    svg += `    <text id="${label.id}" x="${toPxX(label.position.x)}" y="${toPxY(label.position.y)}" fill="#ffffff" font-size="14">${safeText}</text>\n`
                 })
                 svg += `  </g>\n`
             }
@@ -2151,10 +2884,11 @@ export const useFloorplanStore = create<FloorplanState>()(
         generateFloors: async () => {
             set((state) => {
                 // simple base floor generation: bounding box + padding
-                if (state.walls.length === 0) return
+                const levelWalls = filterEntitiesForLevel(state.walls, state.activeLevelId)
+                if (levelWalls.length === 0) return
 
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-                state.walls.forEach(w => {
+                levelWalls.forEach(w => {
                     minX = Math.min(minX, w.start.x, w.end.x)
                     minY = Math.min(minY, w.start.y, w.end.y)
                     maxX = Math.max(maxX, w.start.x, w.end.x)
@@ -2171,6 +2905,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                 const baseRoom: Room = {
                     id: uuidv4(),
                     name: 'Base Floor',
+                    levelId: state.activeLevelId,
                     points: [
                         { x: minX - padX, y: minY - padY },
                         { x: maxX + padX, y: minY - padY },
@@ -2181,7 +2916,7 @@ export const useFloorplanStore = create<FloorplanState>()(
                     center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
                 }
 
-                state.rooms = [baseRoom]
+                state.rooms = [...filterEntitiesOutsideLevel(state.rooms, state.activeLevelId), baseRoom]
                 console.log("Generated Base Floor:", baseRoom)
 
                 if (state.tutorialStep === 'correction') {
@@ -2197,38 +2932,32 @@ export const useFloorplanStore = create<FloorplanState>()(
         // Undo/Redo/Clipboard implementations
         saveHistory: () => set((state) => {
             // For simplicity, we only store last 20 states
-            const snapshot = {
-                walls: JSON.parse(JSON.stringify(state.walls)),
-                furniture: JSON.parse(JSON.stringify(state.furniture)),
-                rooms: JSON.parse(JSON.stringify(state.rooms))
-            }
-            // Truncate future history if we're in the middle of undo stack
-            const newHistory = [...(state as any).history?.slice(0, (state as any).historyIndex + 1) || [], snapshot].slice(-20)
-                ; (state as any).history = newHistory
-                ; (state as any).historyIndex = newHistory.length - 1
+            pushHistorySnapshot(state as MutableHistoryState)
         }),
 
         undo: () => set((state) => {
-            const history = (state as any).history || []
-            const idx = (state as any).historyIndex ?? history.length - 1
+            const history = (state as MutableHistoryState).history || []
+            const idx = (state as MutableHistoryState).historyIndex ?? history.length - 1
             if (idx > 0) {
                 const prev = history[idx - 1]
                 state.walls = JSON.parse(JSON.stringify(prev.walls))
                 state.furniture = JSON.parse(JSON.stringify(prev.furniture))
                 state.rooms = JSON.parse(JSON.stringify(prev.rooms))
-                    ; (state as any).historyIndex = idx - 1
+                state.labels = JSON.parse(JSON.stringify(prev.labels))
+                    ; (state as MutableHistoryState).historyIndex = idx - 1
             }
         }),
 
         redo: () => set((state) => {
-            const history = (state as any).history || []
-            const idx = (state as any).historyIndex ?? history.length - 1
+            const history = (state as MutableHistoryState).history || []
+            const idx = (state as MutableHistoryState).historyIndex ?? history.length - 1
             if (idx < history.length - 1) {
                 const next = history[idx + 1]
                 state.walls = JSON.parse(JSON.stringify(next.walls))
                 state.furniture = JSON.parse(JSON.stringify(next.furniture))
                 state.rooms = JSON.parse(JSON.stringify(next.rooms))
-                    ; (state as any).historyIndex = idx + 1
+                state.labels = JSON.parse(JSON.stringify(next.labels))
+                    ; (state as MutableHistoryState).historyIndex = idx + 1
             }
         }),
 
@@ -2236,30 +2965,59 @@ export const useFloorplanStore = create<FloorplanState>()(
             if (!state.selectedId) return
             const wall = state.walls.find(w => w.id === state.selectedId)
             if (wall) {
-                ; (state as any).clipboard = { type: 'wall', data: JSON.parse(JSON.stringify(wall)) }
+                ; (state as MutableHistoryState).clipboard = { type: 'wall', data: JSON.parse(JSON.stringify(wall)) }
                 return
             }
             const furn = state.furniture.find(f => f.id === state.selectedId)
             if (furn) {
-                ; (state as any).clipboard = { type: 'furniture', data: JSON.parse(JSON.stringify(furn)) }
+                ; (state as MutableHistoryState).clipboard = { type: 'furniture', data: JSON.parse(JSON.stringify(furn)) }
+                return
+            }
+            const room = state.rooms.find(r => r.id === state.selectedId)
+            if (room) {
+                ; (state as MutableHistoryState).clipboard = { type: 'room', data: JSON.parse(JSON.stringify(room)) }
+                return
+            }
+            const label = state.labels.find(entry => entry.id === state.selectedId)
+            if (label) {
+                ; (state as MutableHistoryState).clipboard = { type: 'label', data: JSON.parse(JSON.stringify(label)) }
             }
         }),
 
         pasteObject: () => set((state) => {
-            const clipboard = (state as any).clipboard
+            const clipboard = (state as MutableHistoryState).clipboard
             if (!clipboard) return
             if (clipboard.type === 'wall') {
-                const newWall = { ...clipboard.data, id: uuidv4() }
+                const newWall = { ...clipboard.data, id: uuidv4(), levelId: state.activeLevelId }
                 newWall.start = { x: newWall.start.x + 0.5, y: newWall.start.y + 0.5 }
                 newWall.end = { x: newWall.end.x + 0.5, y: newWall.end.y + 0.5 }
                 state.walls.push(newWall)
                 state.selectedId = newWall.id
             } else if (clipboard.type === 'furniture') {
-                const newFurn = { ...clipboard.data, id: uuidv4() }
+                const newFurn = { ...clipboard.data, id: uuidv4(), levelId: state.activeLevelId }
                 newFurn.position = { ...newFurn.position, x: newFurn.position.x + 0.5, z: newFurn.position.z + 0.5 }
                 state.furniture.push(newFurn)
                 state.selectedId = newFurn.id
+            } else if (clipboard.type === 'room') {
+                const newRoom = { ...clipboard.data, id: uuidv4(), levelId: state.activeLevelId }
+                newRoom.points = newRoom.points.map(point => ({ x: point.x + 0.5, y: point.y + 0.5 }))
+                newRoom.center = { x: newRoom.center.x + 0.5, y: newRoom.center.y + 0.5 }
+                state.rooms.push(newRoom)
+                state.selectedId = newRoom.id
+            } else if (clipboard.type === 'label') {
+                const newLabel = {
+                    ...clipboard.data,
+                    id: uuidv4(),
+                    levelId: state.activeLevelId,
+                    position: {
+                        x: clipboard.data.position.x + 0.5,
+                        y: clipboard.data.position.y + 0.5,
+                    },
+                }
+                state.labels.push(newLabel)
+                state.selectedId = newLabel.id
             }
+            pushHistorySnapshot(state as MutableHistoryState)
         }),
 
         consumeDrop: () => set((state) => {
@@ -2285,20 +3043,36 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
 
         resetFloorplan: () => set((state) => {
+            const defaultLevel = createDefaultLevel()
             state.walls = []
             state.furniture = []
             state.rooms = []
             state.labels = []
+            state.levels = [defaultLevel]
+            state.activeLevelId = defaultLevel.id
             state.uploadedImage = null
-            state.imageDimensions = { width: 0, height: 0 }
+            state.imageDimensions = null
             state.calibrationFactor = 0.01 // Default 1px = 1cm
             state.isCalibrated = false
+            state.mode = '2d'
+            state.cameraMode = 'orbit'
+            state.activeTool = 'wall'
             state.selectedId = null
             state.currentRunId = null
             state.runStatus = 'idle'
+            state.isGenerating3D = false
+            state.isRendering = false
+            state.showBackground = true
+            state.glbPreviewSource = 'none'
+            state.showProcessingModal = false
+            state.showQueueModal = false
             state.tutorialStep = 'none'
+            state.lastQueuedTask = 'none'
+            state.localDraftStatus = 'idle'
+            state.lastLocalSaveAt = null
             ;(state as any).history = []
             ;(state as any).historyIndex = -1
+            clearLocalDraftStorage()
         })
 
     }))

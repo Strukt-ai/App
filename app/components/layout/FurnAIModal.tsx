@@ -108,8 +108,10 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
     const runSAMWithPoints = async (points: AnnotationPoint[]) => {
         if (!imageFileRef.current || !imgRef.current) return
 
+        const thisRequest = ++samRequestIdRef.current
+
         setIsProcessing(true)
-        setStatusMsg('Segmenting...')
+        setStatusMsg(`Segmenting (${points.length} pts)...`)
 
         try {
             const samFormData = new FormData()
@@ -133,6 +135,7 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
                 body: samFormData,
                 headers: authHeaders,
             })
+            if (thisRequest !== samRequestIdRef.current) return
             const data = await res.json().catch(() => ({} as any))
 
             if (data?.polygon && data.polygon.length > 0) {
@@ -153,10 +156,12 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
             setStatusMsg('Processing mask...')
             for (let i = 0; i < 60; i++) {
                 await new Promise(r => setTimeout(r, 500))
+                if (thisRequest !== samRequestIdRef.current) return
                 try {
                     const pollRes = await fetch(`/api/sam3d/jobs/${jobId}/status`, { headers: authHeaders })
                     const poll = await pollRes.json().catch(() => ({} as any))
                     if (poll.status === 'COMPLETED') {
+                        if (thisRequest !== samRequestIdRef.current) return
                         if (poll.polygon && poll.polygon.length > 0) {
                             setPreviewPolygon(poll.polygon)
                             setStatusMsg(`Mask found (${poll.polygon.length} pts)`)
@@ -170,17 +175,23 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
                     }
                 } catch (_) { }
             }
-            setIsProcessing(false)
-            setStatusMsg('Segmentation timed out. Try again.')
+            if (thisRequest === samRequestIdRef.current) {
+                setIsProcessing(false)
+                setStatusMsg('Segmentation timed out. Try again.')
+            }
         } catch (err: any) {
-            console.error("[FurnAI] Segment Failed", err)
-            setStatusMsg('Segmentation failed: ' + err.message)
-            setIsProcessing(false)
+            if (thisRequest === samRequestIdRef.current) {
+                console.error("[FurnAI] Segment Failed", err)
+                setStatusMsg('Segmentation failed: ' + err.message)
+                setIsProcessing(false)
+            }
         }
     }
 
+    const samRequestIdRef = useRef(0)
+
     const handleImageClick = (e: React.MouseEvent) => {
-        if (!image || !imgRef.current || isProcessing) return
+        if (!image || !imgRef.current) return
 
         const rect = imgRef.current.getBoundingClientRect()
         const nx = (e.clientX - rect.left) / rect.width
@@ -195,11 +206,8 @@ export function FurnAIModal({ isOpen, onClose }: FurnAIModalProps) {
             id: Math.random().toString(36).substr(2, 9),
         }
 
-        // Always accumulate points for multi-point SAM
         const updatedPoints = [...activePoints, newPoint]
         setActivePoints(updatedPoints)
-
-        // Run SAM with all accumulated points
         runSAMWithPoints(updatedPoints)
     }
 

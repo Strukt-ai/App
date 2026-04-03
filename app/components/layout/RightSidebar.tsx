@@ -13,7 +13,6 @@ import {
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
-import { JobQueuePanel } from '@/components/layout/JobQueuePanel'
 
 type PolygonPoint = [number, number]
 
@@ -90,16 +89,27 @@ function PanelSection({
     )
 }
 
-export function RightSidebar() {
+type RightSidebarProps = {
+    desktopExpanded?: boolean
+    onDesktopHoverStart?: () => void
+    onDesktopHoverEnd?: () => void
+}
+
+export function RightSidebar({
+    desktopExpanded = false,
+    onDesktopHoverStart,
+    onDesktopHoverEnd,
+}: RightSidebarProps) {
     const activeTool = useFloorplanStore(s => s.activeTool)
     const mode = useFloorplanStore(s => s.mode)
     const token = useFloorplanStore(s => s.token)
+    const currentRunId = useFloorplanStore(s => s.currentRunId)
     const selectedId = useFloorplanStore(s => s.selectedId)
     const furniture = useFloorplanStore(s => s.furniture)
     const updateFurniture = useFloorplanStore(s => s.updateFurniture)
     const deleteObject = useFloorplanStore(s => s.deleteObject)
-    const testGLB = useFloorplanStore(s => s.testGLB)
-    const toggleTestGLB = useFloorplanStore(s => s.toggleTestGLB)
+    const glbPreviewSource = useFloorplanStore(s => s.glbPreviewSource)
+    const setGlbPreviewSource = useFloorplanStore(s => s.setGlbPreviewSource)
     const setMode = useFloorplanStore(s => s.setMode)
     const mobileRightSidebarOpen = useFloorplanStore(s => s.mobileRightSidebarOpen)
     const setMobileRightSidebarOpen = useFloorplanStore(s => s.setMobileRightSidebarOpen)
@@ -124,8 +134,7 @@ export function RightSidebar() {
 
     const mToCm = (v: number) => v * 100
     const showAiPanel = activeTool === 'furniture'
-    const showPreviewPanel = mode === '3d' || testGLB
-    const showEmptyState = !selectedFurn && !showAiPanel && !showPreviewPanel
+    const showPreviewPanel = mode === '3d' || glbPreviewSource !== 'none'
 
     useEffect(() => {
         if (!selectedFurn) {
@@ -172,7 +181,13 @@ export function RightSidebar() {
         if (!selectedFurn) return
         const delta = (deg * Math.PI) / 180
         const next = (selectedFurn.rotation?.y || 0) + delta
-        updateFurniture(selectedFurn.id, { rotation: { y: next } })
+        updateFurniture(selectedFurn.id, {
+            rotation: {
+                x: selectedFurn.rotation?.x || 0,
+                y: next,
+                z: selectedFurn.rotation?.z || 0,
+            }
+        })
         const item = getBpItems().find((it) => it.metadata?.storeId === selectedFurn.id)
         if (item) {
             if (item.rotation) item.rotation.y = next
@@ -364,74 +379,101 @@ export function RightSidebar() {
     return (
         <aside
             className={cn(
-                "absolute inset-y-3 right-3 z-40 flex w-[min(92vw,360px)] max-w-[360px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#070b12]/94 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur-2xl transition-transform duration-300 xl:relative xl:inset-auto xl:z-0 xl:h-full xl:w-[340px] xl:max-w-none xl:translate-x-0 xl:rounded-none xl:border-y-0 xl:border-r-0 xl:border-l xl:bg-slate-950/72 xl:shadow-none xl:backdrop-blur-xl",
-                mobileRightSidebarOpen ? "translate-x-0" : "translate-x-[108%] xl:translate-x-0"
+                "absolute inset-y-3 right-3 z-40 flex flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#070b12]/94 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur-2xl transition-all duration-300 xl:bottom-4 xl:right-4 xl:top-4 xl:bg-slate-950/78",
+                mobileRightSidebarOpen ? "translate-x-0 w-[min(92vw,360px)] max-w-[360px]" : "translate-x-[108%] w-[min(92vw,360px)] max-w-[360px]",
+                desktopExpanded 
+                    ? "xl:translate-x-0 xl:w-[332px] xl:max-w-[332px]" 
+                    : "xl:translate-x-0 xl:w-16 xl:max-w-16 xl:rounded-r-[28px] xl:rounded-l-none xl:border-l-0"
             )}
+            onMouseEnter={onDesktopHoverStart}
+            onMouseLeave={onDesktopHoverEnd}
         >
-            <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.08),transparent_40%),linear-gradient(180deg,rgba(15,23,42,0.75),rgba(2,6,23,0.6))] px-4 py-4">
+            {/* Dockbar content when minimized */}
+            {!desktopExpanded && (
+                <div className="flex flex-col items-center gap-4 p-3">
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                            <MousePointer2 className="h-4 w-4 text-slate-300" />
+                        </div>
+                        <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                            <Box className="h-4 w-4 text-slate-300" />
+                        </div>
+                        <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                            <RotateCw className="h-4 w-4 text-slate-300" />
+                        </div>
+                        <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                            <Trash2 className="h-4 w-4 text-slate-300" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Full content when expanded */}
+            {desktopExpanded && (
+                <>
+                <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.08),transparent_40%),linear-gradient(180deg,rgba(15,23,42,0.75),rgba(2,6,23,0.6))] px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
-                    <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Inspector</p>
-                        <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">Scene Controls</h2>
-                        <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                            Keep the canvas clean. Selection details, preview controls, and AI utilities stay docked here.
-                        </p>
+                    <div className="flex flex-wrap gap-2">
+                        <span className={cn(
+                            "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+                            mode === '3d'
+                                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                : "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                        )}>
+                            {mode === '3d' ? '3D' : '2D'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
+                            {selectedFurn ? 'Selected' : 'Ready'}
+                        </span>
+                        {showAiPanel && (
+                            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-100">
+                                Furn AI
+                            </span>
+                        )}
                     </div>
                     <button
                         type="button"
                         onClick={() => setMobileRightSidebarOpen(false)}
                         className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 xl:hidden"
                         aria-label="Close inspector panel"
-                    >
-                        <X className="h-4 w-4" />
-                    </button>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                    <span className={cn(
-                        "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
-                        mode === '3d'
-                            ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
-                            : "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
-                    )}>
-                        {mode === '3d' ? '3D Mode' : '2D Mode'}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
-                        {selectedFurn ? 'Item Selected' : 'Canvas Ready'}
-                    </span>
-                    {showAiPanel && (
-                        <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-100">
-                            Furn AI Active
-                        </span>
-                    )}
-                </div>
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                {showEmptyState && (
-                    <PanelSection
-                        eyebrow="Workspace"
-                        title="Nothing selected yet"
-                        description="Select a placed item to edit it, open Furn AI to extract a new asset, or switch to 3D mode to preview the scene."
-                        accent="cyan"
-                    >
-                        <div className="grid gap-3 text-sm text-slate-300">
-                            <div className="rounded-2xl border border-white/8 bg-slate-950/60 p-3">
-                                <p className="font-medium text-white">Quick flow</p>
-                                <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                                    Build the floor in 2D, calibrate scale, then move to 3D once the structure is stable.
-                                </p>
-                            </div>
-                            <div className="rounded-2xl border border-white/8 bg-slate-950/60 p-3">
-                                <p className="font-medium text-white">Inspector use</p>
-                                <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                                    This rail becomes active when you pick furniture, run AI segmentation, or load the 3D preview.
-                                </p>
-                            </div>
-                        </div>
-                    </PanelSection>
-                )}
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap gap-2">
+                        <span className={cn(
+                            "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+                            mode === '3d'
+                                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                : "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                        )}>
+                            {mode === '3d' ? '3D' : '2D'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
+                            {selectedFurn ? 'Selected' : 'Ready'}
+                        </span>
+                        {showAiPanel && (
+                            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-100">
+                                Furn AI
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setMobileRightSidebarOpen(false)}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 xl:hidden"
+                        aria-label="Close inspector panel"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+            </div>
 
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
                 {selectedFurn && (
                     <PanelSection
                         eyebrow="Selection"
@@ -632,45 +674,84 @@ export function RightSidebar() {
                     <PanelSection
                         eyebrow="Preview"
                         title="3D Stage"
-                        description="Use the canvas for navigation and keep a fallback test model ready while the main scene loads."
+                        description="Switch between the live editor canvas, the reference test GLB, and the generated floorplan GLB."
                         accent="cyan"
                     >
                         <div className="space-y-3">
-                            <button
-                                onClick={() => {
-                                    if (!testGLB) {
+                            <div className="grid grid-cols-1 gap-2">
+                                <button
+                                    onClick={() => {
                                         setMode('3d')
-                                    }
-                                    toggleTestGLB()
-                                }}
-                                className={cn(
-                                    "inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-semibold transition",
-                                    testGLB
-                                        ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
-                                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
-                                )}
-                            >
-                                <Box className="h-3.5 w-3.5" />
-                                {testGLB ? 'Hide Test GLB' : 'Load Test GLB'}
-                            </button>
+                                        setGlbPreviewSource('none')
+                                    }}
+                                    className={cn(
+                                        "inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-semibold transition",
+                                        glbPreviewSource === 'none' && mode === '3d'
+                                            ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                            : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                                    )}
+                                >
+                                    <RotateCw className="h-3.5 w-3.5" />
+                                    Live 3D Editor
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        setMode('3d')
+                                        setGlbPreviewSource(glbPreviewSource === 'test' ? 'none' : 'test')
+                                    }}
+                                    className={cn(
+                                        "inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-semibold transition",
+                                        glbPreviewSource === 'test'
+                                            ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                                            : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                                    )}
+                                >
+                                    <Box className="h-3.5 w-3.5" />
+                                    {glbPreviewSource === 'test' ? 'Hide Test GLB' : 'Load Test GLB'}
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        setMode('3d')
+                                        setGlbPreviewSource(glbPreviewSource === 'generated' ? 'none' : 'generated')
+                                    }}
+                                    disabled={!currentRunId}
+                                    className={cn(
+                                        "inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-semibold transition",
+                                        glbPreviewSource === 'generated'
+                                            ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                                            : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]",
+                                        !currentRunId && "cursor-not-allowed opacity-50"
+                                    )}
+                                >
+                                    <Upload className="h-3.5 w-3.5" />
+                                    {glbPreviewSource === 'generated' ? 'Hide Generated GLB' : 'Preview Generated GLB'}
+                                </button>
+                            </div>
 
                             <div className="rounded-[22px] border border-white/10 bg-slate-950/70 p-3">
                                 <p className="text-xs font-medium text-white">Preview state</p>
                                 <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                                    {mode === '3d'
-                                        ? 'The scene is in 3D. Use orbit controls directly in the stage and keep this panel for quick preview utilities.'
-                                        : 'You can preload a test GLB from here before switching your main project into 3D.'}
+                                    {glbPreviewSource === 'generated'
+                                        ? 'Generated floorplan GLB preview is active. This now uses the same overlay path and scene controls as the test asset.'
+                                        : glbPreviewSource === 'test'
+                                            ? 'Reference test GLB preview is active. Use it to compare camera feel, material handling, and scene framing.'
+                                            : mode === '3d'
+                                                ? 'Live BP3D editor is active. Switch to a GLB preview when you want to validate the exported mesh.'
+                                                : 'Enter 3D mode or load a GLB preview from here.'}
                                 </p>
+                                {!currentRunId && (
+                                    <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                                        Process a floorplan first to enable generated GLB preview.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </PanelSection>
                 )}
             </div>
-
-            {token && (
-                <div className="border-t border-white/10 bg-slate-950/40 pb-2 pt-2">
-                    <JobQueuePanel />
-                </div>
+                </>
             )}
         </aside>
     )

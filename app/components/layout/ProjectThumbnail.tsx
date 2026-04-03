@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import DOMPurify from 'dompurify'
 import { HardDrive, Image as ImageIcon, FileWarning } from 'lucide-react'
 
 interface ProjectThumbnailProps {
@@ -14,12 +16,15 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
     const [svgContent, setSvgContent] = useState<string | null>(null)
     const [imageUrl, setImageUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
-    const [_error, setError] = useState(false)
 
     useEffect(() => {
         let active = true
         let objectUrl: string | null = null
         const controller = new AbortController()
+        const abortReason =
+            typeof DOMException !== 'undefined'
+                ? new DOMException('Project thumbnail request cancelled during cleanup.', 'AbortError')
+                : 'Project thumbnail request cancelled during cleanup.'
 
         const loadThumbnail = async () => {
             // Always resolve loading state; token may arrive slightly later.
@@ -31,9 +36,12 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
             try {
                 // 1. Try to fetch SVG (Best quality, shows edits)
                 // If a run is still processing, the SVG might appear shortly after; retry a few times.
-                const shouldRetrySvg = status !== 'FAILED'
+                const isSubJob = runId.startsWith('click_') || runId.startsWith('sam_')
+                const shouldRetrySvg = status !== 'FAILED' && !isSubJob
                 const maxAttempts = shouldRetrySvg ? 4 : 1
                 for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    if (isSubJob) break
+
                     const svgRes = await fetch(`/api/runs/${runId}/svg?t=${Date.now()}_${attempt}`, {
                         cache: 'no-store',
                         signal: controller.signal,
@@ -91,12 +99,15 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
                 }
 
                 // If we get here, both failed
-                if (active) setError(true)
-
             } catch (e) {
-                if ((e as any)?.name === 'AbortError') return
+                if (
+                    controller.signal.aborted ||
+                    (e instanceof DOMException && e.name === 'AbortError') ||
+                    (typeof e === 'object' && e !== null && 'name' in e && (e as { name?: string }).name === 'AbortError')
+                ) {
+                    return
+                }
                 console.error("Thumbnail load failed", e)
-                if (active) setError(true)
             } finally {
                 if (active) setLoading(false)
             }
@@ -106,7 +117,9 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
 
         return () => {
             active = false
-            controller.abort()
+            if (!controller.signal.aborted) {
+                controller.abort(abortReason)
+            }
             if (objectUrl) URL.revokeObjectURL(objectUrl)
         }
     }, [runId, imagePath, token, status])
@@ -120,11 +133,14 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
     }
 
     if (svgContent) {
-        // Sanitize: strip <script> tags and event handlers to prevent XSS
-        const sanitized = svgContent
-            .replace(/<script[\s\S]*?<\/script>/gi, '')
-            .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
-            .replace(/<svg /, '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet" ')
+        const clean = DOMPurify.sanitize(svgContent, {
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['use'],
+            ADD_ATTR: ['viewBox', 'preserveAspectRatio', 'xmlns', 'xmlns:xlink'],
+            FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'embed', 'object'],
+            FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+        })
+        const sanitized = clean.replace(/<svg /, '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet" ')
         return (
             <div
                 className="w-full h-full bg-white/5 p-2 overflow-hidden flex items-center justify-center"
@@ -135,11 +151,16 @@ export function ProjectThumbnail({ runId, imagePath, token, status }: ProjectThu
 
     if (imageUrl) {
         return (
-            <img
-                src={imageUrl}
-                alt="Project Thumbnail"
-                className="w-full h-full object-cover"
-            />
+            <div className="relative h-full w-full">
+                <Image
+                    src={imageUrl}
+                    alt="Project Thumbnail"
+                    fill
+                    unoptimized
+                    sizes="240px"
+                    className="object-cover"
+                />
+            </div>
         )
     }
 

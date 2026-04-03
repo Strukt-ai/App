@@ -1,7 +1,7 @@
 'use client'
 
-import { useFloorplanStore } from '@/store/floorplanStore'
-import type { FurnItem } from '@/store/floorplanStore'
+import { DEFAULT_LEVEL_ID, useFloorplanStore } from '@/store/floorplanStore'
+import type { FloorLevel, FurnItem } from '@/store/floorplanStore'
 import { Box } from '@react-three/drei'
 import { memo, useMemo, useCallback } from 'react'
 import * as THREE from 'three'
@@ -43,10 +43,19 @@ const uniformHandleMaterial = new THREE.MeshStandardMaterial({
     emissiveIntensity: 0.5
 })
 
+const matchesLevel = (levelId: string | undefined, activeLevelId: string) => (
+    (levelId || DEFAULT_LEVEL_ID) === (activeLevelId || DEFAULT_LEVEL_ID)
+)
+
+const getLevelElevation = (levels: FloorLevel[], levelId?: string) => (
+    levels.find((level) => level.id === (levelId || DEFAULT_LEVEL_ID))?.elevation ?? 0
+)
+
 const FurnitureItem = memo(function FurnitureItem({
     item,
     isSelected,
     mode,
+    levelElevation,
     onClick,
     onPointerDown,
     onResizeDown
@@ -54,6 +63,7 @@ const FurnitureItem = memo(function FurnitureItem({
     item: FurnItem
     isSelected: boolean
     mode: '2d' | '3d'
+    levelElevation: number
     onClick: (e: any) => void
     onPointerDown: (e: any, id: string) => void
     onResizeDown: (e: any, id: string, subType: 'resize-width' | 'resize-depth' | 'resize-uniform') => void
@@ -68,7 +78,9 @@ const FurnitureItem = memo(function FurnitureItem({
     const height = item.type === 'door'
         ? 2.1
         : (item.dimensions.height || (item.type === 'window' ? 1.2 : 0.5))
-    const yPos = mode === '2d' && isOpening ? 3.1 : (item.position.y || 0)
+    const yPos = mode === '2d'
+        ? (isOpening ? 3.1 : (item.position.y || 0))
+        : levelElevation + (item.position.y || 0)
 
     // Memoize the edge geometry so it's only recreated when dimensions actually change
     const edgeGeo = useMemo(
@@ -189,6 +201,8 @@ const FurnitureItem = memo(function FurnitureItem({
 })
 
 export function FurnitureManager() {
+    const levels = useFloorplanStore(s => s.levels)
+    const activeLevelId = useFloorplanStore(s => s.activeLevelId)
     // Fix: Use individual selectors (like WallManager) to prevent re-renders on every store change
     const furniture = useFloorplanStore(s => s.furniture)
     const selectedId = useFloorplanStore(s => s.selectedId)
@@ -238,14 +252,21 @@ export function FurnitureManager() {
         startInteraction('resizing', id, { x: e.point.x, y: e.point.z }, subType)
     }, [mode, selectObject, startInteraction])
 
+    const visibleFurniture = useMemo(() => (
+        mode === '2d'
+            ? furniture.filter((item) => matchesLevel(item.levelId, activeLevelId))
+            : furniture
+    ), [activeLevelId, furniture, mode])
+
     return (
         <group>
-            {furniture.map((item) => (
+            {visibleFurniture.map((item) => (
                 <FurnitureItem
                     key={item.id}
                     item={item}
                     isSelected={selectedId === item.id}
                     mode={mode}
+                    levelElevation={getLevelElevation(levels, item.levelId)}
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={handlePointerDown}
                     onResizeDown={handleResizeDown}

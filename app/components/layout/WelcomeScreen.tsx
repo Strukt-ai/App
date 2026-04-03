@@ -17,7 +17,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
     const [termsAccepted, setTermsAccepted] = useState(false) // T&C State
     const [showTerms, setShowTerms] = useState(false) // Modal State
 
-    const { setToken, setUser, setProjectsModalOpen } = useFloorplanStore()
+    const { setToken, setUser } = useFloorplanStore()
 
     const handleStart = () => {
         setIsExiting(true)
@@ -30,15 +30,13 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
             return
         }
         if (credentialResponse.credential) {
-            const decoded: any = jwtDecode(credentialResponse.credential)
+            const decoded = jwtDecode<{ email?: string, name?: string, picture?: string }>(credentialResponse.credential)
             setToken(credentialResponse.credential)
             setUser({
                 email: decoded.email,
                 name: decoded.name,
                 picture: decoded.picture
             })
-            // Open Projects Modal immediately
-            setProjectsModalOpen(true)
             handleStart()
         }
     }
@@ -74,7 +72,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
                 </h1>
 
                 <p className="text-lg text-white/50 max-w-2xl mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 leading-relaxed">
-                    The world's first AI-powered platform for interior designers. Calculate costs, apply materials, and visualize in seconds.
+                    The world&apos;s first AI-powered platform for interior designers. Calculate costs, apply materials, and visualize in seconds.
                 </p>
 
                 {/* Feature Grid (Mini) */}

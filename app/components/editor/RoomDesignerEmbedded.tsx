@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState, Suspense } from 'react'
 import Script from 'next/script'
 import dynamic from 'next/dynamic'
-import { useFloorplanStore } from '@/store/floorplanStore'
+import { DEFAULT_LEVEL_ID, useFloorplanStore } from '@/store/floorplanStore'
 import { FurnAIAssetsManager } from '@/components/editor/FurnAIAssetsManager'
 
 type Bp3dInstance = any
 
-const GLBOverlay = dynamic(() => import('@/components/editor/GLBOverlay').then(m => ({ default: m.GLBOverlay })), {
+const GLBOverlay = dynamic(() => import('@/components/editor/GLBOverlay').then(m => m.GLBOverlay), {
   ssr: false,
   loading: () => null
 })
@@ -138,9 +138,18 @@ const normalizeModelUrl = (url?: string) => {
   return `/api/proxy-glb?url=${encodeURIComponent(url)}`
 }
 
+const matchesLevel = (levelId: string | undefined, activeLevelId: string) => (
+  (levelId || DEFAULT_LEVEL_ID) === (activeLevelId || DEFAULT_LEVEL_ID)
+)
+
+const filterByLevel = <T extends { levelId?: string }>(items: T[], activeLevelId: string) => (
+  items.filter((item) => matchesLevel(item.levelId, activeLevelId))
+)
+
 export function RoomDesignerEmbedded() {
   const mode = useFloorplanStore(s => s.mode)
-  const testGLB = useFloorplanStore(s => s.testGLB)
+  const glbPreviewSource = useFloorplanStore(s => s.glbPreviewSource)
+  const activeLevelId = useFloorplanStore(s => s.activeLevelId)
   const activeTool = useFloorplanStore(s => s.activeTool)
   const selectedId = useFloorplanStore(s => s.selectedId)
   const walls = useFloorplanStore(s => s.walls)
@@ -193,6 +202,9 @@ export function RoomDesignerEmbedded() {
 
     const bp = bpRef.current
     const prev = useFloorplanStore.getState()
+    const prevActiveWalls = filterByLevel(prev.walls, prev.activeLevelId)
+    const prevActiveRooms = filterByLevel(prev.rooms, prev.activeLevelId)
+    const prevActiveFurniture = filterByLevel(prev.furniture, prev.activeLevelId)
     const nextWalls = [] as typeof walls
     const nextRooms = [] as typeof rooms
     const nextFurniture = [] as typeof furniture
@@ -209,7 +221,7 @@ export function RoomDesignerEmbedded() {
       let matchedId: string | null = null
       let matchedPrev = null as any
       let best = Infinity
-      prev.walls.forEach(pw => {
+      prevActiveWalls.forEach(pw => {
         const d1 = dist(start, pw.start) + dist(end, pw.end)
         const d2 = dist(start, pw.end) + dist(end, pw.start)
         const d = Math.min(d1, d2)
@@ -235,6 +247,7 @@ export function RoomDesignerEmbedded() {
         end,
         thickness: cmToM(w.thickness || 15),
         height: cmToM(w.height || 250),
+        levelId: matchedPrev?.levelId || prev.activeLevelId,
         textureDataUrl: textureUrl || matchedPrev?.textureDataUrl,
         textureTileWidthM: matchedPrev?.textureTileWidthM,
         textureTileHeightM: matchedPrev?.textureTileHeightM,
@@ -254,7 +267,7 @@ export function RoomDesignerEmbedded() {
       let matchedId: string | null = null
       let matchedPrev = null as any
       let best = Infinity
-      prev.rooms.forEach(pr => {
+      prevActiveRooms.forEach(pr => {
         const c = pr.center || polygonCenter(pr.points)
         const d = dist(center, c)
         const da = Math.abs(Math.abs(polygonArea(pr.points)) - area)
@@ -278,6 +291,7 @@ export function RoomDesignerEmbedded() {
       nextRooms.push({
         id,
         name: matchedPrev?.name || `Room ${idx + 1}`,
+        levelId: matchedPrev?.levelId || prev.activeLevelId,
         points: pts,
         color: matchedPrev?.color || '#ddd8d0',
         center,
@@ -296,11 +310,12 @@ export function RoomDesignerEmbedded() {
       const id = existingId || genId()
       if (!meta.storeId) meta.storeId = id
 
-      const prevItem = prev.furniture.find(f => f.id === id)
+      const prevItem = prevActiveFurniture.find(f => f.id === id)
 
       nextFurniture.push({
         id,
         type: typeFromName || prevItem?.type || (meta.modelUrl ? 'imported' : 'furniture'),
+        levelId: prevItem?.levelId || prev.activeLevelId,
         position: {
           x: cmToM(it.position.x),
           y: cmToM(it.position.y),
@@ -335,13 +350,16 @@ export function RoomDesignerEmbedded() {
 
     const bp = bpRef.current
     const store = useFloorplanStore.getState()
+    const levelWalls = filterByLevel(store.walls, store.activeLevelId)
+    const levelRooms = filterByLevel(store.rooms, store.activeLevelId)
+    const levelFurniture = filterByLevel(store.furniture, store.activeLevelId)
 
     // Configure global wall thickness/height (cm)
     try {
       const BP3D = (window as any).BP3D
       if (BP3D?.Core?.Configuration) {
-        const avgThickness = store.walls.length > 0
-          ? store.walls.reduce((a, w) => a + (w.thickness || 0.15), 0) / store.walls.length
+        const avgThickness = levelWalls.length > 0
+          ? levelWalls.reduce((a, w) => a + (w.thickness || 0.15), 0) / levelWalls.length
           : 0.15
         BP3D.Core.Configuration.setValue(BP3D.Core.configWallThickness, mToCm(avgThickness))
         BP3D.Core.Configuration.setValue(BP3D.Core.configWallHeight, mToCm(2.5))
@@ -366,7 +384,7 @@ export function RoomDesignerEmbedded() {
       return id
     }
 
-    const fpWalls = store.walls.map(w => {
+    const fpWalls = levelWalls.map(w => {
       const c1 = getCornerId(w.start)
       const c2 = getCornerId(w.end)
       return {
@@ -393,7 +411,7 @@ export function RoomDesignerEmbedded() {
 
     const bpWalls = bp.model.floorplan.getWalls()
     bpWalls.forEach((bw: any) => {
-      const id = mapWallToStoreId(bw, store.walls)
+      const id = mapWallToStoreId(bw, levelWalls)
       if (id && bw?.id) {
         wallMapRef.current.set(bw.id, id)
       }
@@ -406,7 +424,7 @@ export function RoomDesignerEmbedded() {
       const center = polygonCenter(pts)
       let bestId: string | null = null
       let bestDist = Infinity
-      store.rooms.forEach(rm => {
+      levelRooms.forEach(rm => {
         const c = rm.center || polygonCenter(rm.points)
         const d = dist(center, c)
         if (d < bestDist) {
@@ -423,7 +441,7 @@ export function RoomDesignerEmbedded() {
     bpWalls.forEach((bw: any) => {
       const start = { x: cmToM(bw.getStartX()), y: cmToM(bw.getStartY()) }
       const end = { x: cmToM(bw.getEndX()), y: cmToM(bw.getEndY()) }
-      const match = store.walls.find(w => {
+      const match = levelWalls.find(w => {
         const d1 = dist(start, w.start) + dist(end, w.end)
         const d2 = dist(start, w.end) + dist(end, w.start)
         return Math.min(d1, d2) < 0.05
@@ -438,7 +456,7 @@ export function RoomDesignerEmbedded() {
     const scene = bp.model.scene
     const THREE = (window as any).THREE
     if (scene && THREE) {
-      store.furniture.forEach(f => {
+      levelFurniture.forEach(f => {
         const opening = f.type === 'door' || f.type === 'window'
         const rawUrl = f.modelUrl || (f.type === 'door' ? DEFAULT_DOOR_MODEL : f.type === 'window' ? DEFAULT_WINDOW_MODEL : '')
         const modelUrl = normalizeModelUrl(rawUrl)
@@ -473,7 +491,7 @@ export function RoomDesignerEmbedded() {
       const center = polygonCenter(pts)
       let best: any = null
       let bestDist = Infinity
-      store.rooms.forEach(sr => {
+      levelRooms.forEach(sr => {
         const c = sr.center || polygonCenter(sr.points)
         const d = dist(center, c)
         if (d < bestDist) {
@@ -619,7 +637,8 @@ export function RoomDesignerEmbedded() {
           syncFromBp3d()
         }
 
-        const storeWalls = useFloorplanStore.getState().walls
+        const storeState = useFloorplanStore.getState()
+        const storeWalls = filterByLevel(storeState.walls, storeState.activeLevelId)
         console.log('store walls:', storeWalls)
         let bestId: string | null = null
         let best = Infinity
@@ -679,7 +698,8 @@ export function RoomDesignerEmbedded() {
 
         if (!start || !end) return
 
-        const storeWalls = useFloorplanStore.getState().walls
+        const storeState = useFloorplanStore.getState()
+        const storeWalls = filterByLevel(storeState.walls, storeState.activeLevelId)
         let bestId: string | null = null
         let best = Infinity
         storeWalls.forEach(w => {
@@ -730,7 +750,8 @@ export function RoomDesignerEmbedded() {
 
         if (!start || !end) return
 
-        const storeWalls = useFloorplanStore.getState().walls
+        const storeState = useFloorplanStore.getState()
+        const storeWalls = filterByLevel(storeState.walls, storeState.activeLevelId)
         let bestId: string | null = null
         let best = Infinity
         storeWalls.forEach(w => {
@@ -766,7 +787,8 @@ export function RoomDesignerEmbedded() {
         const pts = (room?.corners || []).map((c: any) => ({ x: cmToM(c.x), y: cmToM(c.y) }))
         if (pts.length < 3) return
         const center = polygonCenter(pts)
-        const storeRooms = useFloorplanStore.getState().rooms
+        const storeState = useFloorplanStore.getState()
+        const storeRooms = filterByLevel(storeState.rooms, storeState.activeLevelId)
         let bestId: string | null = null
         let bestDist = Infinity
         storeRooms.forEach(rm => {
@@ -874,7 +896,7 @@ export function RoomDesignerEmbedded() {
         bpRef.current?.three?.centerCamera?.()
       })
     }
-  }, [bpReady, mode, walls, rooms, furniture])
+  }, [bpReady, mode, walls, rooms, furniture, activeLevelId])
 
   // Keep BP3D selection in sync with store selection
   useEffect(() => {
@@ -899,7 +921,7 @@ export function RoomDesignerEmbedded() {
 
     const ensureStoreSync = () => {
       const s = useFloorplanStore.getState()
-      if (s.walls.length === 0 && bpRef.current?.model?.floorplan?.getWalls?.()?.length) {
+      if (filterByLevel(s.walls, s.activeLevelId).length === 0 && bpRef.current?.model?.floorplan?.getWalls?.()?.length) {
         syncFromBp3d()
       }
     }
@@ -919,8 +941,9 @@ export function RoomDesignerEmbedded() {
       // Prefer active wall if available (floorplanner hover state)
       const fpWall = fp.activeWall || fp.floorplan?.overlappedWall?.(mouseXcm, mouseYcm)
       if (fpWall) {
+        const storeWalls = filterByLevel(store.walls, store.activeLevelId)
         const mapped = wallMapRef.current.get(fpWall.id)
-        const id = mapped || mapWallToStoreId(fpWall, store.walls)
+        const id = mapped || mapWallToStoreId(fpWall, storeWalls)
         if (id) {
           selectObject(id)
           return
@@ -931,7 +954,7 @@ export function RoomDesignerEmbedded() {
       const point = { x: cmToM(mouseXcm), y: cmToM(mouseYcm) }
       let nearestWallId: string | null = null
       let nearestWallDist = Infinity
-      store.walls.forEach(w => {
+      filterByLevel(store.walls, store.activeLevelId).forEach(w => {
         const d = distPointToSegment(point, w.start, w.end)
         if (d < nearestWallDist) {
           nearestWallDist = d
@@ -944,7 +967,7 @@ export function RoomDesignerEmbedded() {
       }
 
       // Rooms (point-in-polygon)
-      const room = store.rooms.find(r => pointInPolygon(point, r.points))
+      const room = filterByLevel(store.rooms, store.activeLevelId).find(r => pointInPolygon(point, r.points))
       if (room) {
         selectObject(room.id)
         return
@@ -965,7 +988,7 @@ export function RoomDesignerEmbedded() {
       const wall = fp.activeWall
       if (wall) {
         const mapped = wallMapRef.current.get(wall.id)
-        pickedWallId = mapped || mapWallToStoreId(wall, store.walls)
+        pickedWallId = mapped || mapWallToStoreId(wall, filterByLevel(store.walls, store.activeLevelId))
       }
 
       // Fallback: nearest wall to cursor (for some imported template cases)
@@ -978,7 +1001,7 @@ export function RoomDesignerEmbedded() {
 
           let nearestWallId: string | null = null
           let nearestWallDist = Infinity
-          store.walls.forEach(w => {
+          filterByLevel(store.walls, store.activeLevelId).forEach(w => {
             const d = distPointToSegment(point, w.start, w.end)
             if (d < nearestWallDist) {
               nearestWallDist = d
@@ -1107,7 +1130,7 @@ export function RoomDesignerEmbedded() {
         onLoad={() => setScriptsReady(true)}
       />
 
-      {testGLB && mode === '3d' && (
+      {glbPreviewSource !== 'none' && mode === '3d' && (
         <Suspense fallback={null}>
           <GLBOverlay />
         </Suspense>

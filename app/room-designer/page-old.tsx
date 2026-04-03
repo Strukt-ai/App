@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Script from 'next/script';
+import { UUID, WallDefinition, RenderEngineType, FurnitureDefinition, RoomDefinition, HomeDefinition, CommandType } from '@/lib/architecture/types';
+import { useRenderingEngine } from '@/lib/architecture/useRenderingEngine';
+import { StorageManager } from '@/lib/architecture/storage';
 
 const CATALOG = [
   { catalogId: 'chair', name: 'Chair', width: 1.0, depth: 1.0, height: 1.0, color: '#1f77b4' },

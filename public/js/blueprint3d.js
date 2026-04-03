@@ -3605,6 +3605,10 @@ var BP3D;
             }
             // returns the first intersection object
             this.itemIntersection = function (vec2, item) {
+                if (!item || typeof item.customIntersectionPlanes !== 'function') {
+                    var fallbackIntersections = this.getIntersections(vec2, plane);
+                    return fallbackIntersections.length > 0 ? fallbackIntersections[0] : null;
+                }
                 var customIntersections = item.customIntersectionPlanes();
                 var intersections = null;
                 if (customIntersections && customIntersections.length > 0) {

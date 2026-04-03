@@ -86,8 +86,8 @@ export function FurnAIQueueModal({ isOpen, onClose }: FurnAIQueueModalProps) {
                                 <AlertTriangle className="w-6 h-6 text-amber-500" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-foreground">Workers Offline</h3>
-                                <p className="text-xs text-amber-500/80 font-medium">HIGH DEMAND • SERVER BUSY</p>
+                                <h3 className="text-lg font-bold text-foreground">Servers Busy</h3>
+                                <p className="text-xs text-amber-500/80 font-medium">YOUR PROJECT IS SAVED • WE'LL NOTIFY YOU</p>
                             </div>
                         </div>
 
@@ -100,10 +100,9 @@ export function FurnAIQueueModal({ isOpen, onClose }: FurnAIQueueModalProps) {
                         ) : (
                             <>
                                 <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
-                                    We are currently running short on compute power. Don't worry, your work isn't lost.
+                                    Our servers are currently at capacity. Don't worry — your project is safely saved.
                                     <br /><br />
-                                    Enter your email below. We will place you in the <strong>Priority Queue</strong> and
-                                    email you the <span className="text-foreground font-semibold">.blend file</span> as soon as a worker becomes available.
+                                    Enter your email below. We'll automatically process your project when a server becomes available and <span className="text-foreground font-semibold">email you when it's ready</span>.
                                 </p>
 
                                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">

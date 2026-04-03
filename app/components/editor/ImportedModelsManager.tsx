@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { useFloorplanStore } from '@/store/floorplanStore'
+import { DEFAULT_LEVEL_ID, useFloorplanStore } from '@/store/floorplanStore'
 import { Box3, Vector3 } from 'three'
+
+const getLevelElevation = (levels: { id: string; elevation: number }[], levelId?: string) => (
+    levels.find((level) => level.id === (levelId || DEFAULT_LEVEL_ID))?.elevation ?? 0
+)
 
 function ImportedInstance({
     url, x, y, z, rotY,
@@ -24,7 +28,6 @@ function ImportedInstance({
 
         const nativeW = Math.max(size.x, 0.001)
         const nativeD = Math.max(size.z, 0.001)
-        const nativeH = Math.max(size.y, 0.001)
 
         // Calculate scale factors from 2D dimensions
         const sx = targetWidth / nativeW
@@ -40,6 +43,7 @@ function ImportedInstance({
 
 export function ImportedModelsManager() {
     const mode = useFloorplanStore(s => s.mode)
+    const levels = useFloorplanStore(s => s.levels)
     const currentRunId = useFloorplanStore(s => s.currentRunId)
     const token = useFloorplanStore(s => s.token)
     const furniture = useFloorplanStore(s => s.furniture)
@@ -137,7 +141,7 @@ export function ImportedModelsManager() {
                         key={`${it.id}-${it.dimensions.width}-${it.dimensions.depth}`}
                         url={url}
                         x={it.position.x}
-                        y={it.position.y || 0}
+                        y={getLevelElevation(levels, it.levelId) + (it.position.y || 0)}
                         z={it.position.z}
                         rotY={it.rotation?.y || 0}
                         targetWidth={it.dimensions.width || 1}

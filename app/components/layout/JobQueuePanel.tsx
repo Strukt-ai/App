@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, Loader2, CheckCircle2, XCircle, Clock, RefreshCw, Box, Plus, Zap } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
@@ -78,16 +78,16 @@ function assetName(f: GlbFile): string {
     return f.name.replace(/^furn_/, '').replace(/\.glb$/, '') || f.name
 }
 
-export function JobQueuePanel() {
+export function JobQueuePanel({ variant = 'panel' }: { variant?: 'panel' | 'popover' }) {
     const { token, importFurnAiModel } = useFloorplanStore()
     const [jobs, setJobs] = useState<Job[]>([])
     const [s3Assets, setS3Assets] = useState<S3Asset[]>([])
     const [loading, setLoading] = useState(false)
-    const [_tick, setTick] = useState(0)
+    const [, setTick] = useState(0)
     const [loadedIds, setLoadedIds] = useState<Set<string>>(new Set())
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    const fetchJobs = async () => {
+    const fetchJobs = useCallback(async () => {
         if (!token) return
         try {
             const res = await fetch('/api/sam3d/my-jobs', {
@@ -95,9 +95,9 @@ export function JobQueuePanel() {
             })
             if (res.ok) setJobs(await res.json())
         } catch { }
-    }
+    }, [token])
 
-    const fetchAssets = async () => {
+    const fetchAssets = useCallback(async () => {
         if (!token) return
         try {
             const res = await fetch('/api/sam3d/my-assets', {
@@ -105,12 +105,17 @@ export function JobQueuePanel() {
             })
             if (res.ok) setS3Assets(await res.json())
         } catch { }
-    }
+    }, [token])
 
     useEffect(() => {
-        setLoading(true)
-        Promise.all([fetchJobs(), fetchAssets()]).finally(() => setLoading(false))
-    }, [token])
+        const load = async () => {
+            setLoading(true)
+            await Promise.all([fetchJobs(), fetchAssets()])
+            setLoading(false)
+        }
+
+        void load()
+    }, [fetchAssets, fetchJobs])
 
     useEffect(() => {
         const hasActive = jobs.some(j => j.status === 'PENDING' || j.status === 'PROCESSING')
@@ -121,7 +126,7 @@ export function JobQueuePanel() {
             }, 8000)
         }
         return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-    }, [jobs, token])
+    }, [fetchJobs, jobs])
 
     // Tick for live ETA countdown
     useEffect(() => {
@@ -136,9 +141,13 @@ export function JobQueuePanel() {
             j.status === 'COMPLETED' &&
             prevJobsRef.current.some(p => p.job_id === j.job_id && p.status !== 'COMPLETED')
         )
-        if (newlyCompleted.length > 0) fetchAssets()
+        if (newlyCompleted.length > 0) {
+            window.setTimeout(() => {
+                void fetchAssets()
+            }, 0)
+        }
         prevJobsRef.current = jobs
-    }, [jobs])
+    }, [fetchAssets, jobs])
 
     const handleLoadIntoScene = (jobId: string, name: string, url: string, uid: string) => {
         importFurnAiModel({
@@ -179,27 +188,44 @@ export function JobQueuePanel() {
     }
 
     const ec2 = getEc2Schedule()
+    const isPopover = variant === 'popover'
 
     return (
-        <div className="border-t border-border mt-2">
-            <div className="flex items-center justify-between px-4 py-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    3D Job Queue
-                </h3>
+        <div className={cn(
+            isPopover
+                ? "w-[360px] max-w-[min(92vw,360px)] rounded-[24px] border border-white/10 bg-slate-950/90 p-3 shadow-[0_25px_70px_rgba(2,6,23,0.55)] backdrop-blur-xl"
+                : "mt-2 border-t border-border"
+        )}>
+            <div className={cn(
+                "flex items-center justify-between",
+                isPopover ? "px-1 pb-2" : "px-4 py-2"
+            )}>
+                {!isPopover && (
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        3D Job Queue
+                    </h3>
+                )}
+                {isPopover && (
+                    <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-cyan-400" />
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">Processing</p>
+                    </div>
+                )}
                 <button
                     onClick={() => { setLoading(true); Promise.all([fetchJobs(), fetchAssets()]).finally(() => setLoading(false)) }}
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground transition-colors"
+                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary"
                 >
-                    <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
+                    <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
                 </button>
             </div>
 
             {/* EC2 Schedule Banner */}
             <div className={cn(
-                "mx-3 mb-2 px-3 py-1.5 rounded-md flex items-center gap-2 text-[10px] font-medium",
+                "mb-2 flex items-center gap-2 rounded-md px-3 py-1.5 text-[10px] font-medium",
                 ec2.isActive
                     ? "bg-green-500/10 border border-green-500/20 text-green-400"
-                    : "bg-secondary/40 border border-border/50 text-muted-foreground"
+                    : "bg-secondary/40 border border-border/50 text-muted-foreground",
+                isPopover ? "mx-0" : "mx-3"
             )}>
                 <Zap className={cn("w-3 h-3", ec2.isActive && "text-green-400")} />
                 {ec2.label}
@@ -211,7 +237,10 @@ export function JobQueuePanel() {
                 </p>
             )}
 
-            <div className="px-3 pb-3 space-y-2 max-h-[420px] overflow-y-auto">
+            <div className={cn(
+                "space-y-2 overflow-y-auto",
+                isPopover ? "max-h-[420px] px-0 pb-0" : "max-h-[420px] px-3 pb-3"
+            )}>
 
                 {/* Active jobs */}
                 {activeJobs.map(job => {
@@ -286,16 +315,16 @@ export function JobQueuePanel() {
                                             <button
                                                 onClick={() => handleLoadIntoScene(asset.jobId, asset.name, asset.url, asset.uid)}
                                                 className={cn(
-                                                    'flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors',
+                                                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors',
                                                     loaded
-                                                        ? 'bg-green-600/20 text-green-400'
-                                                        : 'bg-primary/10 hover:bg-primary/20 text-primary'
+                                                        ? 'bg-green-600/20 text-green-400 border border-green-500/30'
+                                                        : 'bg-primary hover:bg-primary/90 text-primary-foreground'
                                                 )}
                                             >
                                                 {loaded
-                                                    ? <CheckCircle2 className="w-2.5 h-2.5" />
-                                                    : <Plus className="w-2.5 h-2.5" />}
-                                                {loaded ? 'Added' : 'Add to Scene'}
+                                                    ? <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    : <Plus className="w-3.5 h-3.5" />}
+                                                {loaded ? 'Added' : 'Add to Floorplan'}
                                             </button>
                                             <a
                                                 href={asset.url}

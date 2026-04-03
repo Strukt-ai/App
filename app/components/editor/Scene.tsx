@@ -1,9 +1,9 @@
 'use client'
 
-import { useRef, useEffect, Suspense, useState } from 'react'
+import { useRef, useEffect, Suspense, useState, useMemo } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping, MOUSE } from 'three'
-import { Canvas, useThree, useLoader } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows, Sky } from '@react-three/drei'
+import { Canvas, useThree, useLoader, useFrame } from '@react-three/fiber'
+import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows, Sky, PointerLockControls } from '@react-three/drei'
 import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast, N8AO } from '@react-three/postprocessing'
 import { ToneMappingMode, BlendFunction } from 'postprocessing'
 
@@ -20,6 +20,10 @@ import { FloatingMenu } from './FloatingMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { cn } from '@/lib/utils'
 import { FloorplanOverlay } from './FloorplanOverlay'
+
+type SceneProps = {
+    embedOverlays?: boolean
+}
 
 const _EMPTY_TEX_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO4G8m8AAAAASUVORK5CYII='
 
@@ -47,8 +51,120 @@ function DropResolver() {
     return null
 }
 
+function FPVController() {
+    const mode = useFloorplanStore(s => s.mode)
+    const cameraMode = useFloorplanStore(s => s.cameraMode)
+    const activeLevelId = useFloorplanStore(s => s.activeLevelId)
+    const levels = useFloorplanStore(s => s.levels)
+    const walls = useFloorplanStore(s => s.walls)
+    const rooms = useFloorplanStore(s => s.rooms)
+    const { camera } = useThree()
+    const controlsRef = useRef<any>(null)
+    const moveStateRef = useRef({ forward: false, backward: false, left: false, right: false })
+
+    const activeLevelElevation = useMemo(() => (
+        levels.find((level) => level.id === activeLevelId)?.elevation ?? 0
+    ), [activeLevelId, levels])
+
+    const startPosition = useMemo(() => {
+        const levelWalls = walls.filter((wall) => (wall.levelId || 'level-ground') === activeLevelId)
+        const levelRooms = rooms.filter((room) => (room.levelId || 'level-ground') === activeLevelId)
+        const points = [
+            ...levelWalls.flatMap((wall) => [wall.start, wall.end]),
+            ...levelRooms.flatMap((room) => room.points),
+        ]
+
+        if (points.length === 0) {
+            return new Vector3(0, activeLevelElevation + 1.65, 4)
+        }
+
+        const xs = points.map((point) => point.x)
+        const ys = points.map((point) => point.y)
+        const centerX = (Math.min(...xs) + Math.max(...xs)) / 2
+        const centerZ = (Math.min(...ys) + Math.max(...ys)) / 2
+        const depth = Math.max(3, (Math.max(...ys) - Math.min(...ys)) / 2)
+        return new Vector3(centerX, activeLevelElevation + 1.65, centerZ + depth)
+    }, [activeLevelElevation, activeLevelId, rooms, walls])
+
+    useEffect(() => {
+        if (mode !== '3d' || cameraMode !== 'fpv') {
+            if (document.pointerLockElement) {
+                document.exitPointerLock()
+            }
+            return
+        }
+
+        camera.position.copy(startPosition)
+        camera.lookAt(startPosition.x, activeLevelElevation + 1.65, startPosition.z - 2)
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const key = event.key.toLowerCase()
+            if (key === 'w') moveStateRef.current.forward = true
+            if (key === 's') moveStateRef.current.backward = true
+            if (key === 'a') moveStateRef.current.left = true
+            if (key === 'd') moveStateRef.current.right = true
+        }
+
+        const handleKeyUp = (event: KeyboardEvent) => {
+            const key = event.key.toLowerCase()
+            if (key === 'w') moveStateRef.current.forward = false
+            if (key === 's') moveStateRef.current.backward = false
+            if (key === 'a') moveStateRef.current.left = false
+            if (key === 'd') moveStateRef.current.right = false
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        window.addEventListener('keyup', handleKeyUp)
+
+        return () => {
+            moveStateRef.current = { forward: false, backward: false, left: false, right: false }
+            if (document.pointerLockElement) {
+                document.exitPointerLock()
+            }
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+        }
+    }, [activeLevelElevation, camera, cameraMode, mode, startPosition])
+
+    useFrame((_, delta) => {
+        if (mode !== '3d' || cameraMode !== 'fpv') return
+
+        const direction = new Vector3()
+        camera.getWorldDirection(direction)
+        direction.y = 0
+        direction.normalize()
+
+        const right = new Vector3().crossVectors(new Vector3(0, 1, 0), direction).normalize()
+        const movement = new Vector3()
+
+        if (moveStateRef.current.forward) movement.add(direction)
+        if (moveStateRef.current.backward) movement.sub(direction)
+        if (moveStateRef.current.left) movement.sub(right)
+        if (moveStateRef.current.right) movement.add(right)
+
+        if (movement.lengthSq() === 0) return
+
+        movement.normalize().multiplyScalar(3.2 * delta)
+        const nextPosition = camera.position.clone().add(movement)
+        nextPosition.y = activeLevelElevation + 1.65
+
+        const controls = controlsRef.current
+        const object = controls?.getObject?.()
+        if (object) {
+            object.position.copy(nextPosition)
+        }
+        camera.position.copy(nextPosition)
+    })
+
+    if (mode !== '3d' || cameraMode !== 'fpv') return null
+
+    return <PointerLockControls ref={controlsRef} selector="#fpv-lock-surface" />
+}
+
 function SvgOverlayPlane() {
     const mode = useFloorplanStore(s => s.mode)
+    const activeLevelId = useFloorplanStore(s => s.activeLevelId)
+    const levels = useFloorplanStore(s => s.levels)
     const currentRunId = useFloorplanStore(s => s.currentRunId)
     const token = useFloorplanStore(s => s.token)
     const calibrationFactor = useFloorplanStore(s => s.calibrationFactor)
@@ -120,6 +236,7 @@ function SvgOverlayPlane() {
     }, [mode, currentRunId, token])
 
     const texture = useLoader(TextureLoader, blobUrl || _EMPTY_TEX_DATA_URL)
+    const levelElevation = levels.find((level) => level.id === activeLevelId)?.elevation ?? 0
 
     if (mode !== '3d') return null
     if (!blobUrl || !vb) return null
@@ -130,7 +247,7 @@ function SvgOverlayPlane() {
     const height = imageWorldHeight != null ? imageWorldHeight : (imageDimensions?.height || vb.h) * factor
 
     return (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} renderOrder={-1}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, levelElevation - 0.02, 0]} renderOrder={-1}>
             <planeGeometry args={[width, height]} />
             <meshBasicMaterial map={texture} transparent opacity={0.25} depthWrite={false} toneMapped={false} />
         </mesh>
@@ -274,11 +391,12 @@ function InteractionLayer() {
 // --- Scene Content Component ---
 function SceneContent() {
     const mode = useFloorplanStore(s => s.mode)
+    const cameraMode = useFloorplanStore(s => s.cameraMode)
     const lightingPreset = useFloorplanStore(s => s.lightingPreset)
 
     // Lighting presets — tuned for clean architectural rendering
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6, fogColor: '#d4dce8', fogNear: 40, fogFar: 120, skyTurbidity: 8, skyRayleigh: 1.5, sunPos: [10, 20, 8] as [number, number, number] },
+        day: { env: 'apartment', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6, fogColor: '#d4dce8', fogNear: 40, fogFar: 120, skyTurbidity: 8, skyRayleigh: 1.5, sunPos: [10, 20, 8] as [number, number, number] },
         night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2, fogColor: '#1a1e2e', fogNear: 25, fogFar: 80, skyTurbidity: 20, skyRayleigh: 0.1, sunPos: [-5, -1, -5] as [number, number, number] },
         studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6, fogColor: '#e8e8ee', fogNear: 40, fogFar: 120, skyTurbidity: 10, skyRayleigh: 1.0, sunPos: [5, 15, 10] as [number, number, number] },
         sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35, fogColor: '#e8c8a0', fogNear: 30, fogFar: 100, skyTurbidity: 4, skyRayleigh: 2.5, sunPos: [15, 3, 8] as [number, number, number] }
@@ -288,13 +406,8 @@ function SceneContent() {
     // Determine Environment Preset (drei types: apartment, city, park, lobby, etc.)
     // We map our custom names to closest available Drei presets
     const getEnvPreset = (name: string) => {
-        switch (name) {
-            case 'day': return 'apartment'
-            case 'night': return 'city' // Night is tricky, city might be safest dark-ish or just low intensity
-            case 'studio': return 'studio'
-            case 'sunset': return 'sunset'
-            default: return 'apartment'
-        }
+        const config = lightingConfigs[name as keyof typeof lightingConfigs]
+        return config?.env || 'apartment'
     }
 
     return (
@@ -325,7 +438,9 @@ function SceneContent() {
             <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
 
             {/* HDRI Environment — apartment preset for best interior reflections */}
-            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.3} environmentIntensity={0.8} />
+            {mode === '3d' && (
+                <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.3} environmentIntensity={0.8} />
+            )}
 
             {/* Key Light — soft directional from upper right */}
             <directionalLight
@@ -382,15 +497,19 @@ function SceneContent() {
                 <OrthographicCamera makeDefault position={[0, 10, 0]} zoom={40} />
             )}
 
-            <OrbitControls
-                makeDefault
-                enableRotate={mode === '3d'}
-                enableZoom={true}
-                enablePan={true}
-                enableDamping={false} // Fix: Instant camera jumps for "fit view"
-                maxPolarAngle={mode === '3d' ? Math.PI / 2 : 0}
-                mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: null as any, RIGHT: MOUSE.PAN }}
-            />
+            {cameraMode === 'fpv' && mode === '3d' ? (
+                <FPVController />
+            ) : (
+                <OrbitControls
+                    makeDefault
+                    enableRotate={mode === '3d'}
+                    enableZoom={true}
+                    enablePan={true}
+                    enableDamping={false} // Fix: Instant camera jumps for "fit view"
+                    maxPolarAngle={mode === '3d' ? Math.PI / 2 : 0}
+                    mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: null as any, RIGHT: MOUSE.PAN }}
+                />
+            )}
 
             {mode === '2d' && (
                 <Grid
@@ -457,12 +576,15 @@ function SceneContent() {
 function BackgroundPlane() {
     const uploadedImage = useFloorplanStore(s => s.uploadedImage)
     const showBackground = useFloorplanStore(s => s.showBackground)
+    const activeLevelId = useFloorplanStore(s => s.activeLevelId)
+    const levels = useFloorplanStore(s => s.levels)
     const imageDimensions = useFloorplanStore(s => s.imageDimensions)
     const calibrationFactor = useFloorplanStore(s => s.calibrationFactor)
     const imageWorldWidth = useFloorplanStore(s => s.imageWorldWidth)
     const imageWorldHeight = useFloorplanStore(s => s.imageWorldHeight)
 
     const texture = useLoader(TextureLoader, uploadedImage || '')
+    const levelElevation = levels.find((level) => level.id === activeLevelId)?.elevation ?? 0
 
     if (!uploadedImage || !showBackground || !imageDimensions) return null
 
@@ -476,7 +598,7 @@ function BackgroundPlane() {
         <mesh
             name="BackgroundPlane"
             rotation={[-Math.PI / 2, 0, 0]}
-            position={[0, -0.01, 0]} // On top of Ground
+            position={[0, levelElevation - 0.01, 0]} // On top of Ground / active level
             receiveShadow
             renderOrder={1} // Render before walls but after ground
         >
@@ -493,8 +615,10 @@ function BackgroundPlane() {
 }
 
 // --- Main Component ---
-export function Scene() {
+export function Scene({ embedOverlays = true }: SceneProps) {
     const activeTool = useFloorplanStore(s => s.activeTool)
+    const mode = useFloorplanStore(s => s.mode)
+    const cameraMode = useFloorplanStore(s => s.cameraMode)
     const handleDrop = useFloorplanStore(s => s.handleDrop)
     const uploadedImage = useFloorplanStore(s => s.uploadedImage) // For Reference View
     const wrapperRef = useRef<HTMLDivElement>(null)
@@ -611,6 +735,7 @@ export function Scene() {
     return (
         <div
             ref={wrapperRef}
+            id="fpv-lock-surface"
             className={cn(
                 "flex-1 h-full bg-[#1a1a1a] relative overflow-hidden select-none",
                 activeTool === 'wall' ? "cursor-crosshair" : (activeTool === 'ruler' ? "cursor-default" : "cursor-default")
@@ -643,10 +768,14 @@ export function Scene() {
                 </Suspense>
             </Canvas>
 
-            {/* Reference View (Draggable/Resizable) */}
-            <ReferenceOverlay />
+            {mode === '3d' && cameraMode === 'fpv' && (
+                <div className="pointer-events-none absolute left-4 top-4 z-20 rounded-2xl border border-white/10 bg-slate-950/78 px-4 py-3 text-xs font-medium text-slate-100 shadow-[0_20px_45px_rgba(2,6,23,0.38)] backdrop-blur-xl">
+                    Click the scene to lock the mouse. Use `W A S D` to move and `Esc` to exit FPV.
+                </div>
+            )}
 
-            <TutorialOverlay />
+            {embedOverlays && <ReferenceOverlay />}
+            {embedOverlays && <TutorialOverlay />}
         </div>
     )
 }

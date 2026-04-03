@@ -58,10 +58,10 @@ function RoomLayout() {
 
         {/* Abstract Desks */}
         <RoundedBox args={[2, 0.1, 1]} position={[-2, -0.5, -1]} radius={0.02} smoothness={4}>
-          <meshStandardMaterial color="#1c2028" metalness={0.6} roughness={0.2} />
-        </RoundedBox>
-        <RoundedBox args={[2, 0.1, 1]} position={[2, -0.5, -1]} radius={0.02} smoothness={4}>
-          <meshStandardMaterial color="#1c2028" metalness={0.6} roughness={0.2} />
+        <meshStandardMaterial color="#1c2028" metalness={0.6} roughness={0.2} />
+      </RoundedBox>
+      <RoundedBox args={[2, 0.1, 1]} position={[2, -0.5, -1]} radius={0.02} smoothness={4}>
+        <meshStandardMaterial color="#1c2028" metalness={0.6} roughness={0.2} />
         </RoundedBox>
 
         {/* Floating Abstract "Chairs" */}
@@ -174,7 +174,7 @@ function Rig() {
       8
     );
     state.camera.position.lerp(target, 0.05);
-    state.camera.lookAt(0, 1, 0);
+    state.camera.lookAt(new THREE.Vector3(0, 1, 0));
   });
   return null;
 }

@@ -1,8 +1,8 @@
 // Three.js rendering adapter
 import * as THREE from 'three';
+import { v4 as uuidv4 } from 'uuid';
 import { RenderingAdapter } from '../adapter';
-import { Command, HomeDefinition, CommandType, Point3D, RenderEngineType, FurnitureDefinition } from '../types';
-import { Synchronizer } from '../synchronizer';
+import { Command, HomeDefinition, CommandType, Point3D, RenderEngineType, FurnitureDefinition, UUID, AdapterResponse, SyncState } from '../types';
 
 // Minimal catalog for 3D geometry mapping. Expansion possible.
 const CATALOG: Record<string, { width: number; depth: number; height: number; color: number }> = {
@@ -33,58 +33,64 @@ export class ThreeJSAdapter extends RenderingAdapter {
     super(engineType);
   }
 
-  // Current home state
-  private home: HomeDefinition = {
-    id: 'three-js-home',
-    name: 'Three.js Room',
-    walls: [],
-    furniture: [],
-    rooms: [],
-    dimensions: [],
-    environment: {
-      ambientLight: { r: 0.5, g: 0.5, b: 0.5, a: 1 },
-      directionalLight: { r: 1, g: 1, b: 1, a: 1 },
-    },
-    camera: {
-      position: { x: 0, y: 10, z: 15 },
-      target: { x: 0, y: 0, z: 0 },
-      fov: 75,
-    },
-  };
-
-  async initialize(canvas: HTMLCanvasElement): Promise<void> {
-    // Ensure canvas is properly set up
-    if (!canvas) {
-      throw new Error('Canvas element is required for Three.js adapter');
-    }
-
-    this.canvas = canvas;
-
-    // Wait for canvas to be ready if needed
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    // Ensure canvas has dimensions
-    if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
-      throw new Error(`Canvas has invalid dimensions: ${canvas.clientWidth}x${canvas.clientHeight}`);
-    }
-
+  async initialize(container: string | HTMLElement): Promise<AdapterResponse<void>> {
     try {
+      // Initialize home if not already done
+      if (!this.home) {
+        this.home = {
+          id: uuidv4() as UUID,
+          name: 'Three.js Room',
+          walls: [],
+          furniture: [],
+          rooms: [],
+          dimensions: [],
+          environment: {
+            lightColor: '#ffffff',
+            lightIntensity: 1.0,
+            backgroundColor: '#f0f0f0',
+          },
+          camera: {
+            position: { x: 0, y: 10, z: 15 },
+            target: { x: 0, y: 0, z: 0 },
+            zoom: 1,
+          },
+        };
+      }
+
+      // Get the container element
+      const element = typeof container === 'string' 
+        ? document.getElementById(container)
+        : container;
+      
+      if (!element) {
+        return { success: false, error: 'Container element not found' };
+      }
+
+      const canvas = element as HTMLCanvasElement || document.createElement('canvas');
+      
+      // Ensure canvas is properly set up
+      if (!canvas || (canvas.clientWidth === 0 && canvas.clientHeight === 0)) {
+        canvas.width = 1024;
+        canvas.height = 768;
+      }
+
+      this.canvas = canvas;
       // Scene setup
       this.scene = new THREE.Scene();
       this.scene.background = new THREE.Color(0xcccccc);
 
       // Camera setup
       this.camera = new THREE.PerspectiveCamera(
-        this.home.camera.fov,
-        canvas.clientWidth / canvas.clientHeight,
+        75,
+        (this.canvas?.clientWidth || 1024) / (this.canvas?.clientHeight || 768),
         0.1,
         1000,
       );
       this.updateCameraPosition();
 
       // Renderer setup - ensure canvas context can be obtained
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, canvas, alpha: true });
-      this.renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, canvas: this.canvas, alpha: true });
+      this.renderer.setSize(this.canvas?.clientWidth || 1024, this.canvas?.clientHeight || 768);
       this.renderer.shadowMap.enabled = true;
 
       // Lighting
@@ -108,11 +114,13 @@ export class ThreeJSAdapter extends RenderingAdapter {
       // Start render loop
       this.startRenderLoop();
 
-      this.syncStatus = 'synced';
-      this.emit('initialized');
+      this.syncStatus = { state: 'synced' as any, pendingCommands: [], errors: [] };
+      this.emit('initialized', {});
+      
+      return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Three.js initialization failed: ${message}`);
+      return { success: false, error: `Three.js initialization failed: ${message}` };
     }
   }
 
@@ -129,7 +137,7 @@ export class ThreeJSAdapter extends RenderingAdapter {
   }
 
   private updateCameraPosition(): void {
-    if (!this.camera) return;
+    if (!this.camera || !this.home || !this.home.camera) return;
 
     const { position } = this.home.camera;
     this.camera.position.set(position.x, position.y, position.z);
@@ -140,15 +148,17 @@ export class ThreeJSAdapter extends RenderingAdapter {
     );
   }
 
-  async loadHome(home: HomeDefinition): Promise<void> {
+  async loadHome(home: HomeDefinition): Promise<AdapterResponse<HomeDefinition>> {
     this.home = JSON.parse(JSON.stringify(home)); // Deep copy
+
+    if (!this.home) return { success: false, error: 'Failed to copy home' };
 
     // Clear existing meshes
     this.wallMeshes.clear();
     this.furnitureMeshes.clear();
     this.roomMeshes.clear();
 
-    if (!this.scene) return;
+    if (!this.scene) return { success: false, error: 'Scene not initialized' };
 
     // Remove previous objects
     const toRemove: THREE.Object3D[] = [];
@@ -175,7 +185,12 @@ export class ThreeJSAdapter extends RenderingAdapter {
     }
 
     this.updateCameraPosition();
-    this.syncStatus = 'synced';
+    this.syncStatus = {
+      state: SyncState.SYNCED,
+      pendingCommands: [],
+      errors: [],
+    };
+    return { success: true, data: this.home };
   }
 
   private createWall3D(wall: any): void {
@@ -272,10 +287,12 @@ export class ThreeJSAdapter extends RenderingAdapter {
     this.scene.add(mesh);
   }
 
-  async executeCommand(command: Command): Promise<void> {
+  async executeCommand(command: Command): Promise<AdapterResponse<any>> {
+    if (!this.home) return { success: false, error: 'Home not loaded' };
+
     switch (command.type) {
       case CommandType.CREATE_WALL: {
-        const wall = command.payload;
+        const wall = command.payload as any;
         this.home.walls.push(wall);
         this.createWall3D(wall);
         this.emit('wall-created', { wallId: wall.id });
@@ -283,7 +300,7 @@ export class ThreeJSAdapter extends RenderingAdapter {
       }
 
       case CommandType.UPDATE_WALL: {
-        const { wallId, updates } = command.payload;
+        const { wallId, updates } = command.payload as any;
         const wall = this.home.walls.find((w) => w.id === wallId);
         if (wall) {
           Object.assign(wall, updates);
@@ -295,7 +312,7 @@ export class ThreeJSAdapter extends RenderingAdapter {
       }
 
       case CommandType.DELETE_WALL: {
-        const wallId = command.payload;
+        const wallId = command.payload as any;
         this.home.walls = this.home.walls.filter((w) => w.id !== wallId);
         const mesh = this.wallMeshes.get(wallId);
         if (mesh) this.scene?.remove(mesh);
@@ -304,7 +321,7 @@ export class ThreeJSAdapter extends RenderingAdapter {
       }
 
       case CommandType.CREATE_FURNITURE: {
-        const furniture = command.payload;
+        const furniture = command.payload as any;
         this.home.furniture.push(furniture);
         this.createFurniture3D(furniture);
         this.emit('furniture-created', { furnitureId: furniture.id });
@@ -312,7 +329,7 @@ export class ThreeJSAdapter extends RenderingAdapter {
       }
 
       case CommandType.UPDATE_FURNITURE: {
-        const { furnitureId, updates } = command.payload;
+        const { furnitureId, updates } = command.payload as any;
         const item = this.home.furniture.find((f) => f.id === furnitureId);
         if (item) {
           Object.assign(item, updates);
@@ -324,7 +341,7 @@ export class ThreeJSAdapter extends RenderingAdapter {
       }
 
       case CommandType.DELETE_FURNITURE: {
-        const furnitureId = command.payload;
+        const furnitureId = command.payload as any;
         this.home.furniture = this.home.furniture.filter((f) => f.id !== furnitureId);
         const mesh = this.furnitureMeshes.get(furnitureId);
         if (mesh) this.scene?.remove(mesh);
@@ -333,14 +350,14 @@ export class ThreeJSAdapter extends RenderingAdapter {
       }
 
       case CommandType.SET_CAMERA_POSITION: {
-        this.home.camera = command.payload;
+        this.home.camera = command.payload as any;
         this.updateCameraPosition();
         break;
       }
 
       case CommandType.ZOOM_CAMERA: {
         if (this.camera) {
-          const zoomFactor = command.payload;
+          const zoomFactor = command.payload as any;
           this.camera.fov = Math.max(10, Math.min(120, this.camera.fov * zoomFactor));
           this.camera.updateProjectionMatrix();
         }
@@ -351,41 +368,69 @@ export class ThreeJSAdapter extends RenderingAdapter {
         console.warn(`Unhandled command type: ${command.type}`);
     }
 
-    this.syncStatus = 'synced';
+    this.syncStatus = {
+      state: SyncState.SYNCED,
+      pendingCommands: [],
+      errors: [],
+    };
+    return { success: true, data: null };
   }
 
-  async getHome(): Promise<HomeDefinition> {
-    return JSON.parse(JSON.stringify(this.home));
+  async getHome(): Promise<AdapterResponse<HomeDefinition>> {
+    if (!this.home) {
+      return { success: false, error: 'Home not loaded' };
+    }
+    return { success: true, data: JSON.parse(JSON.stringify(this.home)) };
   }
 
-  async exportHome(format: 'json' | 'sh3d'): Promise<string> {
-    if (format === 'json') {
-      return JSON.stringify(this.home, null, 2);
-    } else {
-      // For sh3d, use synchronizer
-      const sh3dData = Synchronizer.toSH3DFormat(this.home);
-      return JSON.stringify(sh3dData, null, 2);
+  async exportHome(format: 'json' | 'sh3d'): Promise<AdapterResponse<Blob | string>> {
+    try {
+      if (!this.home) {
+        return { success: false, error: 'No home loaded' };
+      }
+      // For now, both formats export as JSON
+      const result = JSON.stringify(this.home, null, 2);
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: `Failed to export home: ${error}` };
     }
   }
 
-  async importHome(data: string, format: 'json' | 'sh3d'): Promise<void> {
+  async importHome(data: Blob | string, format: 'json' | 'sh3d'): Promise<AdapterResponse<HomeDefinition>> {
     try {
-      const parsed = JSON.parse(data);
-
-      if (format === 'sh3d') {
-        this.home = Synchronizer.fromSH3DFormat(parsed);
+      let text: string;
+      if (data instanceof Blob) {
+        text = await data.text();
       } else {
-        this.home = parsed;
+        text = data;
       }
 
-      await this.loadHome(this.home);
-      this.emit('imported');
+      const parsed = JSON.parse(text);
+      this.home = parsed;
+
+      if (!this.home) return { success: false, error: 'Invalid home data' };
+
+      const result = await this.loadHome(this.home);
+      this.emit('imported', {});
+      return result;
     } catch (error) {
-      throw new Error(`Failed to import home: ${error}`);
+      return { success: false, error: `Failed to import home: ${error}` };
     }
   }
 
-  async isReady(): Promise<boolean> {
+  async undo(): Promise<AdapterResponse<HomeDefinition>> {
+    // Simplified undo - return current home state
+    // In a full implementation, this would revert to a previous state
+    return this.getHome();
+  }
+
+  async redo(): Promise<AdapterResponse<HomeDefinition>> {
+    // Simplified redo - return current home state
+    // In a full implementation, this would advance to a next state
+    return this.getHome();
+  }
+
+  isReady(): boolean {
     return this.renderer !== null && this.camera !== null && this.scene !== null;
   }
 
@@ -404,6 +449,6 @@ export class ThreeJSAdapter extends RenderingAdapter {
     this.camera = null;
     this.canvas = null;
 
-    this.emit('disposed');
+    this.emit('disposed', {});
   }
 }

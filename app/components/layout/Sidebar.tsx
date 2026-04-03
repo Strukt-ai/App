@@ -19,7 +19,19 @@ import { GoogleLogin } from '@react-oauth/google'
 import { jwtDecode } from 'jwt-decode'
 import { LogOut, X } from 'lucide-react'
 
-export function Sidebar({ onLogout }: { onLogout?: () => void }) {
+type SidebarProps = {
+    onLogout?: () => void
+    desktopExpanded?: boolean
+    onDesktopHoverStart?: () => void
+    onDesktopHoverEnd?: () => void
+}
+
+export function Sidebar({
+    onLogout,
+    desktopExpanded = false,
+    onDesktopHoverStart,
+    onDesktopHoverEnd,
+}: SidebarProps) {
     const {
         selectedId, walls, calibrate,
         activeTool, setActiveTool, deleteObject,
@@ -206,18 +218,49 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
     return (
         <>
-            <div className={cn(
-                "absolute inset-y-3 left-3 z-40 flex w-[min(92vw,380px)] max-w-[380px] flex-col overflow-y-auto rounded-[28px] border border-white/10 bg-[#070b12]/94 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur-2xl transition-transform duration-300 select-none custom-scrollbar xl:relative xl:inset-auto xl:z-0 xl:h-full xl:w-[360px] xl:max-w-none xl:translate-x-0 xl:rounded-none xl:border-y-0 xl:border-l-0 xl:border-r xl:border-white/10 xl:bg-slate-950/72 xl:shadow-none xl:backdrop-blur-xl",
-                mobileSidebarOpen ? "translate-x-0" : "-translate-x-[108%] xl:translate-x-0"
-            )}>
-                <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_38%),linear-gradient(180deg,rgba(15,23,42,0.78),rgba(2,6,23,0.64))] px-4 py-4">
+            <div className="absolute left-3 top-3 bottom-3 z-40">
+                {/* Dockbar content when minimized */}
+                {!desktopExpanded && (
+                    <div className="flex flex-col items-center gap-4 p-3">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                                <PenTool className="h-4 w-4 text-slate-300" />
+                            </div>
+                            <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                                <Box className="h-4 w-4 text-slate-300" />
+                            </div>
+                            <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                                <Move className="h-4 w-4 text-slate-300" />
+                            </div>
+                            <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                                <RotateCw className="h-4 w-4 text-slate-300" />
+                            </div>
+                            <div className="h-8 w-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                                <Trash2 className="h-4 w-4 text-slate-300" />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Full content when expanded */}
+                {desktopExpanded && (
+                <div>
                     <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Builder</p>
-                            <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">Tools & Assets</h3>
-                            <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                                Build the plan here, keep the canvas clear in the middle, and use the inspector for selection-specific edits.
-                            </p>
+                        <div className="flex flex-wrap gap-2">
+                            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
+                                {mode === '3d' ? 'Preview' : 'Draft'}
+                            </span>
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
+                                {user ? 'Signed In' : 'Guest'}
+                            </span>
+                            <span className={cn(
+                                "rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em]",
+                                currentRunId
+                                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                    : "border-white/10 bg-white/5 text-slate-400"
+                            )}>
+                                {currentRunId ? 'Run Loaded' : 'No Run'}
+                            </span>
                         </div>
                         <button
                             type="button"
@@ -228,32 +271,67 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             <X className="h-4 w-4" />
                         </button>
                     </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                        <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
-                            {mode === '3d' ? 'Preview On' : 'Draft Mode'}
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-300">
-                            {user ? 'Signed In' : 'Guest'}
-                        </span>
-                        <span className={cn(
-                            "rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em]",
-                            currentRunId
-                                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
-                                : "border-white/10 bg-white/5 text-slate-400"
-                        )}>
-                            {currentRunId ? 'Run Loaded' : 'No Run Yet'}
-                        </span>
-                    </div>
                 </div>
 
-                <div className="p-4 border-b border-white/8">
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Tools</h3>
-                    <div className="flex flex-col gap-2">
-                        {/* Plan Controls */}
-                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                            <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Plan</h4>
-                            <div className="grid grid-cols-3 gap-2">
+                )}
+
+                {/* Dockbar view when collapsed on desktop */}
+                {!desktopExpanded && (
+                    <div className="xl:flex xl:flex-col xl:items-center xl:gap-3 xl:py-4 xl:px-2">
+                        <button
+                            type="button"
+                            className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 text-slate-400 transition hover:text-white hover:bg-white/10"
+                            title="New Project"
+                        >
+                            <Plus className="h-5 w-5" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 text-slate-400 transition hover:text-white hover:bg-white/10"
+                            title="Save"
+                        >
+                            <Download className="h-5 w-5" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 text-slate-400 transition hover:text-white hover:bg-white/10"
+                            title="Open"
+                        >
+                            <FolderOpen className="h-5 w-5" />
+                        </button>
+                        <div className="h-px w-8 bg-white/10 my-2"></div>
+                        <button
+                            type="button"
+                            className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 text-slate-400 transition hover:text-white hover:bg-white/10"
+                            title="Wall Tool"
+                        >
+                            <PenTool className="h-5 w-5" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 text-slate-400 transition hover:text-white hover:bg-white/10"
+                            title="Select"
+                        >
+                            <Edit3 className="h-5 w-5" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 text-slate-400 transition hover:text-white hover:bg-white/10"
+                            title="Move"
+                        >
+                            <Move className="h-5 w-5" />
+                        </button>
+                    </div>
+                )}
+
+                {/* Full panel content when expanded */}
+                {desktopExpanded && (
+                    <>
+                        <div className="p-4 border-b border-white/8">
+                            <div className="flex flex-col gap-2">
+                                {/* Plan Controls */}
+                                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                                    <div className="grid grid-cols-3 gap-2">
                                 <button
                                     id="new"
                                     type="button"
@@ -426,7 +504,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             >
                                 <div className="flex items-center gap-2">
                                     <Box className="w-5 h-5" />
-                                    <span className="text-[11px] font-medium uppercase tracking-wider">Assets Library</span>
+                                    <span className="text-[11px] font-medium uppercase tracking-wider">Catalog</span>
                                 </div>
                                 <ChevronDown className={cn("w-4 h-4 transition-transform", assetsOpen && "rotate-180")} />
                             </button>
@@ -436,9 +514,6 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                             assetsOpen ? "max-h-[640px] mt-2 opacity-100" : "max-h-0 opacity-0"
                         )}>
                             <div className="rounded-lg border border-border bg-secondary/10 p-2">
-                                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                                    Add Items (800+)
-                                </div>
                                 <div className="bp3d-items-panel max-h-[560px] overflow-y-auto custom-scrollbar rounded-md">
                                     <div id="add-items">
                                         <div id="items-wrapper" className="row" />
@@ -889,8 +964,8 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                         </div>
                     </div>
                 </div>
-            </div>
-
+            </>
+            )}
 
             <ImportModelModal
                 isOpen={importModalOpen}
@@ -1089,6 +1164,7 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                     }
                 }}
             />
+            </div>
         </>
     )
 }

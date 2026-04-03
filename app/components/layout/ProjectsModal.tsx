@@ -41,7 +41,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
             })
             if (res.ok) {
                 const data = await res.json()
-                setProjects(data)
+                setProjects(data.filter((p: any) => !p.job_id?.startsWith('click_') && !p.job_id?.startsWith('furn_')))
             }
         } catch (e) {
             console.error("Failed to fetch projects", e)
@@ -102,6 +102,7 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
         const runId = project.job_id
         if (!runId) return
 
+        useFloorplanStore.getState().resetFloorplan()
         setRunId(runId)
         setRunStatus(project.status === 'COMPLETED' ? 'completed' : 'processing')
         setMode('2d')
@@ -109,11 +110,10 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
 
         try {
             if (!token) return
+            const headers = { 'Authorization': `Bearer ${token}` }
 
             try {
-                const metaRes = await fetch(`/api/runs/${runId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
+                const metaRes = await fetch(`/api/runs/${runId}`, { headers })
                 if (metaRes.ok) {
                     const meta = await metaRes.json().catch(() => ({} as any))
                     const rm = meta?.run_meta || {}
@@ -128,9 +128,24 @@ export function ProjectsModal({ isOpen, onClose }: ProjectsModalProps) {
                 // ignore
             }
 
-            const svgRes = await fetch(`/api/runs/${runId}/svg`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
+            try {
+                const imgRes = await fetch(`/api/runs/${runId}/download/input_image.png`, { headers })
+                if (imgRes.ok) {
+                    const blob = await imgRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    await new Promise<void>((resolve) => {
+                        const img = new window.Image()
+                        img.onload = () => {
+                            useFloorplanStore.getState().setUploadedImage(url, img.naturalWidth, img.naturalHeight)
+                            resolve()
+                        }
+                        img.onerror = () => resolve()
+                        img.src = url
+                    })
+                }
+            } catch { /* ignore */ }
+
+            const svgRes = await fetch(`/api/runs/${runId}/svg`, { headers })
             if (svgRes.ok) {
                 const svgText = await svgRes.text()
                 useFloorplanStore.getState().importFromSVG(svgText)
