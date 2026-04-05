@@ -16,7 +16,7 @@ export interface SubscriptionData {
         floorplan: TokenPool
         furn3d: TokenPool
     }
-    limits: Record<string, any>
+    limits: Record<string, unknown>
     pro_price_inr: number
     razorpay_customer_id?: string
     tier_expires_at?: string

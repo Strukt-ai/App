@@ -12,12 +12,14 @@ export interface BackendRequest {
   method: RequestMethod
   path: string
   query?: Record<string, string>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body?: any
   headers?: Record<string, string>
 }
 
 export interface BackendResponse {
   status: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any
   headers: Record<string, string>
 }
@@ -30,16 +32,6 @@ export interface BackendResponse {
 export async function callBackend(request: BackendRequest): Promise<BackendResponse> {
   // Backend has been moved outside; always use HTTP proxy
   return callHttpBackend(request)
-}
-
-/*
- * Direct backend function calls originally supported server-side imports of
- * the Python modules. Since the backend has been relocated to an external
- * service, this code is no longer used. It may be deleted in the future but
- * is retained here for reference.
- */
-async function callDirectBackend(request: BackendRequest): Promise<BackendResponse> {
-  throw new Error('Direct backend calls are disabled when using an external backend')
 }
 
 /**
@@ -89,6 +81,7 @@ async function callHttpBackend(request: BackendRequest): Promise<BackendResponse
     const response = await fetch(url.toString(), fetchOptions)
 
     // Parse response — gracefully handle non-JSON error pages (e.g. Cloudflare 530)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let data: any
     const resCT = response.headers.get('content-type') || ''
     if (resCT.includes('application/json')) {

@@ -308,7 +308,7 @@ const App = {
         const poll = async () => {
             try {
                 // Check status endpoint
-                const res = await fetch(`/api/runs/${jobId}/generate-3d`, { method: 'POST' }); // Using existing check endpoint logic
+                await fetch(`/api/runs/${jobId}/generate-3d`, { method: 'POST' }); // Using existing check endpoint logic
                 // Or better, a specific status endpoint
 
                 // For now, let's assume if calling generate-3d returns ok=True and blend_available=True, we are good.
