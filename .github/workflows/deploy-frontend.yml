@@ -1,0 +1,205 @@
+# ============================================================================
+# Strukt AI FRONTEND — Enterprise CI/CD Pipeline (Vercel)
+# ============================================================================
+#
+# Jobs:
+#   secrets   → Gitleaks       — block committed credentials
+#   lint      → ESLint         — code quality
+#   typecheck → tsc --noEmit   — TypeScript safety
+#   build     → next build     — verify production build succeeds
+#   deploy    → Vercel         — production (main) or preview (PR)
+# ============================================================================
+
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.ts"
+      - "tailwind.config.js"
+      - "tsconfig.json"
+      - ".github/workflows/deploy-frontend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.ts"
+      - "tsconfig.json"
+
+# Least-privilege default — each job grants what it needs
+permissions: {}
+
+# Cancel redundant in-progress runs on the same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+
+  # ── 1. SECRET SCANNING ────────────────────────────────────────────────────
+  secrets:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ── 2. LINT ───────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Run ESLint
+        run: npm run lint -- --max-warnings 0
+
+  # ── 3. TYPECHECK ──────────────────────────────────────────────────────────
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: TypeScript compile check
+        run: npx tsc --noEmit
+
+  # ── 4. BUILD VERIFICATION ─────────────────────────────────────────────────
+  build:
+    name: Next.js Build
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, secrets]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Build Next.js
+        env:
+          # Provide dummy API URL so build doesn't fail on missing env vars
+          NEXT_PUBLIC_API_URL: "https://struktai.work"
+        run: npm run build
+
+      - name: Build size summary
+        run: |
+          echo "### Build Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          du -sh .next/ 2>/dev/null || echo "No .next directory"
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ── 5. DEPLOY ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy → Vercel
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      pull-requests: write   # to post preview URL comment on PRs
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: |
+          vercel pull --yes \
+            --environment=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build for Vercel
+        run: |
+          vercel build \
+            ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        id: vercel-deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy \
+            --prebuilt \
+            ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} \
+            --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          echo "### Deployed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "URL: $DEPLOY_URL" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.vercel-deploy.outputs.url }}';
+            const sha = context.sha.slice(0, 7);
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Preview Deployment ✅\n\n**URL:** ${url}\n**Commit:** \`${sha}\`\n\nDeployed via Vercel Preview.`
+            });
+
+      - name: Alert on failure
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.ALERT_WEBHOOK_URL }}" ]; then
+            curl -s -X POST "${{ secrets.ALERT_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"text\": \":red_circle: *Frontend deploy FAILED*\nCommit: \`${{ github.sha }}\`\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+              }"
+          fi
