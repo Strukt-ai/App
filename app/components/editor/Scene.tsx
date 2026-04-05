@@ -368,10 +368,10 @@ function SceneContent() {
 
     // Lighting presets — tuned for clean architectural rendering
     const lightingConfigs = {
-        day: { env: 'city', sunIntensity: 2.2, sunColor: '#fff8f0', fillIntensity: 1.0, fillColor: '#dde6f0', ambientIntensity: 0.6, fogColor: '#d4dce8', fogNear: 40, fogFar: 120, skyTurbidity: 8, skyRayleigh: 1.5, sunPos: [10, 20, 8] as [number, number, number] },
-        night: { env: 'night', sunIntensity: 0.4, sunColor: '#99aacc', fillIntensity: 0.15, fillColor: '#445566', ambientIntensity: 0.2, fogColor: '#1a1e2e', fogNear: 25, fogFar: 80, skyTurbidity: 20, skyRayleigh: 0.1, sunPos: [-5, -1, -5] as [number, number, number] },
-        studio: { env: 'studio', sunIntensity: 1.8, sunColor: '#ffffff', fillIntensity: 0.9, fillColor: '#f0f0ff', ambientIntensity: 0.6, fogColor: '#e8e8ee', fogNear: 40, fogFar: 120, skyTurbidity: 10, skyRayleigh: 1.0, sunPos: [5, 15, 10] as [number, number, number] },
-        sunset: { env: 'sunset', sunIntensity: 1.8, sunColor: '#ffaa55', fillIntensity: 0.5, fillColor: '#8899bb', ambientIntensity: 0.35, fogColor: '#e8c8a0', fogNear: 30, fogFar: 100, skyTurbidity: 4, skyRayleigh: 2.5, sunPos: [15, 3, 8] as [number, number, number] }
+        day:    { sunIntensity: 2.8, sunColor: '#fff5e6', fillIntensity: 0.8, fillColor: '#e8f0ff', ambientIntensity: 0.5, fogColor: '#c8d8f0', fogNear: 100, fogFar: 300, skyTurbidity: 2, skyRayleigh: 0.4, sunPos: [10, 20, 8]  as [number, number, number] },
+        night:  { sunIntensity: 0.5, sunColor: '#99aacc', fillIntensity: 0.12, fillColor: '#334455', ambientIntensity: 0.18, fogColor: '#0f1520', fogNear: 60,  fogFar: 180, skyTurbidity: 20, skyRayleigh: 0.05, sunPos: [-5, -1, -5] as [number, number, number] },
+        studio: { sunIntensity: 2.2, sunColor: '#ffffff', fillIntensity: 1.0, fillColor: '#f0f4ff', ambientIntensity: 0.55, fogColor: '#e0e4f0', fogNear: 120, fogFar: 350, skyTurbidity: 1, skyRayleigh: 0.2,  sunPos: [5, 15, 10]  as [number, number, number] },
+        sunset: { sunIntensity: 2.2, sunColor: '#ff9944', fillIntensity: 0.45, fillColor: '#7788bb', ambientIntensity: 0.3,  fogColor: '#d4a870', fogNear: 80,  fogFar: 250, skyTurbidity: 3, skyRayleigh: 2.0,  sunPos: [15, 3, 8]   as [number, number, number] },
     }
     const lighting = lightingConfigs[lightingPreset]
 
@@ -402,7 +402,7 @@ function SceneContent() {
             <ambientLight intensity={lighting.ambientIntensity} color="#faf8f5" />
 
             {/* Hemisphere Light — warm sky, neutral ground for natural fill */}
-            <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
+            <hemisphereLight args={['#ffffff', '#c8b89a', 0.6]} />
 
             {/* HDRI Environment disabled — preset loading from CDN is unreliable; Sky + hemisphere lights are sufficient */}
 
@@ -510,24 +510,24 @@ function SceneContent() {
                     <SMAA />
                     {/* N8AO — fast high-quality ambient occlusion for realistic depth in corners */}
                     <N8AO
-                        aoRadius={0.8}
-                        intensity={2.5}
-                        distanceFalloff={0.5}
+                        aoRadius={0.6}
+                        intensity={1.2}
+                        distanceFalloff={0.3}
                         quality="medium"
                     />
                     <Bloom
-                        luminanceThreshold={1.5}
+                        luminanceThreshold={1.2}
                         mipmapBlur
-                        intensity={0.08}
-                        radius={0.3}
+                        intensity={0.05}
+                        radius={0.2}
                     />
-                    <BrightnessContrast contrast={0.1} brightness={0.03} />
+                    <BrightnessContrast contrast={0.15} brightness={0.0} />
                     <Vignette
-                        offset={0.3}
-                        darkness={0.35}
+                        offset={0.4}
+                        darkness={0.25}
                         blendFunction={BlendFunction.NORMAL}
                     />
-                    <ToneMapping mode={ToneMappingMode.AGX} />
+                    <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
                 </EffectComposer>
             )}
 
