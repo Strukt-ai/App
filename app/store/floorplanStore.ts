@@ -276,10 +276,9 @@ export const useFloorplanStore = create<FloorplanState>()(
             state.uploadedImage = url
             if (width && height) state.imageDimensions = { width, height }
             
-            // Advance tutorial when image is successfully uploaded
+            // Hide tutorial while user is looking at uploaded image — calibration step fires after processing completes
             if (url && state.tutorialStep === 'upload') {
-                state.tutorialStep = 'process'
-                state.tutorialMinimized = false
+                state.tutorialStep = 'none'
             }
         }),
         setCalibrationFactor: (factor) => set((state) => {

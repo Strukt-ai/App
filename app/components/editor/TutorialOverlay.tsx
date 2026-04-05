@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import {
-    Upload, Play, Ruler, Hammer, Box,
+    Upload, Ruler, Hammer, Box,
     ChevronRight, X, Minimize2, ChevronUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── Step definitions ────────────────────────────────────────────────────────
 
-// 'rooms' removed — Find Rooms is a single button in the toolbar, not a step
-const STEPS = ['upload', 'process', 'calibration', 'correction', 'floor_review'] as const
+// 'rooms' and 'process' removed — process button is self-evident (big green button)
+const STEPS = ['upload', 'calibration', 'correction', 'floor_review'] as const
 type Step = typeof STEPS[number]
 
 interface StepConfig {
@@ -43,21 +43,8 @@ const STEP_CONFIG: Record<Step, StepConfig> = {
         body: 'Click the Load button (top-right) to upload a floorplan image.',
         targetId: 'tutorial-load-btn',
     },
-    process: {
-        index: 2,
-        color: 'cyan',
-        glow: '0 0 28px 0 rgba(6,182,212,0.18)',
-        border: 'border-cyan-500/40',
-        iconBg: 'bg-cyan-500/15',
-        iconColor: 'text-cyan-400',
-        dotActive: 'bg-cyan-500',
-        icon: <Play className="w-4 h-4" />,
-        title: 'Process the image',
-        body: 'Click Process Floorplan. The AI will detect walls, doors, and windows.',
-        targetId: 'tutorial-process-btn',
-    },
     calibration: {
-        index: 3,
+        index: 2,
         color: 'yellow',
         glow: '0 0 28px 0 rgba(234,179,8,0.18)',
         border: 'border-yellow-500/40',
@@ -70,7 +57,7 @@ const STEP_CONFIG: Record<Step, StepConfig> = {
         targetId: 'tutorial-ruler-btn',
     },
     correction: {
-        index: 4,
+        index: 3,
         color: 'blue',
         glow: '0 0 28px 0 rgba(59,130,246,0.18)',
         border: 'border-blue-500/40',
@@ -83,7 +70,7 @@ const STEP_CONFIG: Record<Step, StepConfig> = {
         targetId: 'tutorial-find-rooms-btn',
     },
     floor_review: {
-        index: 5,
+        index: 4,
         color: 'green',
         glow: '0 0 28px 0 rgba(34,197,94,0.18)',
         border: 'border-green-500/40',

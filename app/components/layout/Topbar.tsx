@@ -115,8 +115,8 @@ export function Topbar() {
                                 setTutorialStep('floor_review')
                                 setLastQueuedTask('none')
                             } else {
-                                // Initial prediction job: if not calibrated, start tutorial.
-                                if (tutorialStep === 'none' && !useFloorplanStore.getState().isCalibrated) {
+                                // Initial prediction job: advance to calibration if not yet calibrated
+                                if (!useFloorplanStore.getState().isCalibrated && tutorialStep !== 'floor_review') {
                                     setTutorialStep('calibration')
                                 }
                             }
