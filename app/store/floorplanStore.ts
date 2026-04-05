@@ -96,7 +96,6 @@ export interface FloorplanState {
     mobileRightSidebarOpen: boolean
     tutorialStep: 'none' | 'upload' | 'process' | 'calibration' | 'correction' | 'rooms' | 'floor_review'
     tutorialMinimized: boolean
-    referenceMinimized: boolean
     lastQueuedTask: 'none' | 'detect_rooms' | 'gen_3d'
     renders: string[]
     fitViewTrigger: number
@@ -135,7 +134,6 @@ export interface FloorplanState {
     setMobileRightSidebarOpen: (show: boolean) => void
     setTutorialStep: (step: FloorplanState['tutorialStep']) => void
     setTutorialMinimized: (minimized: boolean) => void
-    setReferenceMinimized: (minimized: boolean) => void
     completeTutorial: () => void
     setLastQueuedTask: (task: 'none' | 'detect_rooms' | 'gen_3d') => void
     triggerDetectRooms: () => Promise<void>
@@ -301,11 +299,9 @@ export const useFloorplanStore = create<FloorplanState>()(
         // Tutorial State
         tutorialStep: 'none',
         tutorialMinimized: false,
-        referenceMinimized: false,
         lastQueuedTask: 'none',
         setTutorialStep: (step) => set((state) => { state.tutorialStep = step; state.tutorialMinimized = false }),
         setTutorialMinimized: (minimized) => set((state) => { state.tutorialMinimized = minimized }),
-        setReferenceMinimized: (minimized) => set((state) => { state.referenceMinimized = minimized }),
         completeTutorial: () => set((state) => { state.tutorialStep = 'none' }),
         setLastQueuedTask: (task) => set((state) => { state.lastQueuedTask = task }),
 

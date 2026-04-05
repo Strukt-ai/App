@@ -15,7 +15,6 @@ import { FloorManager } from './FloorManager'
 import { FurnAIAssetsManager } from './FurnAIAssetsManager'
 import { ImportedModelsManager } from './ImportedModelsManager'
 import { TutorialOverlay } from './TutorialOverlay'
-import { ReferenceOverlay } from './ReferenceOverlay' // New Import
 import { FloatingMenu } from './FloatingMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { cn } from '@/lib/utils'
@@ -642,9 +641,6 @@ export function Scene() {
                     <FloorplanOverlay />
                 </Suspense>
             </Canvas>
-
-            {/* Reference View (Draggable/Resizable) */}
-            <ReferenceOverlay />
 
             <TutorialOverlay />
         </div>
