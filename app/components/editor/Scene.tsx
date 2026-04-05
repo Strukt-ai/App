@@ -52,9 +52,10 @@ function FPVController() {
     const cameraMode = useFloorplanStore(s => s.cameraMode)
     const walls = useFloorplanStore(s => s.walls)
     const rooms = useFloorplanStore(s => s.rooms)
-    const { camera } = useThree()
+    const { camera, gl } = useThree()
     const controlsRef = useRef<any>(null)
     const moveStateRef = useRef({ forward: false, backward: false, left: false, right: false })
+    const [locked, setLocked] = useState(false)
 
     const startPosition = useMemo(() => {
         const points = [
@@ -73,6 +74,7 @@ function FPVController() {
     useEffect(() => {
         if (mode !== '3d' || cameraMode !== 'fpv') {
             if (document.pointerLockElement) document.exitPointerLock()
+            setLocked(false)
             return
         }
 
@@ -93,16 +95,31 @@ function FPVController() {
             if (key === 'a') moveStateRef.current.left = false
             if (key === 'd') moveStateRef.current.right = false
         }
+        const onLockChange = () => setLocked(!!document.pointerLockElement)
 
         window.addEventListener('keydown', handleKeyDown)
         window.addEventListener('keyup', handleKeyUp)
+        document.addEventListener('pointerlockchange', onLockChange)
         return () => {
             moveStateRef.current = { forward: false, backward: false, left: false, right: false }
             if (document.pointerLockElement) document.exitPointerLock()
+            setLocked(false)
             window.removeEventListener('keydown', handleKeyDown)
             window.removeEventListener('keyup', handleKeyUp)
+            document.removeEventListener('pointerlockchange', onLockChange)
         }
     }, [camera, cameraMode, mode, startPosition])
+
+    // Lock mouse on canvas click when in FPV mode
+    useEffect(() => {
+        if (mode !== '3d' || cameraMode !== 'fpv') return
+        const canvas = gl.domElement
+        const onClick = () => {
+            if (!document.pointerLockElement) canvas.requestPointerLock()
+        }
+        canvas.addEventListener('click', onClick)
+        return () => canvas.removeEventListener('click', onClick)
+    }, [gl, mode, cameraMode])
 
     useFrame((_, delta) => {
         if (mode !== '3d' || cameraMode !== 'fpv') return
@@ -133,7 +150,67 @@ function FPVController() {
     })
 
     if (mode !== '3d' || cameraMode !== 'fpv') return null
-    return <PointerLockControls ref={controlsRef} selector="#fpv-lock-surface" />
+    // No selector — PointerLockControls handles mouse look; click handler above triggers lock
+    return <PointerLockControls ref={controlsRef} />
+}
+
+// ─── FPV HTML overlay (outside Canvas) ───────────────────────────────────────
+function FPVOverlay() {
+    const mode = useFloorplanStore(s => s.mode)
+    const cameraMode = useFloorplanStore(s => s.cameraMode)
+    const [locked, setLocked] = useState(false)
+
+    useEffect(() => {
+        const onChange = () => setLocked(!!document.pointerLockElement)
+        document.addEventListener('pointerlockchange', onChange)
+        return () => document.removeEventListener('pointerlockchange', onChange)
+    }, [])
+
+    if (mode !== '3d' || cameraMode !== 'fpv') return null
+
+    return (
+        <>
+            {/* Click-to-lock prompt */}
+            {!locked && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
+                    <div className="flex flex-col items-center gap-3 bg-black/60 backdrop-blur-sm rounded-2xl px-8 py-6 border border-white/10 shadow-2xl">
+                        <div className="w-10 h-10 rounded-full border-2 border-white/40 flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-white/70" />
+                        </div>
+                        <p className="text-white text-sm font-semibold tracking-wide">Click to look around</p>
+                        <div className="flex items-center gap-3 text-[11px] text-white/50">
+                            <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px]">W A S D</kbd> Move</span>
+                            <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px]">Esc</kbd> Release</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Crosshair when locked */}
+            {locked && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
+                    <div className="relative w-6 h-6">
+                        <div className="absolute top-1/2 left-0 w-full h-px bg-white/60 -translate-y-1/2" />
+                        <div className="absolute left-1/2 top-0 h-full w-px bg-white/60 -translate-x-1/2" />
+                        <div className="absolute inset-[9px] rounded-full border border-white/40" />
+                    </div>
+                </div>
+            )}
+
+            {/* Controls hint (locked) */}
+            {locked && (
+                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 pointer-events-none z-40 animate-in fade-in duration-300">
+                    <div className="flex items-center gap-3 text-[11px] text-white/50 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/8">
+                        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px]">W A S D</kbd> Walk</span>
+                        <span className="text-white/20">·</span>
+                        <span>Mouse — Look</span>
+                        <span className="text-white/20">·</span>
+                        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px]">Esc</kbd> Release</span>
+                    </div>
+                </div>
+            )}
+        </>
+    )
 }
 
 function SvgOverlayPlane() {
@@ -728,6 +805,7 @@ export function Scene() {
 
             <TutorialOverlay />
             <CalibrationPanel />
+            <FPVOverlay />
         </div>
     )
 }
