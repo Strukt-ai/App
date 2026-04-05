@@ -15,6 +15,7 @@ import { FloorManager } from './FloorManager'
 import { FurnAIAssetsManager } from './FurnAIAssetsManager'
 import { ImportedModelsManager } from './ImportedModelsManager'
 import { TutorialOverlay } from './TutorialOverlay'
+import { CalibrationPanel } from './CalibrationPanel'
 import { FloatingMenu } from './FloatingMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { cn } from '@/lib/utils'
@@ -643,6 +644,7 @@ export function Scene() {
             </Canvas>
 
             <TutorialOverlay />
+            <CalibrationPanel />
         </div>
     )
 }

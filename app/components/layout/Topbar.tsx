@@ -478,6 +478,7 @@ export function Topbar() {
                     {/* Process Button - Only visible if file selected */}
                     {uploadedImage && (
                         <button
+                            id="tutorial-process-btn"
                             disabled={runStatus === 'processing'}
                             onClick={async () => {
                                 if (!fileToUpload) return
@@ -577,6 +578,7 @@ export function Topbar() {
                     )}
 
                     <label
+                        id="tutorial-load-btn"
                         className={cn(
                             "cursor-pointer px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
                             "bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-transparent",

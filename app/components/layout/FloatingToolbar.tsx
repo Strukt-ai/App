@@ -139,6 +139,7 @@ export function FloatingToolbar() {
                         {tools.map((tool) => (
                             <div key={tool.id} className="flex items-center">
                                 <button
+                                    id={tool.id === 'ruler' ? 'tutorial-ruler-btn' : tool.id === 'find-rooms' ? 'tutorial-find-rooms-btn' : undefined}
                                     onClick={tool.action}
                                     disabled={
                                         (tool.id === 'delete' && !selectedId) ||

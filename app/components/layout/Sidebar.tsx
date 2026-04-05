@@ -234,10 +234,10 @@ export function Sidebar({ onLogout }: { onLogout?: () => void }) {
                     </div>
                 </div>
 
-                {/* Calibration Section - Only visible if Ruler Mode is Active */}
+                {/* Calibration Section - hidden; replaced by floating CalibrationPanel in canvas */}
                 <div className={cn(
                     "p-4 border-b bg-primary/5 transition-all duration-300",
-                    activeTool === 'ruler' ? "opacity-100 max-h-[300px]" : "opacity-0 max-h-0 py-0 overflow-hidden border-none"
+                    "opacity-0 max-h-0 py-0 overflow-hidden border-none"
                 )}>
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Calibration Mode</h3>
                     {selectedWall ? (
