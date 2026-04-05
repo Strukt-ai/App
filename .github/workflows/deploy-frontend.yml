@@ -166,24 +166,31 @@ jobs:
         run: npm install -g vercel@latest
 
       - name: Pull Vercel environment
+        env:
+          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           vercel pull --yes \
-            --environment=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }} \
-            --token=${{ secrets.VERCEL_TOKEN }}
+            --environment=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
 
       - name: Build for Vercel
-        run: |
-          vercel build \
-            ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} \
-            --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel build ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
 
       - name: Deploy to Vercel
         id: vercel-deploy
+        env:
+          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           DEPLOY_URL=$(vercel deploy \
             --prebuilt \
-            ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} \
-            --token=${{ secrets.VERCEL_TOKEN }})
+            ${{ github.ref == 'refs/heads/main' && '--prod' || '' }})
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
           echo "### Deployed ✅" >> $GITHUB_STEP_SUMMARY
           echo "URL: $DEPLOY_URL" >> $GITHUB_STEP_SUMMARY
