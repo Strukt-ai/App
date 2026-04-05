@@ -4,7 +4,7 @@ import { useFloorplanStore } from '@/store/floorplanStore'
 import type { Wall } from '@/store/floorplanStore'
 import { memo, useCallback, useEffect, useMemo, useState, Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
-import { BoxGeometry, CylinderGeometry, DoubleSide, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, Texture } from 'three'
+import { BoxGeometry, CylinderGeometry, DoubleSide, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, Texture, SRGBColorSpace, LinearSRGBColorSpace } from 'three'
 import { Geometry, Base, Subtraction } from '@react-three/csg'
 import { useLoader } from '@react-three/fiber'
 import { TextureLoader } from 'three'
@@ -165,6 +165,11 @@ const WallItem = memo(function WallItem({
         if (wall.pbrAoUrl) textures.push(aoTex)
         if (wall.pbrMetalnessUrl) textures.push(metalnessTex)
 
+        texture.colorSpace = SRGBColorSpace
+        ;[normalTex, roughnessTex, aoTex, metalnessTex].forEach(t => {
+            t.colorSpace = LinearSRGBColorSpace
+        })
+
         textures.forEach(t => {
             t.wrapS = RepeatWrapping
             t.wrapT = RepeatWrapping
@@ -252,22 +257,21 @@ const WallItem = memo(function WallItem({
         if (textureUrl) {
             mat.map = texture
             mat.color.set(isSelected ? 0x3b82f6 : 0xffffff)
-            mat.roughness = 0.75
+            mat.roughness = 0.8
             mat.metalness = 0.0
-            mat.clearcoat = 0.1
-            mat.clearcoatRoughness = 0.5
-            mat.envMapIntensity = 0.5
-            // Use albedo as subtle bump for surface variation (grout, stucco, etc.)
+            mat.clearcoat = 0.05
+            mat.clearcoatRoughness = 0.7
+            mat.envMapIntensity = 0.4
             if (!hasPbr) {
                 mat.bumpMap = texture
-                mat.bumpScale = 0.012
+                mat.bumpScale = 0.025
             }
         }
         // Apply PBR maps for realistic rendering in-browser
         if (hasPbr && !isSelected) {
             if (wall.pbrNormalUrl) {
                 mat.normalMap = normalTex
-                mat.normalScale.set(1.2, 1.2)
+                mat.normalScale.set(0.8, 0.8)
             }
             if (wall.pbrRoughnessUrl) {
                 mat.roughnessMap = roughnessTex

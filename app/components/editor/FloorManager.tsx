@@ -3,7 +3,7 @@
 import { useFloorplanStore } from '@/store/floorplanStore'
 import type { Room } from '@/store/floorplanStore'
 import { memo, useEffect, useMemo } from 'react'
-import { Shape, ShapeGeometry, DoubleSide, RepeatWrapping, Texture } from 'three'
+import { Shape, ShapeGeometry, DoubleSide, RepeatWrapping, Texture, SRGBColorSpace, LinearSRGBColorSpace } from 'three'
 import { Html } from '@react-three/drei'
 import { useLoader } from '@react-three/fiber'
 import { TextureLoader } from 'three'
@@ -78,10 +78,17 @@ const RoomItem = memo(function RoomItem({
         if (room.pbrAoUrl) textures.push(aoTex)
         if (room.pbrMetalnessUrl) textures.push(metalnessTex)
 
+        // Albedo must be sRGB; PBR maps (normal/roughness/ao/metalness) must stay linear
+        texture.colorSpace = SRGBColorSpace
+        ;[normalTex, roughnessTex, aoTex, metalnessTex].forEach(t => {
+            t.colorSpace = LinearSRGBColorSpace
+        })
+
         textures.forEach(t => {
             t.wrapS = RepeatWrapping
             t.wrapT = RepeatWrapping
             t.repeat.set(repeatX, repeatY)
+            t.anisotropy = 16
             t.needsUpdate = true
         })
     }, [textureUrl, room.textureTileWidthM, room.textureTileHeightM, bounds.w, bounds.h,
@@ -110,23 +117,21 @@ const RoomItem = memo(function RoomItem({
                     <meshPhysicalMaterial
                         map={textureUrl ? texture : null}
                         normalMap={hasPbr && room.pbrNormalUrl ? normalTex : null}
-                        normalScale={hasPbr && room.pbrNormalUrl ? [1.2, 1.2] as any : undefined}
+                        normalScale={hasPbr && room.pbrNormalUrl ? [0.8, 0.8] as any : undefined}
                         roughnessMap={hasPbr && room.pbrRoughnessUrl ? roughnessTex : null}
                         aoMap={hasPbr && room.pbrAoUrl ? aoTex : null}
-                        aoMapIntensity={1.2}
+                        aoMapIntensity={1.0}
                         metalnessMap={hasPbr && room.pbrMetalnessUrl ? metalnessTex : null}
-                        // Tile-like material: glossy clearcoat simulates glazed ceramic/porcelain
                         color={selected ? '#fbbf24' : (textureUrl ? '#ffffff' : (room.color || '#ddd8d0'))}
-                        roughness={hasPbr && room.pbrRoughnessUrl ? 1.0 : (textureUrl ? 0.55 : 0.7)}
+                        roughness={hasPbr && room.pbrRoughnessUrl ? 1.0 : (textureUrl ? 0.65 : 0.75)}
                         metalness={hasPbr && room.pbrMetalnessUrl ? 1.0 : 0.0}
-                        clearcoat={textureUrl ? 0.35 : 0.15}
-                        clearcoatRoughness={textureUrl ? 0.2 : 0.4}
-                        envMapIntensity={textureUrl ? 0.5 : 0.3}
-                        // Use the albedo texture as a bump map too for subtle depth (grout lines, surface variation)
+                        clearcoat={textureUrl ? 0.12 : 0.08}
+                        clearcoatRoughness={textureUrl ? 0.5 : 0.6}
+                        envMapIntensity={textureUrl ? 0.6 : 0.3}
                         bumpMap={textureUrl && !hasPbr ? texture : null}
-                        bumpScale={textureUrl && !hasPbr ? 0.015 : undefined}
+                        bumpScale={textureUrl && !hasPbr ? 0.025 : undefined}
                         transparent
-                        opacity={selected ? 0.85 : 0.92}
+                        opacity={selected ? 0.85 : 1.0}
                         side={DoubleSide}
                         depthWrite={false}
                     />
