@@ -171,8 +171,8 @@ jobs:
             --environment=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }} \
             --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID:     ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
       - name: Build for Vercel
         run: |
@@ -180,8 +180,8 @@ jobs:
             ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} \
             --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID:     ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
       - name: Deploy to Vercel
         id: vercel-deploy
@@ -194,8 +194,8 @@ jobs:
           echo "### Deployed ✅" >> $GITHUB_STEP_SUMMARY
           echo "URL: $DEPLOY_URL" >> $GITHUB_STEP_SUMMARY
         env:
-          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID:     ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request'
