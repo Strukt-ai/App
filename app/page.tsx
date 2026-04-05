@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from 'react'
 import dynamic from 'next/dynamic'
 
 // Dynamically load the heavy editor; no server-side rendering
