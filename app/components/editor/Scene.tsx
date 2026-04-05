@@ -1,9 +1,9 @@
 'use client'
 
-import { useRef, useEffect, Suspense, useState } from 'react'
+import { useRef, useEffect, Suspense, useState, useMemo } from 'react'
 import { Box3, Vector3, Object3D, TextureLoader, ACESFilmicToneMapping, MOUSE } from 'three'
-import { Canvas, useThree, useLoader } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, Environment, ContactShadows, SoftShadows, Sky } from '@react-three/drei'
+import { Canvas, useThree, useLoader, useFrame } from '@react-three/fiber'
+import { OrbitControls, PerspectiveCamera, OrthographicCamera, Grid, ContactShadows, SoftShadows, Sky, PointerLockControls } from '@react-three/drei'
 import { EffectComposer, SMAA, Bloom, ToneMapping, Vignette, BrightnessContrast, N8AO } from '@react-three/postprocessing'
 import { ToneMappingMode, BlendFunction } from 'postprocessing'
 
@@ -45,6 +45,95 @@ function DropResolver() {
         }
     }, [pendingDrop, camera, raycaster, scene, addFurniture, consumeDrop])
     return null
+}
+
+function FPVController() {
+    const mode = useFloorplanStore(s => s.mode)
+    const cameraMode = useFloorplanStore(s => s.cameraMode)
+    const walls = useFloorplanStore(s => s.walls)
+    const rooms = useFloorplanStore(s => s.rooms)
+    const { camera } = useThree()
+    const controlsRef = useRef<any>(null)
+    const moveStateRef = useRef({ forward: false, backward: false, left: false, right: false })
+
+    const startPosition = useMemo(() => {
+        const points = [
+            ...walls.flatMap((wall) => [wall.start, wall.end]),
+            ...rooms.flatMap((room) => room.points),
+        ]
+        if (points.length === 0) return new Vector3(0, 1.65, 4)
+        const xs = points.map((p) => p.x)
+        const ys = points.map((p) => p.y)
+        const centerX = (Math.min(...xs) + Math.max(...xs)) / 2
+        const centerZ = (Math.min(...ys) + Math.max(...ys)) / 2
+        const depth = Math.max(3, (Math.max(...ys) - Math.min(...ys)) / 2)
+        return new Vector3(centerX, 1.65, centerZ + depth)
+    }, [walls, rooms])
+
+    useEffect(() => {
+        if (mode !== '3d' || cameraMode !== 'fpv') {
+            if (document.pointerLockElement) document.exitPointerLock()
+            return
+        }
+
+        camera.position.copy(startPosition)
+        camera.lookAt(startPosition.x, 1.65, startPosition.z - 2)
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const key = event.key.toLowerCase()
+            if (key === 'w') moveStateRef.current.forward = true
+            if (key === 's') moveStateRef.current.backward = true
+            if (key === 'a') moveStateRef.current.left = true
+            if (key === 'd') moveStateRef.current.right = true
+        }
+        const handleKeyUp = (event: KeyboardEvent) => {
+            const key = event.key.toLowerCase()
+            if (key === 'w') moveStateRef.current.forward = false
+            if (key === 's') moveStateRef.current.backward = false
+            if (key === 'a') moveStateRef.current.left = false
+            if (key === 'd') moveStateRef.current.right = false
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        window.addEventListener('keyup', handleKeyUp)
+        return () => {
+            moveStateRef.current = { forward: false, backward: false, left: false, right: false }
+            if (document.pointerLockElement) document.exitPointerLock()
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+        }
+    }, [camera, cameraMode, mode, startPosition])
+
+    useFrame((_, delta) => {
+        if (mode !== '3d' || cameraMode !== 'fpv') return
+
+        const direction = new Vector3()
+        camera.getWorldDirection(direction)
+        direction.y = 0
+        direction.normalize()
+
+        const right = new Vector3().crossVectors(new Vector3(0, 1, 0), direction).normalize()
+        const movement = new Vector3()
+
+        if (moveStateRef.current.forward) movement.add(direction)
+        if (moveStateRef.current.backward) movement.sub(direction)
+        if (moveStateRef.current.left) movement.sub(right)
+        if (moveStateRef.current.right) movement.add(right)
+
+        if (movement.lengthSq() === 0) return
+
+        movement.normalize().multiplyScalar(3.2 * delta)
+        const nextPosition = camera.position.clone().add(movement)
+        nextPosition.y = 1.65
+
+        const controls = controlsRef.current
+        const object = controls?.getObject?.()
+        if (object) object.position.copy(nextPosition)
+        camera.position.copy(nextPosition)
+    })
+
+    if (mode !== '3d' || cameraMode !== 'fpv') return null
+    return <PointerLockControls ref={controlsRef} selector="#fpv-lock-surface" />
 }
 
 function SvgOverlayPlane() {
@@ -274,6 +363,7 @@ function InteractionLayer() {
 // --- Scene Content Component ---
 function SceneContent() {
     const mode = useFloorplanStore(s => s.mode)
+    const cameraMode = useFloorplanStore(s => s.cameraMode)
     const lightingPreset = useFloorplanStore(s => s.lightingPreset)
 
     // Lighting presets — tuned for clean architectural rendering
@@ -285,17 +375,7 @@ function SceneContent() {
     }
     const lighting = lightingConfigs[lightingPreset]
 
-    // Determine Environment Preset (drei types: apartment, city, park, lobby, etc.)
-    // We map our custom names to closest available Drei presets
-    const getEnvPreset = (name: string) => {
-        switch (name) {
-            case 'day': return 'apartment'
-            case 'night': return 'city' // Night is tricky, city might be safest dark-ish or just low intensity
-            case 'studio': return 'studio'
-            case 'sunset': return 'sunset'
-            default: return 'apartment'
-        }
-    }
+
 
     return (
         <>
@@ -324,8 +404,7 @@ function SceneContent() {
             {/* Hemisphere Light — warm sky, neutral ground for natural fill */}
             <hemisphereLight args={['#dce4f0', '#b8a99a', 0.5]} />
 
-            {/* HDRI Environment — apartment preset for best interior reflections */}
-            <Environment preset={getEnvPreset(lightingPreset) as any} background={false} blur={0.3} environmentIntensity={0.8} />
+            {/* HDRI Environment disabled — preset loading from CDN is unreliable; Sky + hemisphere lights are sufficient */}
 
             {/* Key Light — soft directional from upper right */}
             <directionalLight
@@ -382,15 +461,19 @@ function SceneContent() {
                 <OrthographicCamera makeDefault position={[0, 10, 0]} zoom={40} />
             )}
 
-            <OrbitControls
-                makeDefault
-                enableRotate={mode === '3d'}
-                enableZoom={true}
-                enablePan={true}
-                enableDamping={false} // Fix: Instant camera jumps for "fit view"
-                maxPolarAngle={mode === '3d' ? Math.PI / 2 : 0}
-                mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: null as any, RIGHT: MOUSE.PAN }}
-            />
+            {cameraMode === 'fpv' && mode === '3d' ? (
+                <FPVController />
+            ) : (
+                <OrbitControls
+                    makeDefault
+                    enableRotate={mode === '3d'}
+                    enableZoom={true}
+                    enablePan={true}
+                    enableDamping={false}
+                    maxPolarAngle={mode === '3d' ? Math.PI / 2 : 0}
+                    mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: null as any, RIGHT: MOUSE.PAN }}
+                />
+            )}
 
             {mode === '2d' && (
                 <Grid

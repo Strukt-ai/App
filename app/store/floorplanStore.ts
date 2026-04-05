@@ -63,8 +63,11 @@ export type TextLabel = {
     position: Vector2
 }
 
+export type CameraMode = 'orbit' | 'fpv'
+
 export interface FloorplanState {
     mode: '2d' | '3d'
+    cameraMode: CameraMode
     activeTool: 'select' | 'move' | 'resize' | 'rotate' | 'delete' | 'label' | 'wall' | 'ruler' | 'furniture' | 'floor' | 'none'
     lightingPreset: 'day' | 'night' | 'studio' | 'sunset'
     drawing: boolean
@@ -120,6 +123,7 @@ export interface FloorplanState {
     setUser: (user: any) => void
 
     // Actions
+    setCameraMode: (mode: CameraMode) => void
     setMode: (mode: '2d' | '3d') => void
     setActiveTool: (tool: FloorplanState['activeTool']) => void
     setLightingPreset: (preset: FloorplanState['lightingPreset']) => void
@@ -196,6 +200,7 @@ export interface FloorplanState {
 export const useFloorplanStore = create<FloorplanState>()(
     immer((set, get): FloorplanState => ({
         mode: '2d', // Start in 2D to allow immediate editing
+        cameraMode: 'orbit' as CameraMode,
         activeTool: 'wall', // Default to drawing walls
         lightingPreset: 'day', // Default lighting
         drawing: false,
@@ -263,6 +268,7 @@ export const useFloorplanStore = create<FloorplanState>()(
         }),
         setUser: (user) => set((state) => { state.user = user }),
 
+        setCameraMode: (mode) => set((state) => { state.cameraMode = mode }),
         setMode: (mode) => set((state) => { state.mode = mode }),
         setActiveTool: (tool) => set((state) => { state.activeTool = tool }),
         setLightingPreset: (preset) => set((state) => { state.lightingPreset = preset }),
