@@ -269,7 +269,10 @@ export const useFloorplanStore = create<FloorplanState>()(
         setUser: (user) => set((state) => { state.user = user }),
 
         setCameraMode: (mode) => set((state) => { state.cameraMode = mode }),
-        setMode: (mode) => set((state) => { state.mode = mode }),
+        setMode: (mode) => set((state) => {
+            state.mode = mode
+            if (mode === '2d') state.cameraMode = 'orbit'
+        }),
         setActiveTool: (tool) => set((state) => { state.activeTool = tool }),
         setLightingPreset: (preset) => set((state) => { state.lightingPreset = preset }),
         setUploadedImage: (url, width, height) => set((state) => {
