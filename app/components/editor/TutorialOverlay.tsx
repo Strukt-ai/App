@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import {
-    Upload, Ruler, Hammer, Box,
+    Ruler, Hammer, Box,
     ChevronRight, X, Minimize2, ChevronUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── Step definitions ────────────────────────────────────────────────────────
 
-// 'rooms' and 'process' removed — process button is self-evident (big green button)
-const STEPS = ['upload', 'calibration', 'correction', 'floor_review'] as const
+// 'upload', 'rooms', 'process' removed — tutorial starts at calibration after first process
+const STEPS = ['calibration', 'correction', 'floor_review'] as const
 type Step = typeof STEPS[number]
 
 interface StepConfig {
@@ -30,21 +30,8 @@ interface StepConfig {
 }
 
 const STEP_CONFIG: Record<Step, StepConfig> = {
-    upload: {
-        index: 1,
-        color: 'emerald',
-        glow: '0 0 28px 0 rgba(16,185,129,0.18)',
-        border: 'border-emerald-500/40',
-        iconBg: 'bg-emerald-500/15',
-        iconColor: 'text-emerald-400',
-        dotActive: 'bg-emerald-500',
-        icon: <Upload className="w-4 h-4" />,
-        title: 'Upload your floorplan',
-        body: 'Click the Load button (top-right) to upload a floorplan image.',
-        targetId: 'tutorial-load-btn',
-    },
     calibration: {
-        index: 2,
+        index: 1,
         color: 'yellow',
         glow: '0 0 28px 0 rgba(234,179,8,0.18)',
         border: 'border-yellow-500/40',
@@ -57,7 +44,7 @@ const STEP_CONFIG: Record<Step, StepConfig> = {
         targetId: 'tutorial-ruler-btn',
     },
     correction: {
-        index: 3,
+        index: 2,
         color: 'blue',
         glow: '0 0 28px 0 rgba(59,130,246,0.18)',
         border: 'border-blue-500/40',
@@ -70,7 +57,7 @@ const STEP_CONFIG: Record<Step, StepConfig> = {
         targetId: 'tutorial-find-rooms-btn',
     },
     floor_review: {
-        index: 4,
+        index: 3,
         color: 'green',
         glow: '0 0 28px 0 rgba(34,197,94,0.18)',
         border: 'border-green-500/40',

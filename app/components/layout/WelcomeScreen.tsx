@@ -38,8 +38,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
                 name: decoded.name,
                 picture: decoded.picture
             })
-            // Start the interactive tutorial immediately in the editor
-            setTutorialStep('upload')
+            // Tutorial starts at calibration once a floorplan is processed — not before
             handleStart()
         }
     }
