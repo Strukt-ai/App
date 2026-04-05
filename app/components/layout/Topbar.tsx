@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Menu } from 'lucide-react'
+import { LayoutGrid, Box, Download, Play, Eye, EyeOff, Menu, Footprints } from 'lucide-react'
 import { useFloorplanStore } from '@/store/floorplanStore'
 import { cn } from '@/lib/utils'
 import { DebugPanel } from './DebugPanel'
 
 export function Topbar() {
-    const { mode, setMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile, setMobileSidebarOpen, setActiveTool } = useFloorplanStore()
+    const { mode, setMode, cameraMode, setCameraMode, currentRunId, runStatus, setRunId, setRunStatus, uploadedImage, setUploadedImage, isCalibrated, isGenerating3D, syncSVGAndEnter3D, showBackground, toggleBackground, showToast, tutorialStep, setTutorialStep, lastQueuedTask, setLastQueuedTask, token, pendingFile, setPendingFile, setMobileSidebarOpen, setActiveTool } = useFloorplanStore()
 
     const requireCalibration = () => {
         if (!isCalibrated) {
@@ -216,6 +216,19 @@ export function Topbar() {
                     <Box className="w-4 h-4" />
                     <span>3D View</span>
                 </button>
+                {mode === '3d' && (
+                    <button
+                        onClick={() => setCameraMode(cameraMode === 'fpv' ? 'orbit' : 'fpv')}
+                        className={cn(
+                            "p-1.5 rounded-md transition-colors flex items-center gap-2 text-xs font-medium",
+                            cameraMode === 'fpv' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
+                        )}
+                        title="First Person View — WASD to move"
+                    >
+                        <Footprints className="w-4 h-4" />
+                        <span>FPV</span>
+                    </button>
+                )}
                 </div>
             </div>
 
