@@ -29,6 +29,9 @@ import { useFloorplanStore } from '@/store/floorplanStore'
 function App() {
   useKeyboardShortcuts()
   const showProcessingModal = useFloorplanStore(s => s.showProcessingModal)
+  const cameraMode = useFloorplanStore(s => s.cameraMode)
+  const mode = useFloorplanStore(s => s.mode)
+  const isFPV = mode === '3d' && cameraMode === 'fpv'
   const showQueueModal = useFloorplanStore(s => s.showQueueModal)
   const setShowQueueModal = useFloorplanStore(s => s.setShowQueueModal)
   const [showPremiumModal, setShowPremiumModal] = useState(false)
@@ -53,7 +56,7 @@ function App() {
           <Topbar />
           <div className="flex flex-1 overflow-hidden relative w-full">
             {/* Sidebar renders with its own mobile drawer via store */}
-            <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />
+            {!isFPV && <Sidebar onLogout={() => { setShowWelcome(true); setShowDashboard(true) }} />}
             
             {/* Main Scene Area */}
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -63,7 +66,7 @@ function App() {
             </div>
             
             {/* RightSidebar renders with its own mobile drawer via store */}
-            <RightSidebar />
+            {!isFPV && <RightSidebar />}
             
             {/* Floating Upgrade Card */}
             {showUpgradeCard && (

@@ -55,7 +55,7 @@ function FPVController() {
     const { camera, gl } = useThree()
     const controlsRef = useRef<any>(null)
     const moveStateRef = useRef({ forward: false, backward: false, left: false, right: false })
-    const [locked, setLocked] = useState(false)
+    const [, setLocked] = useState(false)
 
     const startPosition = useMemo(() => {
         const points = [
@@ -445,7 +445,7 @@ function SceneContent() {
 
     // Lighting presets — tuned for clean architectural rendering
     const lightingConfigs = {
-        day:    { sunIntensity: 2.8, sunColor: '#fff5e6', fillIntensity: 0.8, fillColor: '#e8f0ff', ambientIntensity: 0.5, fogColor: '#c8d8f0', fogNear: 100, fogFar: 300, skyTurbidity: 2, skyRayleigh: 0.4, sunPos: [10, 20, 8]  as [number, number, number] },
+        day:    { sunIntensity: 2.8, sunColor: '#fff5e6', fillIntensity: 0.8, fillColor: '#e8f0ff', ambientIntensity: 0.5, fogColor: '#e8edf5', fogNear: 100, fogFar: 300, skyTurbidity: 2, skyRayleigh: 0.4, sunPos: [10, 20, 8]  as [number, number, number] },
         night:  { sunIntensity: 0.5, sunColor: '#99aacc', fillIntensity: 0.12, fillColor: '#334455', ambientIntensity: 0.18, fogColor: '#0f1520', fogNear: 60,  fogFar: 180, skyTurbidity: 20, skyRayleigh: 0.05, sunPos: [-5, -1, -5] as [number, number, number] },
         studio: { sunIntensity: 2.2, sunColor: '#ffffff', fillIntensity: 1.0, fillColor: '#f0f4ff', ambientIntensity: 0.55, fogColor: '#e0e4f0', fogNear: 120, fogFar: 350, skyTurbidity: 1, skyRayleigh: 0.2,  sunPos: [5, 15, 10]  as [number, number, number] },
         sunset: { sunIntensity: 2.2, sunColor: '#ff9944', fillIntensity: 0.45, fillColor: '#7788bb', ambientIntensity: 0.3,  fogColor: '#d4a870', fogNear: 80,  fogFar: 250, skyTurbidity: 3, skyRayleigh: 2.0,  sunPos: [15, 3, 8]   as [number, number, number] },
@@ -533,7 +533,7 @@ function SceneContent() {
             />
 
             {mode === '3d' ? (
-                <PerspectiveCamera makeDefault position={[5, 12, 12]} fov={50} />
+                <PerspectiveCamera makeDefault position={[5, 12, 12]} fov={cameraMode === 'fpv' ? 75 : 50} />
             ) : (
                 <OrthographicCamera makeDefault position={[0, 10, 0]} zoom={40} />
             )}
@@ -644,7 +644,7 @@ function BackgroundPlane() {
             <meshBasicMaterial
                 map={texture}
                 transparent
-                opacity={0.6} // Increased opacity from 0.3 to be more visible
+                opacity={1.0}
                 depthWrite={false}
                 toneMapped={false}
             />
@@ -810,18 +810,3 @@ export function Scene() {
     )
 }
 
-const DebugOverlay = () => {
-    const s = useFloorplanStore()
-    return (
-        <div className="absolute top-2 left-2 z-[9999] pointer-events-none text-[10px] bg-black/80 text-green-400 p-2 rounded shadow-lg font-mono flex flex-col gap-1 w-[250px] opacity-80 backdrop-blur-sm">
-            <div className="text-white border-b border-white/20 pb-1 mb-1">DEBUG PANEL</div>
-            <div>Calib: {s.calibrationFactor.toExponential(2)}</div>
-            <div>Ratio: {(s.calibrationFactor / 0.01).toFixed(2)}x</div>
-            <div>ImgPx: {s.imageDimensions ? `${s.imageDimensions.width}x${s.imageDimensions.height}` : 'null'}</div>
-            <div>ImgWorld: {s.imageWorldWidth != null ? `${s.imageWorldWidth.toFixed(1)} x ${s.imageWorldHeight?.toFixed(1)}` : 'null'}</div>
-            <div>Walls: {s.walls.length}</div>
-            {s.walls[0] && <div>W0 Len: {Math.sqrt((s.walls[0].end.x - s.walls[0].start.x) ** 2 + (s.walls[0].end.y - s.walls[0].start.y) ** 2).toFixed(2)}</div>}
-            {s.walls[0] && <div>W0 Pos: {s.walls[0].start.x.toFixed(1)}, {s.walls[0].start.y.toFixed(1)}</div>}
-        </div>
-    )
-}
